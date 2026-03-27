@@ -16,20 +16,6 @@ entities/ : Core business data models and states (e.g., Performance score data s
 
 shared/ : Reusable, common small components used throughout the project (e.g., Common API clients, Basic UI buttons, Font settings).
 
-2. GitHub Workflow Rules (Must Read)
-The main branch is the core framework of our project. It is strictly locked to prevent anyone from pushing code directly. When working on code, you must follow these rules:
-
-Branch Creation: Before starting any work, create a new working branch from the main branch. (e.g., feat/dashboard-ui, fix/api-error)
-
-Commit Rules: Write clear and descriptive commit messages so others can easily understand what was modified.
-
-Pull Request (PR): Once your work is complete, create a Pull Request to merge your branch into the main branch.
-
-Code Review and Approval: Code will only be merged into the main branch after the System Architect verifies the folder structure and approves the PR. Do not merge arbitrarily.
-
-3. Data Communication Protocol
-Performance data collected by the AI and automation bots (Python) will be transmitted to the frontend (Next.js) according to a predefined common API JSON specification. The communication protocol document will be updated in the Wiki later.
-
 -----------------------------------------------------------------------------------------------------------------------------------------------------
 
 데카트론 웹 성능 지능형 벤치마킹 대시보드
@@ -50,13 +36,3 @@ entities/ : 비즈니스 핵심 데이터 모델 및 상태 (예: 성능 점수 
 
 shared/ : 프로젝트 전체에서 공통으로 쓰는 작은 부품들 (예: 공용 API 클라이언트, 기본 UI 버튼, 폰트 설정)
 
-2. 깃허브 작업 규칙 (필독)
-main 브랜치는 건물의 메인 뼈대입니다. 절대 개인이 직접 코드를 밀어 넣을 수 없도록 잠겨 있습니다. 코드를 작업할 때는 다음 규칙을 따릅니다.
-
-브랜치 생성: 작업 시작 전 main 브랜치에서 자신의 작업용 브랜치를 새로 만듭니다. (예: feat/dashboard-ui, fix/api-error)
-
-커밋 규칙: 무엇을 수정했는지 알아보기 쉽게 커밋 메시지를 작성합니다.
-
-Pull Request (PR): 작업이 끝나면 main 브랜치로 합쳐달라는 PR 대기표를 뽑습니다.
-
-코드 리뷰 및 승인: 시스템 아키텍트의 폴더 구조 확인 및 코드 리뷰 승인(Approve)이 떨어져야만 main에 코드가 병합됩니다. 임의로 병합하지 마세요.
