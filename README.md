@@ -16,6 +16,9 @@ entities/ : Core business data models and states (e.g., Performance score data s
 
 shared/ : Reusable, common small components used throughout the project (e.g., Common API clients, Basic UI buttons, Font settings).
 
+
+PLEASE RUN init.bat file to standardise the environment for all of us!! if you require any other additional package or dependencies make sure to (update the RESPECTIVE file accordingly or ASK in the group if you don't know) and (UPDATE in the group)!!!
+
 -----------------------------------------------------------------------------------------------------------------------------------------------------
 
 데카트론 웹 성능 지능형 벤치마킹 대시보드

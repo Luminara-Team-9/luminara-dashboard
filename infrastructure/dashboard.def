@@ -1,0 +1,30 @@
+Bootstrap: docker
+From: node:20-bullseye-slim
+
+%labels
+    Maintainer Luminara-SRE-Team
+    Version v1.0
+    Description Luminara Next.js Dashboard Environment
+
+%environment
+    # Ensure standard encodings and paths
+    export LC_ALL=C
+    export PORT=3000
+    export NODE_ENV=production
+
+%post
+    # This runs ONCE during the build process to set up the container
+    apt-get update && apt-get install -y git curl
+    npm install -g pnpm
+
+%runscript
+    # This runs EVERY TIME the container is started
+    echo "Starting Luminara Dashboard..."
+    
+    # Move to the bound codebase directory
+    cd /workspace/1_dashboard_app
+    
+    # Install dependencies and start the production server
+    pnpm install
+    pnpm run build
+    pnpm run start
