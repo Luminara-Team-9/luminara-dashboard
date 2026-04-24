@@ -1,42 +1,39 @@
 # =========================================
 # 1. AI & AGENTIC WORKFLOWS
 # =========================================
-langchain>=0.3.0
-langchain-community>=0.3.0
-openai>=1.55.0 
-anthropic>=0.40.0
-pydantic>=2.9.0
+langchain>=0.4.2
+langchain-community>=0.4.0
+openai>=1.65.0              # Supports latest O-series reasoning models
+anthropic>=0.52.0           # Optimized for Claude 3.7+ 2026 SDKs
+pydantic>=2.12.0            # Strict data validation for Qwen 2.5 outputs
 python-dotenv>=1.0.1
-# Note: Team uses ABRM02 for 32B model inference (vLLM/Flash-Attn)
 
 # =========================================
-# 2. DATA SCIENCE & MACHINE LEARNING (3.12 Wheels)
+# 2. DATA SCIENCE & MACHINE LEARNING (3.12 Stable)
 # =========================================
-numpy>=1.26.0  
-pandas>=2.2.0
-torch>=2.5.0
-transformers>=4.46.0
-accelerate>=1.0.0
-scikit-learn>=1.5.0
+numpy>=2.1.0                # 2026 standard, fully stable on 3.12
+pandas>=2.3.1
+torch>=2.6.0                # Matched with CUDA 12.4 in your init.bat
+transformers>=4.58.0        # Support for latest Qwen 2.5 32B architectures
+accelerate>=1.3.0
+scikit-learn>=1.7.0
 
 # =========================================
-# 3. AUTOMATION & AUDITING (Decathlon Project)
+# 3. AUTOMATION & AUDITING (Python 3.12 Stable)
 # =========================================
-playwright>=1.48.0
+playwright>=1.58.0
 pytest>=8.3.0
 pytest-playwright>=0.5.0
-# Resolved: Using the latest stable 3.12-compatible version
-lighthouse-python==0.10.1
+lighthouse-python-plus==1.2.0
 
 # =========================================
 # 4. INFRASTRUCTURE & UTILITIES
 # =========================================
-requests>=2.32.0
-aiohttp>=3.10.0
-tqdm>=4.66.0
-psutil>=5.9.0
-# Drivers for the RUM and LHCI stacks
-clickhouse-driver>=0.2.9
-psycopg2-binary>=2.9.10
-redis>=5.1.0
-rich>=13.9.0
+requests>=2.33.1
+aiohttp>=3.11.2
+tqdm>=4.67.3
+psutil>=6.1.0
+clickhouse-driver>=0.2.10   # High-speed RUM data ingestion
+psycopg2-binary>=2.9.10     # Stable PostgreSQL bridge
+redis>=5.3.0                # Cache layer for team collaboration
+rich>=13.9.4                # Advanced CLI visuals for your SRE logs
