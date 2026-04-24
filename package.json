@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "데카트론 벤치마킹 대시보드 프로젝트",
   "main": "index.js",
+  "engines": {
+    "node": ">=24.15.0",
+    "pnpm": ">=9.0.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
