@@ -1,0 +1,12 @@
+{
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylint",
+      "ms-vscode.vscode-typescript-next",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "tamasfe.even-better-toml",
+      "ms-azuretools.vscode-docker",
+      "mechatroner.rainbow-csv"
+    ]
+  }
