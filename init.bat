@@ -32,14 +32,24 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-:: 3. Python Dependencies (pip)
-echo [..] Checking Python dependencies (requirements.txt)...
-python -m pip install --upgrade pip >nul
+:: 3. Python Dependencies (Layered Install)
+echo [..] Installing Core AI Engine (PyTorch) first...
+pip install torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
+if !errorlevel! equ 0 (
+    echo [OK] Core AI Engine installed.
+) else (
+    echo [!] FAILED to install Torch.
+    pause
+    exit /b 1
+)
+
+echo [..] Installing remaining dependencies from requirements.txt...
+:: We use --no-build-isolation for flash-attn to use the torch we just installed
 pip install -r requirements.txt
 if !errorlevel! equ 0 (
-    echo [OK] Python dependencies are synchronized and satisfied.
+    echo [OK] All dependencies satisfied.
 ) else (
-    echo [!] FAILED to install Python dependencies. Check requirements.txt.
+    echo [!] Installation failed. See SRE Note below.
     pause
     exit /b 1
 )

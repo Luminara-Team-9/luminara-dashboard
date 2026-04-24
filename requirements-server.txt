@@ -8,7 +8,9 @@ pydantic>=2.10.0
 python-dotenv>=1.0.1
 
 # High-performance inference for Qwen 2.5 32B
-vllm>=0.7.0
+vllm>=0.7.0 
+# Required for Qwen's attention mechanism efficiency
+flash-attn>=2.7.0 
 
 # =========================================
 # 2. DATA SCIENCE & MACHINE LEARNING
