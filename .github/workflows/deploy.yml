@@ -1,0 +1,20 @@
+name: ABRM02 Luminara Deployment
+
+# This tells GitHub to run this script ONLY when code is pushed to the main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-server-connection:
+    runs-on: self-hosted # The magic routing directive to your KNU server
+
+    steps:
+      - name: Ping the Server
+        run: |
+          echo "SUCCESS: GitHub has officially breached the KNU firewall!"
+          echo "Current working directory on ABRM02:"
+          pwd
+          echo "Checking for active Singularity instances:"
+          singularity instance list
