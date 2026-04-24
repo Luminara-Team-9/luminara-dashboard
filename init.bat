@@ -1,19 +1,21 @@
 @echo off
 setlocal enabledelayedexpansion
-title Luminara Environment Setup
+title Luminara Environment Setup (Python 3.12 Explicit)
 
 echo ============================================
 echo 🚦 LUMINARA SRE: Environment Check Start
 echo ============================================
 
 :: 1. Check/Create Virtual Environment
+:: We use 'py -3.12' to ensure we don't accidentally use 3.13 or 3.11
 if not exist ".venv" (
-    echo [..] .venv not found. Creating Python 3.13 environment...
-    python -m venv .venv
+    echo [..] .venv not found. Creating Python 3.12 environment...
+    py -3.12 -m venv .venv
     if !errorlevel! equ 0 (
-        echo [OK] .venv created successfully.
+        echo [OK] .venv created successfully using Python 3.12.
     ) else (
-        echo [!] FAILED to create .venv. Ensure Python 3.13 is installed and in PATH.
+        echo [!] FAILED to create .venv. 
+        echo [?] Ensure Python 3.12.9 is installed and the 'py' launcher is in PATH.
         pause
         exit /b 1
     )
@@ -33,10 +35,12 @@ if !errorlevel! equ 0 (
 )
 
 :: 3. Python Dependencies (Layered Install)
-echo [..] Installing Core AI Engine (PyTorch) first...
-pip install torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
+echo [..] Installing Core AI Engine (PyTorch 2.5.0 for 3.12)...
+:: Explicitly installing the 3.12 stable wheel for CUDA 12.4
+python -m pip install --upgrade pip >nul
+pip install torch>=2.5.0 --index-url https://download.pytorch.org/whl/cu124
 if !errorlevel! equ 0 (
-    echo [OK] Core AI Engine installed.
+    echo [OK] PyTorch Engine installed.
 ) else (
     echo [!] FAILED to install Torch.
     pause
@@ -44,18 +48,18 @@ if !errorlevel! equ 0 (
 )
 
 echo [..] Installing remaining dependencies from requirements.txt...
-:: We use --no-build-isolation for flash-attn to use the torch we just installed
 pip install -r requirements.txt
 if !errorlevel! equ 0 (
     echo [OK] All dependencies satisfied.
 ) else (
-    echo [!] Installation failed. See SRE Note below.
+    echo [!] Installation failed. Check requirements.txt for 3.12 compatibility.
     pause
     exit /b 1
 )
 
 :: 4. Node.js Packages (pnpm)
 echo [..] Checking pnpm Node.js packages...
+:: Note: This uses the global Node 24 engine we set up earlier
 call pnpm install
 if !errorlevel! equ 0 (
     echo [OK] pnpm workspace packages are synchronized.
@@ -67,7 +71,6 @@ if !errorlevel! equ 0 (
 
 :: 5. Playwright Browser Check
 echo [..] Checking Playwright Chromium binaries...
-:: Playwright is smart enough to only install if missing or outdated
 playwright install chromium
 if !errorlevel! equ 0 (
     echo [OK] Playwright Chromium is ready for auditing.
