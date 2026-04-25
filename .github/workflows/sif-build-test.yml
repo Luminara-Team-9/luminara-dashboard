@@ -4,33 +4,38 @@ on:
   push:
     branches:
       - main
+      - develop
       - 'feat/**'
       - 'fix/**'
       - 'chore/**'
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   build-test:
-    runs-on: self-hosted  # Using 20.04 for better compatibility with legacy Singularity
+    # Use your self-hosted labels
+    runs-on: [self-hosted, knu-server] 
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Singularity
-        uses: eukarya-inc/setup-singularity@v1
-        with:
-          singularity-version: 3.7.3
-
-      - name: Build Singularity Sandbox (Test)
+      - name: Verify Singularity Presence
         run: |
-          # Note: We use 'singularity' instead of 'apptainer' now
-          sudo singularity build --sandbox test_env 1_dashboard_app/luminara_dash_dev.def
+          # This simply checks if the KNU server's Singularity is ready
+          singularity --version
+          which singularity
+
+      - name: Build Singularity Sandbox (Direct on KNU)
+        run: |
+          # We use the absolute path for extra SRE safety
+          # Replace /usr/bin/singularity if 'which singularity' gave a different path
+          sudo /usr/bin/singularity build --sandbox test_env 1_dashboard_app/luminara_dash_dev.def
           
       - name: Verify SRE Infrastructure Anchors
         run: |
-          # Verify that our specific mount points exist in the baked image
           sudo singularity exec test_env ls -d /data
           sudo singularity exec test_env ls -d /workspace
           sudo singularity exec test_env pnpm --version
