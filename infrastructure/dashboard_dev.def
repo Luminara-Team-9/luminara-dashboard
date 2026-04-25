@@ -1,0 +1,25 @@
+Bootstrap: docker
+From: node:24-bookworm # Use full version for better dev tools
+
+%labels
+    Maintainer Luminara-SRE
+    Environment Development
+
+%environment
+    export LC_ALL=C.UTF-8
+    export NODE_ENV=development
+    export PORT=3000
+
+%post
+    apt-get update && apt-get install -y curl git procps # procps helps with process management
+    npm install -g pnpm@latest
+
+%runscript
+    echo "🛠️ Starting Luminara DEVELOPMENT Dashboard..."
+    cd /workspace/1_dashboard_app
+    
+    # In dev, we always check for new packages on start
+    pnpm install
+    
+    # Use 'dev' mode for Hot Reloading
+    pnpm run dev

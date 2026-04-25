@@ -1,30 +1,58 @@
 Bootstrap: docker
-From: node:20-bullseye-slim
+From: node:24-bookworm-slim
 
 %labels
-    Maintainer Luminara-SRE-Team
-    Version v1.0
-    Description Luminara Next.js Dashboard Environment
+    Maintainer Luminara-SRE
+    Luminara-Dashboard
+    Version v2.0
+    Node_Version 24.15.0
+
+%files
+    # Bake the dependency manifests into the image for pre-installation
+    ./package.json /opt/luminara/package.json
+    ./pnpm-lock.yaml /opt/luminara/pnpm-lock.yaml
+    ./pnpm-workspace.yaml /opt/luminara/pnpm-workspace.yaml
 
 %environment
-    # Ensure standard encodings and paths
-    export LC_ALL=C
+    # Locale: C.UTF-8 is the modern standard that supports Korean (UTF-8) 
+    # while maintaining system stability (ASCII compatibility).
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    
+    # Production Settings
     export PORT=3000
     export NODE_ENV=production
+    
+    # Ensure pnpm is in the path
+    export PATH="/usr/local/bin:$PATH"
 
 %post
-    # This runs ONCE during the build process to set up the container
-    apt-get update && apt-get install -y git curl
-    npm install -g pnpm
+    # 1. System updates and Essential Tools
+    apt-get update && apt-get install -y curl git
+    
+    # 2. Install pnpm globally
+    npm install -g pnpm@latest
+    
+    # 3. Bake Dependencies (The "SRE Standard")
+    # We install dependencies DURING the build so the container is ready instantly
+    cd /opt/luminara
+    pnpm install --frozen-lockfile
+    
+    # Cleanup to keep the container small
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 %runscript
-    # This runs EVERY TIME the container is started
-    echo "Starting Luminara Dashboard..."
+    echo "🚦 Starting Luminara Production Dashboard on Port ${PORT}..."
     
     # Move to the bound codebase directory
+    # On the KNU server, we will bind the latest code to /workspace
     cd /workspace/1_dashboard_app
     
-    # Install dependencies and start the production server
-    pnpm install
+    # Link the 'baked' node_modules to the workspace to save time
+    ln -s /opt/luminara/node_modules ./node_modules
+    
+    # Start the production server
+    # Note: 'pnpm run build' should ideally be done in %post, 
+    # but since our code changes daily, we build at runtime for now.
     pnpm run build
     pnpm run start
