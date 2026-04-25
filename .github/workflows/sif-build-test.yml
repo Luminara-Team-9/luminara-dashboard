@@ -16,7 +16,7 @@ on:
 jobs:
   build-test:
     # Use your self-hosted labels
-    runs-on: [self-hosted, knu-server] 
+    runs-on: [self-hosted, Linux]
     
     steps:
       - name: Checkout Code
