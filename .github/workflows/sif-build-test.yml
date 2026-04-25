@@ -30,16 +30,20 @@ jobs:
 
       - name: Build Singularity Sandbox (Direct on KNU)
         run: |
-          # We use the absolute path for extra SRE safety
-          # Replace /usr/bin/singularity if 'which singularity' gave a different path
-          sudo /usr/bin/singularity build --sandbox test_env 1_dashboard_app/luminara_dash_dev.def
+          # 1. Removed 'sudo'
+          # 2. Added '--fakeroot' to allow building without root
+          singularity build --fakeroot --sandbox test_env 1_dashboard_app/luminara_dash_dev.def
           
       - name: Verify SRE Infrastructure Anchors
         run: |
-          sudo singularity exec test_env ls -d /data
-          sudo singularity exec test_env ls -d /workspace
-          sudo singularity exec test_env pnpm --version
+          # 3. Removed 'sudo' from all verification lines
+          singularity exec test_env ls -d /data
+          singularity exec test_env ls -d /workspace
+          singularity exec test_env pnpm --version
 
       - name: Cleanup
         if: always()
-        run: sudo rm -rf test_env
+        run: |
+          # 4. Removed 'sudo'
+          # Since you built 'test_env' as yourself, you can delete it as yourself
+          rm -rf test_env
