@@ -1,25 +1,63 @@
 Bootstrap: docker
-From: node:24-bookworm # Use full version for better dev tools
+From: node:24.15.0-slim
 
 %labels
     Maintainer Luminara-SRE
-    Environment Development
+    Project Luminara-Dashboard
+    Tier Development
+    Team_Size 5
+
+%setup
+    # Pre-create anchors for the SRE "Multi-Tenant" protocol
+    mkdir -p ${SINGULARITY_ROOTFS}/data
+    mkdir -p ${SINGULARITY_ROOTFS}/workspace
 
 %environment
-    export LC_ALL=C.UTF-8
+    # SRE Port Offset Rule
+    export PORT=${PORT:-3000}
     export NODE_ENV=development
-    export PORT=3000
+    export DATA_PATH=/data
+    
+    # Pathing for pnpm
+    export PNPM_HOME="/usr/local/share/pnpm"
+    export PATH="$PNPM_HOME:$PATH"
 
 %post
-    apt-get update && apt-get install -y curl git procps # procps helps with process management
+    # Fail immediately if any command fails
+    set -e
+
+    # Update and install core SRE tools
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        procps \
+        ca-certificates \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Install pnpm and configure it to be container-friendly
     npm install -g pnpm@latest
+    pnpm config set store-dir /workspace/.pnpm-store
 
 %runscript
-    echo "🛠️ Starting Luminara DEVELOPMENT Dashboard..."
-    cd /workspace/1_dashboard_app
+    # Ensure we start in the correct project directory
+    # (Assuming the Next.js app is in the root of the bound workspace)
+    cd /workspace
     
-    # In dev, we always check for new packages on start
+    echo "🛠️  Luminara DEV Dashboard Active"
+    echo "👥 Team Member: ${USER:-Unknown}"
+    echo "🌐 Access at: http://<KNU_SERVER_IP>:$PORT"
+    echo "📂 Data Source: /data"
+    echo "------------------------------------------------"
+
+    # Install dependencies (only if missing/changed)
     pnpm install
-    
-    # Use 'dev' mode for Hot Reloading
-    pnpm run dev
+
+    # CRITICAL: Bind to 0.0.0.0 so you can access it from your PC browser
+    exec pnpm dev --port $PORT --hostname 0.0.0.0
+
+%help
+    Luminara Development Dashboard
+    ------------------------------
+    Run this with the --bind flag to connect your local code.
+    Example:
+    singularity run --env PORT=3010 --bind ./my_code:/workspace,~/data:/data dev_dashboard.sif
