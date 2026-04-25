@@ -1,58 +1,64 @@
 Bootstrap: docker
-From: node:24-bookworm-slim
+From: node:24.15.0-slim
 
 %labels
     Maintainer Luminara-SRE
-    Luminara-Dashboard
-    Version v2.0
-    Node_Version 24.15.0
+    Project Luminara-Dashboard
+    Tier Production
+    Team_Size 5
 
-%files
-    # Bake the dependency manifests into the image for pre-installation
-    ./package.json /opt/luminara/package.json
-    ./pnpm-lock.yaml /opt/luminara/pnpm-lock.yaml
-    ./pnpm-workspace.yaml /opt/luminara/pnpm-workspace.yaml
+%setup
+    # Pre-create anchors for the SRE "Multi-Tenant" protocol
+    # These must remain identical to Dev to ensure infrastructure parity
+    mkdir -p ${SINGULARITY_ROOTFS}/data
+    mkdir -p ${SINGULARITY_ROOTFS}/workspace
 
 %environment
-    # Locale: C.UTF-8 is the modern standard that supports Korean (UTF-8) 
-    # while maintaining system stability (ASCII compatibility).
-    export LC_ALL=C.UTF-8
-    export LANG=C.UTF-8
-    
-    # Production Settings
-    export PORT=3000
+    # SRE Port Offset Rule
+    export PORT=${PORT:-3000}
     export NODE_ENV=production
+    export DATA_PATH=/data
     
-    # Ensure pnpm is in the path
-    export PATH="/usr/local/bin:$PATH"
+    # Pathing for pnpm
+    export PNPM_HOME="/usr/local/share/pnpm"
+    export PATH="$PNPM_HOME:$PATH"
 
 %post
-    # 1. System updates and Essential Tools
-    apt-get update && apt-get install -y curl git
-    
-    # 2. Install pnpm globally
+    set -e
+
+    # Minimal system tools for Production (Removed procps to keep it slim)
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
     npm install -g pnpm@latest
     
-    # 3. Bake Dependencies (The "SRE Standard")
-    # We install dependencies DURING the build so the container is ready instantly
-    cd /opt/luminara
-    pnpm install --frozen-lockfile
-    
-    # Cleanup to keep the container small
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    # Configure pnpm for a shared environment
+    pnpm config set store-dir /workspace/.pnpm-store
 
 %runscript
-    echo "🚦 Starting Luminara Production Dashboard on Port ${PORT}..."
+    cd /workspace
     
-    # Move to the bound codebase directory
-    # On the KNU server, we will bind the latest code to /workspace
-    cd /workspace/1_dashboard_app
-    
-    # Link the 'baked' node_modules to the workspace to save time
-    ln -s /opt/luminara/node_modules ./node_modules
-    
-    # Start the production server
-    # Note: 'pnpm run build' should ideally be done in %post, 
-    # but since our code changes daily, we build at runtime for now.
-    pnpm run build
-    pnpm run start
+    echo "🚀 Luminara PRODUCTION Dashboard Starting"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "📂 Data Source: $DATA_PATH"
+    echo "------------------------------------------------"
+
+    # 1. Install dependencies (Production only to save space)
+    # Using --frozen-lockfile ensures the build is predictable
+    pnpm install --frozen-lockfile
+
+    # 2. Build the Next.js application
+    # This generates the optimized .next folder in the bound workspace
+    pnpm build
+
+    # 3. Start the production server
+    # Bound to 0.0.0.0 for external access
+    exec pnpm start --port $PORT --hostname 0.0.0.0
+
+%help
+    Luminara Production Dashboard
+    ------------------------------
+    This image runs the optimized Next.js build. 
+    It is recommended to use a dedicated production branch of your code.
