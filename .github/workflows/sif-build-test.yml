@@ -1,0 +1,84 @@
+name: Luminara Containers CI Pipeline
+
+on:
+  push:
+    branches:  
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'chore/**'
+    paths:
+      - '**.def'
+  pull_request:
+    branches:
+      - main
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  
+jobs:
+  detect-changes:
+    runs-on: [self-hosted, Linux]
+    outputs:
+      def_files: ${{ steps.filter.outputs.all_changed_files }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed .def files
+        id: filter
+        uses: tj-actions/changed-files@v44
+        with:
+          files: "**/*.def"
+          escape_json: false
+          json: true
+
+  build-changed:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.def_files != '[]' && needs.detect-changes.outputs.def_files != ''
+    runs-on: [self-hosted, Linux]
+    strategy:
+      matrix:
+        def_file: ${{ fromJson(needs.detect-changes.outputs.def_files) }}
+      max-parallel: 1
+      fail-fast: false
+      
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Dynamic Sandbox
+        run: |
+          SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
+          echo "FOLDER_NAME=test_env_${SAFE_NAME}" >> $GITHUB_ENV
+          singularity build --fakeroot --sandbox "test_env_${SAFE_NAME}" "${{ matrix.def_file }}"
+          
+      - name: Smart Verification (Feature Detection)
+        run: |
+          echo "🔍 Starting intelligent capability check for ${{ matrix.def_file }}..."
+          
+          # 1. Check for Standard Infrastructure
+          singularity exec ${{ env.FOLDER_NAME }} ls -d /data
+          singularity exec ${{ env.FOLDER_NAME }} ls -d /workspace
+
+          # 2. Conditional Node.js/pnpm Check
+          if grep -qi "pnpm" "${{ matrix.def_file }}"; then
+            echo "✅ Node.js detected. Verifying pnpm..."
+            singularity exec ${{ env.FOLDER_NAME }} pnpm --version
+          fi
+
+          # 3. Conditional Python/Pip Check
+          if grep -qi "python" "${{ matrix.def_file }}" || grep -qi "pip" "${{ matrix.def_file }}"; then
+            echo "✅ Python detected. Verifying pip..."
+            singularity exec ${{ env.FOLDER_NAME }} python3 --version
+            singularity exec ${{ env.FOLDER_NAME }} pip3 --version
+          fi
+
+          # 4. Conditional AI/GPU Check (vLLM/CUDA)
+          if grep -qi "cuda" "${{ matrix.def_file }}"; then
+            echo "✅ CUDA detected. Verifying NVIDIA tools..."
+            singularity exec ${{ env.FOLDER_NAME }} nvidia-smi --version || echo "Warning: nvidia-smi failed (Expected if not on GPU node)"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -d "${{ env.FOLDER_NAME }}" ]; then
+            rm -rf "${{ env.FOLDER_NAME }}"
+          fi
