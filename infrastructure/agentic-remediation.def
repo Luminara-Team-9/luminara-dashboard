@@ -45,17 +45,16 @@ From: python:3.12-slim-bookworm
     
     pip install --no-cache-dir --upgrade pip
 
-    # ---------------------------------------------------------
-    # HARDWARE PARITY FIX (For NVIDIA Driver 525.105.17)
+# ---------------------------------------------------------
+    # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
     # ---------------------------------------------------------
     
-    # 1. Downgrade to the highly stable PyTorch 2.5.1 using CUDA 12.1
-    echo "Installing PyTorch CUDA Foundation (Matched to cu121 for Driver 525)..."
+    echo "Installing PyTorch CUDA Foundation..."
     pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
-    # 2. Use the exact Flash Attention wheel compiled for torch 2.5 + cu121 + Python 3.12
+    # SRE FIX: The exact unified 'cu12' wheel for torch 2.5 and python 3.12
     echo "Installing pre-compiled Flash Attention..."
-    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu121torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
+    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
     pip install --no-cache-dir $FLASH_WHEEL
 
     # THE PURE INFERENCE STACK
@@ -66,7 +65,7 @@ openai>=1.65.0
 anthropic>=0.52.0
 pydantic>=2.12.0
 python-dotenv>=1.0.1
-vllm>=0.6.0  # Slightly relaxed to ensure perfect cu121 compatibility
+vllm==0.6.4
 numpy>=2.1.0
 pandas>=2.3.1
 transformers>=4.48.0
@@ -83,7 +82,7 @@ rich>=13.9.4
 GitPython>=3.1.0
 EOF
 
-    echo "Installing remaining AI Tooling..."
+    echo "Installing remaining Dev AI Tooling..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
     

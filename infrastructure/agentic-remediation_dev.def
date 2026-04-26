@@ -53,19 +53,19 @@ From: python:3.12-slim-bookworm
     pip install --no-cache-dir --upgrade pip
     export MAX_JOBS=4
 
-    # ---------------------------------------------------------
+# ---------------------------------------------------------
     # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
     # ---------------------------------------------------------
     
-    echo "Installing PyTorch CUDA Foundation (Matched to cu121)..."
+    echo "Installing PyTorch CUDA Foundation..."
     pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
-    echo "Installing pre-compiled Flash Attention (Bypassing compilation)..."
-    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu121torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
+    # SRE FIX: The exact unified 'cu12' wheel for torch 2.5 and python 3.12
+    echo "Installing pre-compiled Flash Attention..."
+    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
     pip install --no-cache-dir $FLASH_WHEEL
 
-    # DEV DIFFERENCE: Pure Inference Stack + Developer Formatting Tools
-    # Note: vLLM is pinned to 0.6.4 to prevent it from upgrading PyTorch
+    # THE PURE INFERENCE STACK
     cat > requirements.txt <<EOF
 langchain>=0.4.2
 langchain-community>=0.4.0
@@ -88,11 +88,6 @@ psycopg2-binary>=2.9.10
 redis>=5.3.0
 rich>=13.9.4
 GitPython>=3.1.0
-
-# DEV SPECIFIC TOOLS (Formatting & Unit Testing)
-pytest>=8.3.0
-black>=24.0.0
-isort>=5.0.0
 EOF
 
     echo "Installing remaining Dev AI Tooling..."
