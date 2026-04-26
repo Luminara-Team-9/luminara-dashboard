@@ -75,7 +75,7 @@ fi
 echo -e "[..] Bridging Node 24 and pnpm from the Toolbox..."
 
 # This ensures the script sees the Node 24 we installed in Conda
-TOOLBOX_PATH="/home/coss41/miniconda3/envs/luminara_v12/bin"
+TOOLBOX_PATH="/abr/coss41/miniconda3/envs/luminara_v12/bin"
 export PATH="$TOOLBOX_PATH:$PATH"
 
 # Verify Node Version (Safety Check)
@@ -103,7 +103,8 @@ fi
 
 # 5. Playwright Browser Check
 echo -e "[..] Checking Chromium for Testing binaries..."
-npx playwright install chromium
+# This uses the Python CLI instead of Node's npx
+playwright install chromium
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] Playwright is ready for auditing.${NC}"
 else
