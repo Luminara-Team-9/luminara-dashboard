@@ -11,7 +11,6 @@ From: node:24.15.0-slim
     # Identical to Production: Pre-create anchors
     mkdir -p ${SINGULARITY_ROOTFS}/data
     mkdir -p ${SINGULARITY_ROOTFS}/workspace
-    mkdir -p ${SINGULARITY_ROOTFS}/usr/local/share/pnpm
 
 %environment
     # DEV PARITY: Same defaults, different NODE_ENV
@@ -19,7 +18,7 @@ From: node:24.15.0-slim
     export NODE_ENV=development
     export DATA_PATH=/data
     
-    export PNPM_HOME="/usr/local/share/pnpm"
+    export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
     export COREPACK_ENABLE_AUTO_PIN=0
 
@@ -31,10 +30,6 @@ From: node:24.15.0-slim
         curl \
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-    # Identical to Production: Fix permissions for the shared pnpm home
-    mkdir -p /usr/local/share/pnpm
-    chmod -R 777 /usr/local/share/pnpm
 
     npm install -g pnpm@latest
     

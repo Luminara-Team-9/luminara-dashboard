@@ -9,18 +9,15 @@ From: node:24.15.0-slim
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data
     mkdir -p ${SINGULARITY_ROOTFS}/workspace
-    # PRE-CREATE the pnpm home so the ownership is established during build
-    mkdir -p ${SINGULARITY_ROOTFS}/usr/local/share/pnpm
 
 %environment
     export PORT=${PORT:-3000}
     export NODE_ENV=production
     export DATA_PATH=/data
     
-    # SRE FIX: Move pnpm home to a location that won't conflict with system tools
-    export PNPM_HOME="/usr/local/share/pnpm"
+    # THE FIX: Point PNPM_HOME to /tmp, which is always writable at runtime
+    export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
-    # Ensure pnpm doesn't try to auto-update itself during CI
     export COREPACK_ENABLE_AUTO_PIN=0
 
 %post
@@ -32,9 +29,6 @@ From: node:24.15.0-slim
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    # SRE FIX: Explicitly set permissions for the pnpm directory
-    mkdir -p /usr/local/share/pnpm
-    chmod -R 777 /usr/local/share/pnpm
 
     # Install pnpm
     npm install -g pnpm@latest
