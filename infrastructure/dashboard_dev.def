@@ -43,6 +43,7 @@ From: node:24.15.0-slim
     # (Assuming the Next.js app is in the root of the bound workspace)
     cd /workspace
     
+    echo "------------------------------------------------"
     echo "🛠️  Luminara DEV Dashboard Active"
     echo "👥 Team Member: ${USER:-Unknown}"
     echo "🌐 Access at: http://<KNU_SERVER_IP>:$PORT"

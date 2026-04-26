@@ -40,6 +40,7 @@ From: node:24.15.0-slim
 %runscript
     cd /workspace
     
+    echo "------------------------------------------------"
     echo "🚀 Luminara PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "📂 Data Source: $DATA_PATH"
