@@ -1,0 +1,82 @@
+Bootstrap: docker
+From: python:3.12-slim-bookworm
+
+%labels
+    Maintainer Luminara-SRE-Dev
+    Project Luminara-Auditor
+    Tier Ephemeral-Development
+    Team_Size 5
+
+%setup
+    mkdir -p ${SINGULARITY_ROOTFS}/data
+    mkdir -p ${SINGULARITY_ROOTFS}/workspace
+    mkdir -p ${SINGULARITY_ROOTFS}/usr/share/luminara-core
+
+%environment
+    export APP_ENV=development
+    export PIP_CACHE_DIR="/workspace/.pip-cache"
+    export PIP_ROOT_USER_ACTION=ignore
+    
+    export PLAYWRIGHT_BROWSERS_PATH="/usr/lib/playwright"
+    export XDG_CONFIG_HOME="/tmp/.config"
+    export XDG_CACHE_HOME="/tmp/.cache"
+    export XDG_DATA_HOME="/tmp/.data"
+    export npm_config_cache="/tmp/.npm"
+    export CHROME_PATH="/usr/bin/chromium"
+
+%post
+    set -e
+
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        gnupg \
+        libpq-dev \
+        build-essential \
+        chromium \
+        htop \
+        nano \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
+    npm install -g lighthouse
+
+    pip install --no-cache-dir --upgrade pip
+
+    cat > requirements.txt <<EOF
+playwright>=1.58.0
+pytest>=8.3.0
+pytest-playwright>=0.5.0
+lighthouse-python-plus==1.2.0
+requests>=2.33.1
+aiohttp>=3.11.2
+tqdm>=4.67.3
+psutil>=6.1.0
+clickhouse-driver>=0.2.10
+psycopg2-binary>=2.9.10 
+redis>=5.3.0
+rich>=13.9.4
+numpy>=1.26.4,<2.0.0
+
+# DEV SPECIFIC TOOLS
+black>=24.0.0
+isort>=5.0.0
+EOF
+
+    pip install --no-cache-dir -r requirements.txt
+    rm requirements.txt
+
+    export PLAYWRIGHT_BROWSERS_PATH="/usr/lib/playwright"
+    playwright install chromium
+    playwright install-deps chromium
+    chmod -R 755 /usr/lib/playwright
+
+%runscript
+    cd /workspace
+    mkdir -p /tmp/.config /tmp/.cache /tmp/.data /tmp/.npm
+    
+    echo "------------------------------------------------"
+    echo "🛠️ Luminara DEV AUDITOR Executing"
+    echo "------------------------------------------------"
+    exec "$@"
