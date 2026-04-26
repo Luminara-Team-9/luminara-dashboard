@@ -2,9 +2,10 @@ Bootstrap: docker
 From: python:3.12-slim-bookworm
 
 %labels
-    Maintainer Luminara-SRE-Agent
+    Maintainer Luminara-SRE-Agent-Dev
     Project Luminara-AI-Remediation
-    Tier Production-Agent
+    Tier Development-Agent
+    Team_Size 5
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data
@@ -12,11 +13,13 @@ From: python:3.12-slim-bookworm
     mkdir -p ${SINGULARITY_ROOTFS}/usr/share/luminara-core
 
 %environment
-    export PORT=${PORT:-5000}
-    export APP_ENV=production
+    # DEV PARITY: Port offset to 5001 to prevent conflicts with Production
+    export PORT=${PORT:-5001}
+    export APP_ENV=development
     export DATA_PATH=/data
     export PIP_CACHE_DIR="/workspace/.pip-cache"
     export PIP_ROOT_USER_ACTION=ignore
+    
     export XDG_CONFIG_HOME="/tmp/.config"
     export XDG_CACHE_HOME="/tmp/.cache"
     export GIT_CONFIG_NOSYSTEM=1
@@ -26,6 +29,7 @@ From: python:3.12-slim-bookworm
 %post
     set -e
 
+    # 1. Dev Tools Included (htop, nano)
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
@@ -33,8 +37,11 @@ From: python:3.12-slim-bookworm
         libpq-dev \
         build-essential \
         git \
+        htop \
+        nano \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+    # 2. GitHub CLI
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
@@ -44,6 +51,7 @@ From: python:3.12-slim-bookworm
     git config --global core.filemode false
     
     pip install --no-cache-dir --upgrade pip
+    export MAX_JOBS=4
 
 # ---------------------------------------------------------
     # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
@@ -80,17 +88,31 @@ psycopg2-binary>=2.9.10
 redis>=5.3.0
 rich>=13.9.4
 GitPython>=3.1.0
+transformers>=5.6.1
+accelerate>=1.13.0
+langgraph>=1.1.9
+langgraph-sdk>=0.3.13
+sentence-transformers>=5.4.1
+ormsgpack>=1.12.2
 EOF
 
     echo "Installing remaining Dev AI Tooling..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
     
-    echo "Luminara-SRE: Hardware-Matched AI Agent Container Hardening Complete ✅"
+    echo "Luminara-SRE: DEV AI Agent Container Hardening Complete ✅"
 
 %runscript
     cd /workspace
     echo "------------------------------------------------"
-    echo "🚀 Luminara PURE AI AGENT Starting"
+    echo "🛠️ Luminara DEVELOPMENT AI AGENT Starting"
+    echo "🌐 Mode: $APP_ENV | Port: $PORT"
     echo "------------------------------------------------"
-    exec python -m luminara_core.remediation_agent.run_agent --port $PORT
+    
+    echo "[..] Verifying shared store parity anchors..."
+    if [ ! -d "/workspace/.pip-cache" ] || [ ! -d "/workspace/.ssh" ]; then
+        echo "Warning: Persistent Parity anchors not detected."
+    fi
+
+    # DEV DIFFERENCE: Boots into hot-reloading for the backend team
+    exec python -m luminara_core.remediation_agent.train_or_debug --port $PORT --hot-reload
