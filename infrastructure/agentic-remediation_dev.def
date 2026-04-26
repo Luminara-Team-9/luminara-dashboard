@@ -58,6 +58,11 @@ From: python:3.12-slim-bookworm
     # SRE FIX: Throttled compilation for shared server safety (CRUCIAL for flash-attn)
     export MAX_JOBS=4
     
+    # SRE FIX 2: The PyTorch Bootstrapping Rule
+    # Torch MUST be fully installed before flash-attn or vLLM attempt to compile
+    echo "Installing PyTorch CUDA Foundation..."
+    pip install --no-cache-dir torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
+
     # DEV DIFFERENCE: Includes the Pure Inference stack PLUS testing/formatting tools
     cat > requirements.txt <<EOF
 langchain>=0.4.2
@@ -90,6 +95,7 @@ black>=24.0.0
 isort>=5.0.0
 EOF
 
+    echo "Installing AI Tooling and Flash Attention..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
     
