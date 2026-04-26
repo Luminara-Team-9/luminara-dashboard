@@ -16,7 +16,8 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # Define where you want the final images to live
-  RELEASE_PATH: "/abr/coss41/Luminara_App/images-prod"
+  PROD_RELEASE_PATH: "/abr/coss41/Luminara_App/images-prod"
+  DEV_RELEASE_PATH: "/abr/coss41/shared_workspace/images_dev"
 
 jobs:
   detect-changes:
@@ -46,11 +47,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare Variables
+      - name: SRE Dynamic Routing & Variables
         run: |
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
           echo "SIF_NAME=${SAFE_NAME}.sif" >> $GITHUB_ENV
-          echo "SAFE_NAME=${SAFE_NAME}" >> $GITHUB_ENV
+          
+          # 🚦 The Routing Logic
+          # This checks if the file string ends exactly with "_dev.def"
+          if [[ "${{ matrix.def_file }}" == *"_dev.def" ]]; then
+            echo "TARGET_DIR=${{ env.DEV_RELEASE_PATH }}" >> $GITHUB_ENV
+            echo "TIER=Development" >> $GITHUB_ENV
+            echo "Detected DEV environment. Routing to dev_release."
+          else
+            echo "TARGET_DIR=${{ env.PROD_RELEASE_PATH }}" >> $GITHUB_ENV
+            echo "TIER=Production" >> $GITHUB_ENV
+            echo "Detected PROD environment. Routing to release."
+          fi
 
       - name: Build SIF (Sudo-Free)
         run: |
@@ -85,13 +97,13 @@ jobs:
             singularity exec ${{ env.SIF_NAME }} nvidia-smi --version || echo "Warning: nvidia-smi failed (Expected if not on GPU node)"
           fi
 
-      - name: Release to Production
-        # Only move the file if we are merging/pushing to MAIN
+      - name: Continuous Delivery (CD) Release
         if: github.ref == 'refs/heads/main' && success()
         run: |
-          mkdir -p ${{ env.RELEASE_PATH }}
-          mv ${{ env.SIF_NAME }} ${{ env.RELEASE_PATH }}/
-          echo "✅ Released ${{ env.SIF_NAME }} to ${{ env.RELEASE_PATH }}"
+          echo "🚀 Deploying ${{ env.TIER }} container..."
+          mkdir -p ${{ env.TARGET_DIR }}
+          mv ${{ env.SIF_NAME }} ${{ env.TARGET_DIR }}/
+          echo "✅ Successfully routed ${{ env.SIF_NAME }} to ${{ env.TARGET_DIR }}"
 
       - name: Cleanup
         if: always()
