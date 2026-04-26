@@ -1,0 +1,121 @@
+Bootstrap: docker
+From: python:3.12-slim-bookworm
+
+%labels
+    Maintainer Luminara-SRE-Agent-Dev
+    Project Luminara-AI-Remediation
+    Tier Development-Agent
+    Team_Size 5
+
+%setup
+    mkdir -p ${SINGULARITY_ROOTFS}/data
+    mkdir -p ${SINGULARITY_ROOTFS}/workspace
+    mkdir -p ${SINGULARITY_ROOTFS}/usr/share/luminara-core
+
+%environment
+    # DEV PARITY RULE: Offset port to 5001 to prevent conflicts with Production (5000)
+    export PORT=${PORT:-5001}
+    export APP_ENV=development
+    export DATA_PATH=/data
+    
+    export PIP_CACHE_DIR="/workspace/.pip-cache"
+    export PIP_ROOT_USER_ACTION=ignore
+    
+    # CI/CD Agentic State Anchors (Writable in RAM)
+    export XDG_CONFIG_HOME="/tmp/.config"
+    export XDG_CACHE_HOME="/tmp/.cache"
+    export GIT_CONFIG_NOSYSTEM=1
+    export GIT_KNOWN_HOSTS_PATH="/workspace/.ssh/known_hosts"
+    export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+%post
+    set -e
+
+    # DEV DIFFERENCE: Added htop and nano for live debugging inside the container
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        gnupg \
+        libpq-dev \
+        build-essential \
+        git \
+        htop \
+        nano \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Install Github CLI (gh)
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    apt-get update && apt-get install -y github-cli && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Git Core Hardening
+    git config --global init.defaultBranch main
+    git config --global core.filemode false
+    
+    pip install --no-cache-dir --upgrade pip
+
+    # SRE FIX: Throttled compilation for shared server safety (CRUCIAL for flash-attn)
+    export MAX_JOBS=4
+    
+    # DEV DIFFERENCE: Includes the Pure Inference stack PLUS testing/formatting tools
+    cat > requirements.txt <<EOF
+langchain>=0.4.2
+langchain-community>=0.4.0
+openai>=1.65.0 
+anthropic>=0.52.0
+pydantic>=2.12.0
+python-dotenv>=1.0.1
+vllm>=0.8.0 
+flash-attn>=2.8.0 
+numpy>=2.1.0
+pandas>=2.3.1
+torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
+transformers>=4.58.0
+accelerate>=1.3.0
+scikit-learn>=1.7.0
+requests>=2.33.1
+aiohttp>=3.11.2
+tqdm>=4.67.3
+psutil>=6.1.0
+clickhouse-driver>=0.2.10
+psycopg2-binary>=2.9.10 
+redis>=5.3.0
+rich>=13.9.4
+GitPython>=3.1.0
+
+# DEV SPECIFIC TOOLS (For the 5-person team workflow)
+pytest>=8.3.0
+black>=24.0.0
+isort>=5.0.0
+EOF
+
+    pip install --no-cache-dir -r requirements.txt
+    rm requirements.txt
+    
+    echo "Luminara-SRE: DEV AI Agent Container Hardening Complete ✅"
+
+%runscript
+    cd /workspace
+    echo "------------------------------------------------"
+    echo "🛠️ Luminara DEVELOPMENT AI AGENT Starting"
+    echo "🌐 Mode: $APP_ENV | Port: $PORT"
+    echo "------------------------------------------------"
+    
+    echo "[..] Verifying shared store parity anchors..."
+    if [ ! -d "/workspace/.pip-cache" ] || [ ! -d "/workspace/.ssh" ]; then
+        echo "Warning: Persistent Parity anchors not detected."
+    fi
+
+    # DEV DIFFERENCE: Boots into a training/debug loop with hot-reloading enabled
+    exec python -m luminara_core.remediation_agent.train_or_debug --port $PORT --hot-reload
+
+%help
+    Luminara Development AI Agent
+    ------------------------------
+    This container is specialized for backend developers.
+    It contains the exact same inference engine as production
+    but adds htop, nano, pytest, black, and isort. 
+    
+    It boots into a hot-reloading state on Port 5001 to 
+    allow live edits to the Langchain/vLLM agentic logic.
