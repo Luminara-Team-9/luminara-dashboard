@@ -8,57 +8,57 @@ From: node:24.15.0-slim
     Team_Size 5
 
 %setup
-    # Pre-create anchors for the SRE "Multi-Tenant" protocol
+    # Identical to Production: Pre-create anchors
     mkdir -p ${SINGULARITY_ROOTFS}/data
     mkdir -p ${SINGULARITY_ROOTFS}/workspace
+    mkdir -p ${SINGULARITY_ROOTFS}/usr/local/share/pnpm
 
 %environment
-    # SRE Port Offset Rule
-    export PORT=${PORT:-3000}
+    # DEV PARITY: Same defaults, different NODE_ENV
+    export PORT=${PORT:-3001}
     export NODE_ENV=development
     export DATA_PATH=/data
     
-    # Pathing for pnpm
     export PNPM_HOME="/usr/local/share/pnpm"
     export PATH="$PNPM_HOME:$PATH"
+    export COREPACK_ENABLE_AUTO_PIN=0
 
 %post
-    # Fail immediately if any command fails
     set -e
 
-    # Update and install core SRE tools
+    # Identical to Production: Ensure tools are present
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
-        git \
-        procps \
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    # Install pnpm and configure it to be container-friendly
+    # Identical to Production: Fix permissions for the shared pnpm home
+    mkdir -p /usr/local/share/pnpm
+    chmod -R 777 /usr/local/share/pnpm
+
     npm install -g pnpm@latest
+    
     pnpm config set store-dir /workspace/.pnpm-store
+    pnpm config set update-notifier false
 
 %runscript
-    # Ensure we start in the correct project directory
-    # (Assuming the Next.js app is in the root of the bound workspace)
     cd /workspace
     
     echo "------------------------------------------------"
-    echo "🛠️  Luminara DEV Dashboard Active"
-    echo "👥 Team Member: ${USER:-Unknown}"
-    echo "🌐 Access at: http://<KNU_SERVER_IP>:$PORT"
-    echo "📂 Data Source: /data"
+    echo "🛠️ Luminara DEVELOPMENT Dashboard Starting"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "📂 Data Source: $DATA_PATH"
     echo "------------------------------------------------"
 
-    # Install dependencies (only if missing/changed)
+    # DEV DIFFERENCE: We do not use --frozen-lockfile in dev
+    # to allow teammates to add packages easily.
     pnpm install
 
-    # CRITICAL: Bind to 0.0.0.0 so you can access it from your PC browser
+    # DEV DIFFERENCE: Launch Next.js in dev mode (hot reloading)
     exec pnpm dev --port $PORT --hostname 0.0.0.0
 
 %help
     Luminara Development Dashboard
     ------------------------------
-    Run this with the --bind flag to connect your local code.
-    Example:
-    singularity run --env PORT=3010 --bind ./my_code:/workspace,~/data:/data dev_dashboard.sif
+    This container is optimized for hot-reloading and debugging.
+    It uses 'pnpm dev' and is mirrored to the Production SIF.
