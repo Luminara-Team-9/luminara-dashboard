@@ -5,37 +5,44 @@ From: node:24.15.0-slim
     Maintainer Luminara-SRE
     Project Luminara-Dashboard
     Tier Production
-    Team_Size 5
 
 %setup
-    # Pre-create anchors for the SRE "Multi-Tenant" protocol
-    # These must remain identical to Dev to ensure infrastructure parity
     mkdir -p ${SINGULARITY_ROOTFS}/data
     mkdir -p ${SINGULARITY_ROOTFS}/workspace
+    # PRE-CREATE the pnpm home so the ownership is established during build
+    mkdir -p ${SINGULARITY_ROOTFS}/usr/local/share/pnpm
 
 %environment
-    # SRE Port Offset Rule
     export PORT=${PORT:-3000}
     export NODE_ENV=production
     export DATA_PATH=/data
     
-    # Pathing for pnpm
+    # SRE FIX: Move pnpm home to a location that won't conflict with system tools
     export PNPM_HOME="/usr/local/share/pnpm"
     export PATH="$PNPM_HOME:$PATH"
+    # Ensure pnpm doesn't try to auto-update itself during CI
+    export COREPACK_ENABLE_AUTO_PIN=0
 
 %post
     set -e
 
-    # Minimal system tools for Production (Removed procps to keep it slim)
+    # Install system tools
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+    # SRE FIX: Explicitly set permissions for the pnpm directory
+    mkdir -p /usr/local/share/pnpm
+    chmod -R 777 /usr/local/share/pnpm
+
+    # Install pnpm
     npm install -g pnpm@latest
     
-    # Configure pnpm for a shared environment
+    # Configure pnpm to use the bound workspace for its store
     pnpm config set store-dir /workspace/.pnpm-store
+    # Disable the "update check" which causes the mkdir error
+    pnpm config set update-notifier false
 
 %runscript
     cd /workspace

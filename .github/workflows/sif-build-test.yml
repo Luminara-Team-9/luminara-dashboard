@@ -2,16 +2,18 @@ name: Luminara Containers CI Pipeline
 
 on:
   push:
-    branches:  
-      - main
-      - 'feat/**'
-      - 'fix/**'
-      - 'chore/**'
-    paths:
-      - '**.def'
+    branches: [ main ]
+    paths: [ '**.def' ]
   pull_request:
-    branches:
-      - main
+    # This triggers on any PR targeting main
+    branches: [ main ]
+    paths: [ '**.def' ]
+
+# THE SRE FIX: This ensures only one build per branch/PR runs at a time.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   
