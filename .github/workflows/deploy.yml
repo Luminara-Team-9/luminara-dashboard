@@ -1,4 +1,4 @@
-name: ABRM02 Luminara Deployment
+name: ABRM02 Server Connection Check (switch to deployment?)
 
 # This tells GitHub to run this script ONLY when code is pushed to the main branch
 on:
