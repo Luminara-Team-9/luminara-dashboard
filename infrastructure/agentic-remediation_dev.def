@@ -55,15 +55,20 @@ From: python:3.12-slim-bookworm
     
     pip install --no-cache-dir --upgrade pip
 
-    # SRE FIX: Throttled compilation for shared server safety (CRUCIAL for flash-attn)
+    # SRE FIX: Throttled compilation for shared server safety
     export MAX_JOBS=4
-    
-    # SRE FIX 2: The PyTorch Bootstrapping Rule
-    # Torch MUST be fully installed before flash-attn or vLLM attempt to compile
-    echo "Installing PyTorch CUDA Foundation..."
+    export FLASH_ATTENTION_FORCE_BUILD="TRUE"
+
+    # SRE FIX 2: Install PyTorch AND the missing C++ build tools first
+    echo "Installing PyTorch CUDA Foundation and Build Tools..."
+    pip install --no-cache-dir packaging ninja wheel
     pip install --no-cache-dir torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
-    # DEV DIFFERENCE: Includes the Pure Inference stack PLUS testing/formatting tools
+    # SRE FIX 3: Force flash-attn to use the global PyTorch we just installed
+    echo "Compiling Flash Attention (Bypassing Build Isolation)..."
+    pip install --no-cache-dir flash-attn>=2.8.0 --no-build-isolation
+
+    # THE PURE INFERENCE STACK (Stripped of Playwright/Lighthouse)
     cat > requirements.txt <<EOF
 langchain>=0.4.2
 langchain-community>=0.4.0
@@ -71,11 +76,9 @@ openai>=1.65.0
 anthropic>=0.52.0
 pydantic>=2.12.0
 python-dotenv>=1.0.1
-vllm>=0.8.0 
-flash-attn>=2.8.0 
+vllm>=0.8.0
 numpy>=2.1.0
 pandas>=2.3.1
-torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
 transformers>=4.58.0
 accelerate>=1.3.0
 scikit-learn>=1.7.0
@@ -88,18 +91,13 @@ psycopg2-binary>=2.9.10
 redis>=5.3.0
 rich>=13.9.4
 GitPython>=3.1.0
-
-# DEV SPECIFIC TOOLS (For the 5-person team workflow)
-pytest>=8.3.0
-black>=24.0.0
-isort>=5.0.0
 EOF
 
     echo "Installing AI Tooling and Flash Attention..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
     
-    echo "Luminara-SRE: DEV AI Agent Container Hardening Complete ✅"
+    echo "Luminara-SRE: PURE AI Agent Container Hardening Complete ✅"
 
 %runscript
     cd /workspace
