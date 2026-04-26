@@ -5,41 +5,43 @@ From: node:24.15.0-slim
     Maintainer Luminara-SRE
     Project Luminara-Dashboard
     Tier Production
-    Team_Size 5
 
 %setup
-    # Pre-create anchors for the SRE "Multi-Tenant" protocol
-    # These must remain identical to Dev to ensure infrastructure parity
     mkdir -p ${SINGULARITY_ROOTFS}/data
     mkdir -p ${SINGULARITY_ROOTFS}/workspace
 
 %environment
-    # SRE Port Offset Rule
     export PORT=${PORT:-3000}
     export NODE_ENV=production
     export DATA_PATH=/data
     
-    # Pathing for pnpm
-    export PNPM_HOME="/usr/local/share/pnpm"
+    # THE FIX: Point PNPM_HOME to /tmp, which is always writable at runtime
+    export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
+    export COREPACK_ENABLE_AUTO_PIN=0
 
 %post
     set -e
 
-    # Minimal system tools for Production (Removed procps to keep it slim)
+    # Install system tools
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+
+    # Install pnpm
     npm install -g pnpm@latest
     
-    # Configure pnpm for a shared environment
+    # Configure pnpm to use the bound workspace for its store
     pnpm config set store-dir /workspace/.pnpm-store
+    # Disable the "update check" which causes the mkdir error
+    pnpm config set update-notifier false
 
 %runscript
     cd /workspace
     
+    echo "------------------------------------------------"
     echo "🚀 Luminara PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "📂 Data Source: $DATA_PATH"

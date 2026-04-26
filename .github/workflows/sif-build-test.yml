@@ -1,20 +1,23 @@
-name: Luminara Containers CI Pipeline
+name: Luminara Containers CI/CD
 
 on:
   push:
-    branches:  
-      - main
-      - 'feat/**'
-      - 'fix/**'
-      - 'chore/**'
-    paths:
-      - '**.def'
+    branches: [ main ]
+    paths: [ '**.def' ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+    paths: [ '**.def' ]
+
+# SRE FIX: Only one build per branch/PR. New pushes cancel old ones.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  
+  # Define where you want the final images to live
+  RELEASE_PATH: "/abr/coss41/Luminara_App/images-prod"
+
 jobs:
   detect-changes:
     runs-on: [self-hosted, Linux]
@@ -30,7 +33,7 @@ jobs:
           escape_json: false
           json: true
 
-  build-changed:
+  build-and-deploy:
     needs: detect-changes
     if: needs.detect-changes.outputs.def_files != '[]' && needs.detect-changes.outputs.def_files != ''
     runs-on: [self-hosted, Linux]
@@ -43,42 +46,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Dynamic Sandbox
+      - name: Prepare Variables
         run: |
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
-          echo "FOLDER_NAME=test_env_${SAFE_NAME}" >> $GITHUB_ENV
-          singularity build --fakeroot --sandbox "test_env_${SAFE_NAME}" "${{ matrix.def_file }}"
-          
-      - name: Smart Verification (Feature Detection)
+          echo "SIF_NAME=${SAFE_NAME}.sif" >> $GITHUB_ENV
+          echo "SAFE_NAME=${SAFE_NAME}" >> $GITHUB_ENV
+
+      - name: Build SIF (Sudo-Free)
         run: |
-          echo "🔍 Starting intelligent capability check for ${{ matrix.def_file }}..."
+          # We build a SIF file directly to bypass NFS permission issues
+          singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}
           
-          # 1. Check for Standard Infrastructure
-          singularity exec ${{ env.FOLDER_NAME }} ls -d /data
-          singularity exec ${{ env.FOLDER_NAME }} ls -d /workspace
+      - name: Smart Verification
+        run: |
+
+          # 1. Infrastructure Check
+          echo "🔍 Testing SIF Integrity..."
+          # Standard Anchor Checks
+          singularity exec ${{ env.SIF_NAME }} ls -d /data
+          singularity exec ${{ env.SIF_NAME }} ls -d /workspace
 
           # 2. Conditional Node.js/pnpm Check
           if grep -qi "pnpm" "${{ matrix.def_file }}"; then
             echo "✅ Node.js detected. Verifying pnpm..."
-            singularity exec ${{ env.FOLDER_NAME }} pnpm --version
+            singularity exec ${{ env.SIF_NAME }} pnpm --version
           fi
 
           # 3. Conditional Python/Pip Check
           if grep -qi "python" "${{ matrix.def_file }}" || grep -qi "pip" "${{ matrix.def_file }}"; then
             echo "✅ Python detected. Verifying pip..."
-            singularity exec ${{ env.FOLDER_NAME }} python3 --version
-            singularity exec ${{ env.FOLDER_NAME }} pip3 --version
+            singularity exec ${{ env.SIF_NAME }} python3 --version
+            singularity exec ${{ env.SIF_NAME }} pip3 --version
           fi
 
           # 4. Conditional AI/GPU Check (vLLM/CUDA)
           if grep -qi "cuda" "${{ matrix.def_file }}"; then
             echo "✅ CUDA detected. Verifying NVIDIA tools..."
-            singularity exec ${{ env.FOLDER_NAME }} nvidia-smi --version || echo "Warning: nvidia-smi failed (Expected if not on GPU node)"
+            singularity exec ${{ env.SIF_NAME }} nvidia-smi --version || echo "Warning: nvidia-smi failed (Expected if not on GPU node)"
           fi
+
+      - name: Release to Production
+        # Only move the file if we are merging/pushing to MAIN
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
+          mkdir -p ${{ env.RELEASE_PATH }}
+          mv ${{ env.SIF_NAME }} ${{ env.RELEASE_PATH }}/
+          echo "✅ Released ${{ env.SIF_NAME }} to ${{ env.RELEASE_PATH }}"
 
       - name: Cleanup
         if: always()
         run: |
-          if [ -d "${{ env.FOLDER_NAME }}" ]; then
-            rm -rf "${{ env.FOLDER_NAME }}"
-          fi
+          # Delete the SIF from the runner folder if it wasn't moved to release
+          rm -f ${{ env.SIF_NAME }}
