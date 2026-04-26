@@ -103,7 +103,7 @@ fi
 
 # 5. Playwright Browser Check
 echo -e "[..] Checking Chromium for Testing binaries..."
-npx playwright install --with-deps chromium
+npx playwright install chromium
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] Playwright is ready for auditing.${NC}"
 else
