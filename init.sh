@@ -13,11 +13,20 @@ echo -e "${BLUE}============================================${NC}"
 echo -e "🚦 ${BLUE}LUMINARA SRE: Environment Check Start (Linux)${NC}"
 echo -e "${BLUE}============================================${NC}"
 
+
+# Force-deactivate any active Conda environments to prevent version conflicts
+if command -v conda >/dev/null 2>&1; then
+    echo -e "[..] Neutralizing active Conda environments for safety..."
+    # Running it twice handles nested environments (e.g., base -> decathlon)
+    conda deactivate > /dev/null 2>&1
+    conda deactivate > /dev/null 2>&1 
+fi
+
 # 1. Check/Create Virtual Environment
 if [ ! -d ".venv" ]; then
     echo -e "[..] .venv not found. Creating Python 3.12 environment..."
     # On KNU ABRM02, we use python3.12 directly
-    python3.12 -m venv .venv
+    /abr/coss41/miniconda3/envs/luminara_v12/bin/python -m venv .venv --copies
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}[OK] .venv created successfully.${NC}"
     else
