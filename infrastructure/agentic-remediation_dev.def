@@ -13,15 +13,13 @@ From: python:3.12-slim-bookworm
     mkdir -p ${SINGULARITY_ROOTFS}/usr/share/luminara-core
 
 %environment
-    # DEV PARITY RULE: Offset port to 5001 to prevent conflicts with Production (5000)
+    # DEV PARITY: Port offset to 5001 to prevent conflicts with Production
     export PORT=${PORT:-5001}
     export APP_ENV=development
     export DATA_PATH=/data
-    
     export PIP_CACHE_DIR="/workspace/.pip-cache"
     export PIP_ROOT_USER_ACTION=ignore
     
-    # CI/CD Agentic State Anchors (Writable in RAM)
     export XDG_CONFIG_HOME="/tmp/.config"
     export XDG_CACHE_HOME="/tmp/.cache"
     export GIT_CONFIG_NOSYSTEM=1
@@ -31,7 +29,7 @@ From: python:3.12-slim-bookworm
 %post
     set -e
 
-    # DEV DIFFERENCE: Added htop and nano for live debugging inside the container
+    # 1. Dev Tools Included (htop, nano)
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
@@ -43,32 +41,31 @@ From: python:3.12-slim-bookworm
         nano \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    # Install Github CLI (gh)
+    # 2. GitHub CLI
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-    apt-get update && apt-get install -y github-cli && apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get update && apt-get install -y gh && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    # Git Core Hardening
     git config --global init.defaultBranch main
     git config --global core.filemode false
     
     pip install --no-cache-dir --upgrade pip
-
-    # SRE FIX: Throttled compilation for shared server safety
     export MAX_JOBS=4
-    export FLASH_ATTENTION_FORCE_BUILD="TRUE"
 
-    # SRE FIX 2: Install PyTorch AND the missing C++ build tools first
-    echo "Installing PyTorch CUDA Foundation and Build Tools..."
-    pip install --no-cache-dir packaging ninja wheel
-    pip install --no-cache-dir torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
+    # ---------------------------------------------------------
+    # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
+    # ---------------------------------------------------------
+    
+    echo "Installing PyTorch CUDA Foundation (Matched to cu121)..."
+    pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
-    # SRE FIX 3: Force flash-attn to use the global PyTorch we just installed
-    echo "Compiling Flash Attention (Bypassing Build Isolation)..."
-    pip install --no-cache-dir flash-attn>=2.8.0 --no-build-isolation
+    echo "Installing pre-compiled Flash Attention (Bypassing compilation)..."
+    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu121torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
+    pip install --no-cache-dir $FLASH_WHEEL
 
-    # THE PURE INFERENCE STACK (Stripped of Playwright/Lighthouse)
+    # DEV DIFFERENCE: Pure Inference Stack + Developer Formatting Tools
+    # Note: vLLM is pinned to 0.6.4 to prevent it from upgrading PyTorch
     cat > requirements.txt <<EOF
 langchain>=0.4.2
 langchain-community>=0.4.0
@@ -76,10 +73,10 @@ openai>=1.65.0
 anthropic>=0.52.0
 pydantic>=2.12.0
 python-dotenv>=1.0.1
-vllm>=0.8.0
+vllm==0.6.4
 numpy>=2.1.0
 pandas>=2.3.1
-transformers>=4.58.0
+transformers>=4.48.0
 accelerate>=1.3.0
 scikit-learn>=1.7.0
 requests>=2.33.1
@@ -91,13 +88,18 @@ psycopg2-binary>=2.9.10
 redis>=5.3.0
 rich>=13.9.4
 GitPython>=3.1.0
+
+# DEV SPECIFIC TOOLS (Formatting & Unit Testing)
+pytest>=8.3.0
+black>=24.0.0
+isort>=5.0.0
 EOF
 
-    echo "Installing AI Tooling and Flash Attention..."
+    echo "Installing remaining Dev AI Tooling..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
     
-    echo "Luminara-SRE: PURE AI Agent Container Hardening Complete ✅"
+    echo "Luminara-SRE: DEV AI Agent Container Hardening Complete ✅"
 
 %runscript
     cd /workspace
@@ -111,15 +113,5 @@ EOF
         echo "Warning: Persistent Parity anchors not detected."
     fi
 
-    # DEV DIFFERENCE: Boots into a training/debug loop with hot-reloading enabled
+    # DEV DIFFERENCE: Boots into hot-reloading for the backend team
     exec python -m luminara_core.remediation_agent.train_or_debug --port $PORT --hot-reload
-
-%help
-    Luminara Development AI Agent
-    ------------------------------
-    This container is specialized for backend developers.
-    It contains the exact same inference engine as production
-    but adds htop, nano, pytest, black, and isort. 
-    
-    It boots into a hot-reloading state on Port 5001 to 
-    allow live edits to the Langchain/vLLM agentic logic.
