@@ -11,7 +11,7 @@ python-dotenv>=1.0.1
 # High-performance inference for Qwen 2.5 32B (Server/Linux Only)
 vllm>=0.6.4 
 # Required for Qwen's attention mechanism efficiency (Server/Linux Only)
-flash-attn>=2.7.0.post2 
+flash-attn>=2.7.4.post1 
 
 # =========================================
 # 2. DATA SCIENCE & MACHINE LEARNING
