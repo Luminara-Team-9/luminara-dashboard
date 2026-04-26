@@ -3,5 +3,8 @@
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
+  },
+  "terminal.integrated.env.linux": {
+    "PATH": "/abr/coss41/miniconda3/envs/luminara_v12/bin:${env:PATH}"
   }
 }

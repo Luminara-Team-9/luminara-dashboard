@@ -72,13 +72,32 @@ else
 fi
 
 # 4. Node.js Packages (pnpm)
-echo -e "[..] Checking pnpm Node.js packages..."
-# Ensure pnpm is in your PATH
-pnpm install
+echo -e "[..] Bridging Node 24 and pnpm from the Toolbox..."
+
+# This ensures the script sees the Node 24 we installed in Conda
+TOOLBOX_PATH="/home/coss41/miniconda3/envs/luminara_v12/bin"
+export PATH="$TOOLBOX_PATH:$PATH"
+
+# Verify Node Version (Safety Check)
+CURRENT_NODE=$(node -v | cut -d'.' -f1)
+if [ "$CURRENT_NODE" != "v24" ]; then
+    echo -e "${RED}[!] WRONG NODE: Found $CURRENT_NODE, need v24. Check luminara_v12 env.${NC}"
+    exit 1
+fi
+
+# Check and run pnpm
+if command -v pnpm &> /dev/null; then
+    echo -e "${GREEN}[OK] Using Node 24. Synchronizing packages...${NC}"
+    pnpm install
+else
+    echo -e "${BLUE}[..] pnpm missing. Trying to enable via Corepack...${NC}"
+    corepack enable && pnpm install
+fi
+
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] pnpm workspace packages are synchronized.${NC}"
 else
-    echo -e "${RED}[!] FAILED pnpm install. Ensure Node 24 is active.${NC}"
+    echo -e "${RED}[!] FAILED: pnpm install failed. Check network or package.json.${NC}"
     exit 1
 fi
 
