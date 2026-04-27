@@ -41,7 +41,7 @@ jobs:
     strategy:
       matrix:
         def_file: ${{ fromJson(needs.detect-changes.outputs.def_files) }}
-      max-parallel: 3
+      max-parallel: 2
       fail-fast: false
       
     steps:
@@ -74,14 +74,35 @@ jobs:
             echo "Detected PROD environment. Routing to release."
           fi
 
-      - name: Build SIF (Sudo-Free)
+      - name: Build SIF (Auto-Healing & Cleanup Hardened & Sudo-Free)
         run: |
-          # SRE FIX 3: Use /tmp for building to bypass slow NFS/Shared storage
-          export SINGULARITY_TMPDIR=/tmp/singularity-build-${{ github.run_id }}
+          # 1. Isolate the temp directory per matrix job to prevent collisions
+          SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
+          
+          # SRE FIX: Use the massive main SSD instead of the limited /tmp partition
+          export SINGULARITY_TMPDIR=${{ github.workspace }}/singularity-tmp-${SAFE_NAME}
           mkdir -p $SINGULARITY_TMPDIR
           
-          singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}
+          echo "🚀 Attempting standard build..."
           
+          # 2. AUTO-HEALING LOGIC: If the build fails, catch it and retry without cache
+          if ! singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}; then
+              echo "⚠️ Build failed! Suspected cache corruption or network drop."
+              echo "🧹 Initiating SRE Auto-Healing: Purging Singularity cache..."
+              
+              # Force clear the local Singularity cache
+              singularity cache clean --force
+              
+              echo "🔄 Retrying build from a clean state..."
+              # If this second attempt fails, the pipeline will officially fail.
+              singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}
+          fi
+          
+          echo "✅ Build successful. Initiating secure cleanup..."
+          
+          # 3. CLEANUP FIX: Give the host user write permissions to the fake-root files
+          # This completely prevents the 'rm: cannot remove... Permission denied' error
+          chmod -R u+rwX $SINGULARITY_TMPDIR 2>/dev/null || true
           rm -rf $SINGULARITY_TMPDIR
           
       - name: Smart Verification
