@@ -1,4 +1,4 @@
-name: Luminara Containers CI/CD V2
+name: Luminara Containers Build Test CI/CD V2
 
 on:
   push:
