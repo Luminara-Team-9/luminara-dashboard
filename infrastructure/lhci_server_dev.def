@@ -1,0 +1,56 @@
+Bootstrap: docker
+From: node:24.15.0-slim
+
+%labels
+    Maintainer Luminara-SRE-Dev
+    Project Luminara-Infrastructure
+    Service LHCI-Development
+    Team_Size 5
+
+%setup
+    mkdir -p ${SINGULARITY_ROOTFS}/data
+    mkdir -p ${SINGULARITY_ROOTFS}/workspace
+
+%environment
+    # DEV PARITY: Offset port to 9002
+    export PORT=${PORT:-9002}
+    export NODE_ENV=development
+    export PNPM_HOME="/tmp/pnpm"
+    export PATH="$PNPM_HOME:$PATH"
+
+%post
+    set -e
+    # 🛠️ DEV TOOLS
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        htop \
+        nano \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    npm install -g @lhci/server@latest
+
+%runscript
+    cd /workspace
+    
+    echo "------------------------------------------------"
+    echo "🏛️ Luminara DEVELOPMENT LHCI SERVER Starting"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "------------------------------------------------"
+
+    # Validation for the dev-specific lighthouserc.json
+    if [ ! -f "/workspace/lighthouserc.dev.json" ]; then
+        echo "WARNING: lighthouserc.dev.json not found. Checking for default lighthouserc.json..."
+        if [ ! -f "/workspace/lighthouserc.json" ]; then
+            echo "CRITICAL ERROR: No LHCI configuration found."
+            exit 1
+        fi
+    fi
+
+    exec lhci server --port=$PORT
+
+%help
+    Luminara Development LHCI Server
+    --------------------------------
+    Runs on Port 9002. Use this to receive audit results from 
+    ephemeral 'audit_dev.sif' containers.

@@ -1,0 +1,51 @@
+Bootstrap: docker
+From: postgres:15-bookworm
+
+%labels
+    Maintainer Luminara-SRE-Dev
+    Project Luminara-Infrastructure
+    Service Database-Development
+    Team_Size 5
+
+%environment
+    # DEV PARITY: Offset port to 5433
+    export PGPORT=5433
+    export PGDATA=/data/postgres_dev
+    export PGSOCKETS=/tmp
+    export PATH="/usr/lib/postgresql/15/bin:$PATH"
+
+%post
+    set -e
+    # 🛠️ DEV TOOLS: Essential for live debugging on the shared server
+    apt-get update && apt-get install -y --no-install-recommends \
+        htop \
+        nano \
+        vim \
+        procps \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+    
+    mkdir -p /data/postgres_dev
+
+%runscript
+    # ------------------------------------------------------------------
+    # DEVELOPMENT BOOTSTRAP PROTOCOL
+    # ------------------------------------------------------------------
+    if [ ! -f "$PGDATA/PG_VERSION" ]; then
+        echo "🛠️ Initializing DEVELOPMENT Database at $PGDATA..."
+        initdb -D "$PGDATA" --auth=md5 --pwfile=<(echo "${POSTGRES_PASSWORD:-admin}")
+    fi
+
+    echo "------------------------------------------------"
+    echo "🐘 Luminara DEVELOPMENT POSTGRESQL Starting"
+    echo "🌐 Port: $PGPORT"
+    echo "📂 Data Path: $PGDATA"
+    echo "------------------------------------------------"
+
+    # Launch with redirected sockets to bypass read-only /var/run
+    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p $PGPORT
+
+%help
+    Luminara Development PostgreSQL
+    -------------------------------
+    Runs on Port 5433. Includes htop and nano.
+    Usage: singularity run --bind /path/to/dev_data:/data postgres_dev.sif

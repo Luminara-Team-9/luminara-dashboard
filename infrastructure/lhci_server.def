@@ -1,0 +1,45 @@
+Bootstrap: docker
+From: node:24.15.0-slim
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-Infrastructure
+    Service LHCI-Production
+
+%environment
+    export PORT=${PORT:-9001}
+    export NODE_ENV=production
+    export PNPM_HOME="/tmp/pnpm"
+    export PATH="$PNPM_HOME:$PATH"
+
+%post
+    set -e
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Install specific pinned version for future-proofing
+    npm install -g @lhci/server@0.13.0
+
+%runscript
+    cd /workspace
+    
+    echo "------------------------------------------------"
+    echo "🏛️ Luminara LHCI SERVER Starting"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "------------------------------------------------"
+
+    # Validation: Ensure the DB config is present before booting
+    if [ ! -f "/workspace/lighthouserc.json" ]; then
+        echo "CRITICAL ERROR: Configuration file 'lighthouserc.json' is missing."
+        echo "The LHCI server cannot connect to Postgres without this file."
+        exit 1
+    fi
+
+    exec lhci server --port=$PORT
+
+%help
+    Luminara Production LHCI Server
+    -------------------------------
+    Listens for Flow 6 audit data and manages Flow 7 storage.

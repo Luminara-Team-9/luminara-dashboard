@@ -1,0 +1,43 @@
+Bootstrap: docker
+From: postgres:15-bookworm
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-Infrastructure
+    Service Database-Production
+
+%environment
+    # SRE RULE: All data MUST be in a persistent bound folder
+    export PGDATA=/data/postgres
+    # SRE FIX: Bypasses read-only /var/run for socket locks
+    export PGSOCKETS=/tmp
+    export PATH="/usr/lib/postgresql/15/bin:$PATH"
+
+%post
+    # Pre-create the internal mount point
+    mkdir -p /data/postgres
+
+%runscript
+    # ------------------------------------------------------------------
+    # PRODUCTION BOOTSTRAP PROTOCOL
+    # ------------------------------------------------------------------
+    
+    # 1. Check if the database has been initialized
+    if [ ! -f "$PGDATA/PG_VERSION" ]; then
+        echo "🚨 Database not found at $PGDATA. Initializing new cluster..."
+        initdb -D "$PGDATA" --auth=md5 --pwfile=<(echo "$POSTGRES_PASSWORD")
+    else
+        echo "✅ Existing Database found at $PGDATA."
+    fi
+
+    echo "🐘 Luminara POSTGRESQL Starting on Port 5432..."
+    
+    # 2. Launch with redirected sockets for Singularity compatibility
+    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p 5432
+
+%help
+    Luminara Production PostgreSQL
+    ------------------------------
+    Standardized for ABRM02 shared server. 
+    Requires environment variable: POSTGRES_PASSWORD
+    Usage: singularity run --bind /abr/shared/pg_data:/data db.sif
