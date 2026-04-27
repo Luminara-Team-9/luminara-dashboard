@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: postgres:15-bookworm
+From: postgres:15.6-bookworm
 
 %labels
     Maintainer Luminara-SRE
@@ -8,6 +8,7 @@ From: postgres:15-bookworm
     Hardware ABRM02-ABR-COSS41
 
 %environment
+    export PGPORT=5432
     # SRE RULE: All data MUST be in a persistent bound folder
     export PGDATA=/data/postgres
     # SRE FIX: Bypasses read-only /var/run for socket locks
@@ -36,9 +37,10 @@ From: postgres:15-bookworm
     apt-get clean
     rm -rf /tmp/apt-cache
 
-    # Now mkdir will work because we restored the PATH above
-    mkdir -p /data/postgres_dev
-    
+    # SRE FIX: Align the mount point with PGDATA and create the GHA anchors
+    mkdir -p /data/postgres
+    mkdir -p /workspace
+
     echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
 
 %runscript
@@ -63,7 +65,7 @@ From: postgres:15-bookworm
 
     # 2. Execution (Hardened for Singularity/No-Sudo environments)
     # -k points the Unix Socket to /tmp to avoid read-only /var/run crashes
-    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p 5432
+    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p $PGPORT
 
 %help
     Luminara Production PostgreSQL

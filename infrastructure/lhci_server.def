@@ -19,7 +19,7 @@ From: node:24.15.0-slim
     # Create the folders the GHA Runner expects to see
     mkdir -p /data
     mkdir -p /workspace
-    
+
     set -e
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
@@ -29,6 +29,9 @@ From: node:24.15.0-slim
     # Install specific pinned version for future-proofing
     npm install -g @lhci/server@0.13.0
 
+    # SRE FIX: Nuke the massive NPM cache before compression
+    npm cache clean --force
+    
 %runscript
     cd /workspace
     

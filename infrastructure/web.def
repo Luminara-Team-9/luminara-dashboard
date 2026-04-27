@@ -38,6 +38,9 @@ From: node:24-slim
     # Disable the "update check" which causes the mkdir error
     pnpm config set update-notifier false
 
+    # SRE FIX: Nuke the massive NPM cache before compression
+    npm cache clean --force
+
 %runscript
     cd /workspace
     

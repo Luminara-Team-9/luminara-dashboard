@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: postgres:15-bookworm
+From: postgres:15.6-bookworm
 
 %labels
     Maintainer Luminara-SRE-Dev
@@ -42,7 +42,8 @@ From: postgres:15-bookworm
 
     # Now mkdir will work because we restored the PATH above
     mkdir -p /data/postgres_dev
-    
+    mkdir -p /workspace
+
     echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
 
 %runscript
