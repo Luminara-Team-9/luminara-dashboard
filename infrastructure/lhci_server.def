@@ -10,9 +10,16 @@ From: node:24.15.0-slim
     export PORT=${PORT:-9001}
     export NODE_ENV=production
     export PNPM_HOME="/tmp/pnpm"
-    export PATH="$PNPM_HOME:$PATH"
+    export PATH="$PNPM_HOME:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 %post
+    # SRE FIX: Restore PATH and create mandatory Infrastructure Anchors
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # Create the folders the GHA Runner expects to see
+    mkdir -p /data
+    mkdir -p /workspace
+    
     set -e
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
