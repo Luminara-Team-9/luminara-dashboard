@@ -125,7 +125,7 @@ jobs:
           singularity exec ${{ env.SIF_NAME }} ls -d /workspace
 
           # 2. Conditional Node.js/pnpm Check
-          if grep -qi "pnpm" "${{ matrix.def_file }}"; then
+          if grep -qE "npm install.*pnpm|curl.*pnpm" "${{ matrix.def_file }}"; then
             echo "✅ Node.js detected. Verifying pnpm..."
             singularity exec ${{ env.SIF_NAME }} pnpm --version
           fi
