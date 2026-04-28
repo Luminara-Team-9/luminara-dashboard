@@ -79,9 +79,15 @@ jobs:
           # 1. Isolate the temp directory per matrix job to prevent collisions
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
           
-          # SRE FIX: Use the massive main SSD instead of the limited /tmp partition
-          export SINGULARITY_TMPDIR=${{ github.workspace }}/singularity-tmp-${SAFE_NAME}
+          # SRE FIX: The Catch-22 Resolution.
+          # Use /var/tmp (Large, persistent local disk) and force wide-open permissions 
+          # so the --fakeroot user is not rejected by strict filesystem rules.
+          export SINGULARITY_TMPDIR=/var/tmp/singularity-${{ github.run_id }}-${SAFE_NAME}
+          
+          # Clear any ghost files from previous runs, then create and permission
+          rm -rf $SINGULARITY_TMPDIR || true
           mkdir -p $SINGULARITY_TMPDIR
+          chmod 777 $SINGULARITY_TMPDIR
           
           echo "🚀 Attempting standard build..."
           
@@ -93,12 +99,12 @@ jobs:
               # Force clear the local Singularity cache
               singularity cache clean --force
               
-              echo "🔄 Retrying build from a clean state..."
-              
-              # SRE FIX: Recreate the folder that would have been deleted when we clean the cache.
+              # SRE FIX: Fully reset the environment for the retry
+              rm -rf $SINGULARITY_TMPDIR || true
               mkdir -p $SINGULARITY_TMPDIR
+              chmod 777 $SINGULARITY_TMPDIR
 
-              # If this second attempt fails, the pipeline will officially fail.
+              echo "🔄 Retrying build from a clean state..."
               singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}
           fi
           
