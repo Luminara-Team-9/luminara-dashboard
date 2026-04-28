@@ -16,7 +16,7 @@ sentence-transformers>=5.4.1
 # STRICT PIN: Server Hardware Constraint (NVIDIA Driver 525)
 vllm==0.6.4
 # Required for Qwen's attention mechanism efficiency (Server/Linux Only)
-flash-attn>=2.7.4.post1 
+flash-attn>=2.7.4.post1
 
 # =========================================
 # 2. DATA SCIENCE & MACHINE LEARNING
