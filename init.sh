@@ -63,7 +63,7 @@ else
 fi
 
 echo -e "[..] Installing requirements.txt dependencies..."
-pip install -r requirements.txt
+pip install -r requirements-server.txt
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] All Python dependencies synchronized.${NC}"
 else
