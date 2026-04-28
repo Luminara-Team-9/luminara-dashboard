@@ -94,6 +94,10 @@ jobs:
               singularity cache clean --force
               
               echo "🔄 Retrying build from a clean state..."
+              
+              # SRE FIX: Recreate the folder that would have been deleted when we clean the cache.
+              mkdir -p $SINGULARITY_TMPDIR
+
               # If this second attempt fails, the pipeline will officially fail.
               singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}
           fi
