@@ -9,8 +9,9 @@ From: node:24.15.0-slim
 %environment
     export PORT=${PORT:-9001}
     export NODE_ENV=production
-    export PNPM_HOME="/tmp/pnpm"
-    export PATH="$PNPM_HOME:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+     # SRE FIX: Removed the PNPM_HOME variables so the GHA pipeline 
+    # doesn't falsely assume pnpm is installed.
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 %post
     # SRE FIX: Restore PATH and create mandatory Infrastructure Anchors
