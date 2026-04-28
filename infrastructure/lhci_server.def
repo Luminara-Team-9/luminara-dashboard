@@ -1,0 +1,56 @@
+Bootstrap: docker
+From: node:24.15.0-slim
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-Infrastructure
+    Service LHCI-Production
+
+%environment
+    export PORT=${PORT:-9001}
+    export NODE_ENV=production
+    # SRE FIX: Removed the required variables so the GHA pipeline 
+    # doesn't falsely assume installations.
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    # SRE FIX: Restore PATH and create mandatory Infrastructure Anchors
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # Create the folders the GHA Runner expects to see
+    mkdir -p /data
+    mkdir -p /workspace
+
+    set -e
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Install specific pinned version for future-proofing
+    npm install -g @lhci/server@0.13.0
+
+    # SRE FIX: Nuke the massive NPM cache before compression
+    npm cache clean --force
+    
+%runscript
+    cd /workspace
+    
+    echo "------------------------------------------------"
+    echo "🏛️ Luminara LHCI SERVER Starting"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "------------------------------------------------"
+
+    # Validation: Ensure the DB config is present before booting
+    if [ ! -f "/workspace/lighthouserc.json" ]; then
+        echo "CRITICAL ERROR: Configuration file 'lighthouserc.json' is missing."
+        echo "The LHCI server cannot connect to Postgres without this file."
+        exit 1
+    fi
+
+    exec lhci server --port=$PORT
+
+%help
+    Luminara Production LHCI Server
+    -------------------------------
+    Listens for Flow 6 audit data and manages Flow 7 storage.

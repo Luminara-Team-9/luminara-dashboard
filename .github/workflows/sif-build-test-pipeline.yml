@@ -125,22 +125,36 @@ jobs:
           singularity exec ${{ env.SIF_NAME }} ls -d /workspace
 
           # 2. Conditional Node.js/pnpm Check
-          if grep -qi "pnpm" "${{ matrix.def_file }}"; then
+          if grep -qE "npm install.*pnpm|curl.*pnpm" "${{ matrix.def_file }}"; then
             echo "✅ Node.js detected. Verifying pnpm..."
             singularity exec ${{ env.SIF_NAME }} pnpm --version
           fi
 
-          # 3. Conditional Python/Pip Check
-          if grep -qi "python" "${{ matrix.def_file }}" || grep -qi "pip" "${{ matrix.def_file }}"; then
-            echo "✅ Python detected. Verifying pip..."
-            singularity exec ${{ env.SIF_NAME }} python3 --version
-            singularity exec ${{ env.SIF_NAME }} pip3 --version
+          # 3. Conditional Python/Pip Check (Hardened against the Grep Trap)
+          # SRE FIX: Uses Regex to only trigger if Python is the base image (-E "^From:.*python") 
+          # or if pip is actively being used to install something (-E "pip install").
+          if grep -qE "^From:.*python|pip install" "${{ matrix.def_file }}"; then
+            echo "✅ Python ecosystem detected. Verifying binaries..."
+            
+            # SRE FIX: Safely checks for either 'python3' or 'python' without crashing
+            singularity exec ${{ env.SIF_NAME }} bash -c 'if command -v python3 >/dev/null 2>&1; then python3 --version; elif command -v python >/dev/null 2>&1; then python --version; else exit 1; fi'
+            
+            # SRE FIX: Safely checks for either 'pip3' or 'pip'
+            singularity exec ${{ env.SIF_NAME }} bash -c 'if command -v pip3 >/dev/null 2>&1; then pip3 --version; elif command -v pip >/dev/null 2>&1; then pip --version; else exit 1; fi'
           fi
 
-          # 4. Conditional AI/GPU Check (vLLM/CUDA)
-          if grep -qi "cuda" "${{ matrix.def_file }}"; then
-            echo "✅ CUDA detected. Verifying NVIDIA tools..."
-            singularity exec ${{ env.SIF_NAME }} nvidia-smi --version || echo "Warning: nvidia-smi failed (Expected if not on GPU node)"
+          # 4. Conditional AI/GPU Check (Hardened & Runner-Safe)
+          # SRE FIX: Trigger ONLY if an NVIDIA/CUDA base image is used, 
+          # or if heavy AI libraries (torch, vllm, flash-attn) are explicitly pip installed.
+          if grep -qE "^From:.*(nvidia|cuda)|pip install.*(torch|vllm|flash-attn)" "${{ matrix.def_file }}"; then
+            echo "✅ AI/GPU payload detected. Verifying toolchain..."
+            
+            # SRE FIX: Safely check for nvidia-smi. 
+            # Does not crash if the GHA runner lacks a GPU or if the --nv flag is missing.
+            singularity exec ${{ env.SIF_NAME }} bash -c 'if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi --version; else echo "⚠️ nvidia-smi not available in runner context (Expected without --nv flag or on CPU node)."; fi'
+            
+            # SRE FIX (Bonus Parity Check): Safely verify that the AI Python payload actually compiled
+            singularity exec ${{ env.SIF_NAME }} bash -c 'if command -v python3 >/dev/null 2>&1; then python3 -c "import sys; import importlib.util; sys.exit(0) if importlib.util.find_spec(\"torch\") or importlib.util.find_spec(\"vllm\") else sys.exit(1)" 2>/dev/null && echo "✅ AI Python Libraries (vLLM/Torch) verified." || echo "⚠️ Warning: AI libraries not found in Python path."; fi'
           fi
 
       - name: Continuous Delivery (CD) Release

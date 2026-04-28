@@ -36,6 +36,9 @@ From: node:24-slim
     pnpm config set store-dir /workspace/.pnpm-store
     pnpm config set update-notifier false
 
+    # SRE FIX: Nuke the massive NPM cache before compression
+    npm cache clean --force
+    
 %runscript
     cd /workspace
     

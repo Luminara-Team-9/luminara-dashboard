@@ -1,0 +1,71 @@
+Bootstrap: docker
+From: postgres:15.6-bookworm
+
+%labels
+    Maintainer Luminara-SRE-Dev
+    Project Luminara-Infrastructure
+    Service Database-Development
+    Team_Size 5
+
+%environment
+    # DEV PARITY: Offset port to 5433
+    export PGPORT=5433
+    export PGDATA=/data/postgres_dev
+    export PGSOCKETS=/tmp
+    export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    # SRE FIX 1: Restore the PATH immediately
+    # This prevents the "mkdir: not found" error by telling the shell where binaries live.
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+
+    set -e
+
+    # SRE FIX 2: Bypassing the statvfs disk space error
+    # We tell apt to use /tmp for its archives so it doesn't get confused by the overlay.
+    mkdir -p /tmp/apt-cache
+    
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
+    
+    # SRE FIX 3: Disable disk space check and install tools
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+        htop \
+        nano \
+        vim \
+        procps \
+        ca-certificates \
+        curl
+        
+    apt-get clean
+    rm -rf /tmp/apt-cache
+
+    # Now mkdir will work because we restored the PATH above
+    mkdir -p /data/postgres_dev
+    mkdir -p /workspace
+
+    echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
+
+%runscript
+    # ------------------------------------------------------------------
+    # DEVELOPMENT BOOTSTRAP PROTOCOL
+    # ------------------------------------------------------------------
+    if [ ! -f "$PGDATA/PG_VERSION" ]; then
+        echo "🛠️ Initializing DEVELOPMENT Database at $PGDATA..."
+        initdb -D "$PGDATA" --auth=md5 --pwfile=<(echo "${POSTGRES_PASSWORD:-admin}")
+    fi
+
+    echo "------------------------------------------------"
+    echo "🐘 Luminara DEVELOPMENT POSTGRESQL Starting"
+    echo "🌐 Port: $PGPORT"
+    echo "📂 Data Path: $PGDATA"
+    echo "------------------------------------------------"
+
+    # Launch with redirected sockets to bypass read-only /var/run
+    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p $PGPORT
+
+%help
+    Luminara Development PostgreSQL
+    -------------------------------
+    Runs on Port 5433. Includes htop and nano.
+    Usage: singularity run --bind /path/to/dev_data:/data postgres_dev.sif
