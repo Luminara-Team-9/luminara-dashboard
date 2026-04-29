@@ -1,0 +1,50 @@
+Bootstrap: docker
+From: redis:7-bookworm
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service Redis-Production
+
+%environment
+    export PORT=6379
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    # SRE FIX 1: Restore PATH for the build environment
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+    
+    # Service-specific data folder
+    mkdir -p /data/redis
+    
+    # SRE FIX 2: Bypassing the statvfs error
+    mkdir -p /tmp/apt-cache
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+        ca-certificates \
+        curl
+    apt-get clean
+    rm -rf /tmp/apt-cache
+
+    # 🚦 GHA Infrastructure Anchors
+    mkdir -p /data/redis
+    mkdir -p /workspace
+
+%runscript
+    echo "------------------------------------------------"
+    echo "🔴 Luminara RUM: REDIS Starting"
+    echo "🌐 Port: 6379 | Data: /data/redis"
+    echo "------------------------------------------------"
+    
+    # SRE FIX 3: Direct data and PID to writable locations, bypassing read-only /var/run
+    exec redis-server --port 6379 --dir /data/redis --dbfilename dump.rdb --appendonly yes --pidfile /tmp/redis.pid
+
+%help
+    Luminara Production Redis (Swetrix Stack)
+    -----------------------------------------
+    Usage: singularity run --bind /host/rum_redis_data:/data redis_prod.sif

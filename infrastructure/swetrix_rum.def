@@ -1,0 +1,37 @@
+Bootstrap: docker
+From: swetrix/swetrix-api:latest
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service Swetrix-API-Production
+
+%environment
+    # Swetrix internal API defaults to 5005
+    export PORT=${PORT:-5005}
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # 🚦 GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+    
+    # NPM Cache Bomb defusal (Cleans any garbage left by the base image)
+    npm cache clean --force || true
+
+%runscript
+    echo "------------------------------------------------"
+    echo "📈 Luminara RUM: SWETRIX API Starting"
+    echo "🌐 Port: $PORT"
+    echo "------------------------------------------------"
+    
+    # Swetrix is a compiled NestJS app. We bypass npm and execute Node directly.
+    exec node dist/main.js
+
+%help
+    Luminara Production Swetrix API
+    -------------------------------
+    Ensure you inject the correct environment variables (CLICKHOUSE_HOST, 
+    REDIS_HOST) when running this container so it can connect to the RUM stack.

@@ -1,0 +1,45 @@
+Bootstrap: docker
+From: clickhouse/clickhouse-server:24.3
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service ClickHouse-Production
+
+%environment
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+    
+    # 🚦 GHA Infrastructure Anchors & Mount Points
+    mkdir -p /data/clickhouse
+    mkdir -p /workspace
+    mkdir -p /tmp/clickhouse_logs
+    mkdir -p /tmp/clickhouse_tmp
+    mkdir -p /tmp/clickhouse_user_files
+
+%runscript
+    echo "------------------------------------------------"
+    echo "📊 Luminara RUM: CLICKHOUSE Starting"
+    echo "🌐 HTTP: 8123 | Native: 9000"
+    echo "------------------------------------------------"
+    
+    # SRE FIX: Override all hardcoded paths via CLI arguments 
+    # so ClickHouse survives the read-only Singularity file system.
+    exec clickhouse-server --config-file=$CLICKHOUSE_CONFIG \
+        -- --path=/data/clickhouse/ \
+        --logger.log=/tmp/clickhouse_logs/clickhouse-server.log \
+        --logger.errorlog=/tmp/clickhouse_logs/clickhouse-server.err.log \
+        --tmp_path=/tmp/clickhouse_tmp/ \
+        --user_files_path=/tmp/clickhouse_user_files/
+
+%help
+    Luminara Production ClickHouse (Swetrix Stack)
+    ----------------------------------------------
+    Usage: singularity run --bind /host/rum_ch_data:/data clickhouse_prod.sif
