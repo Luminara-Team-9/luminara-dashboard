@@ -36,6 +36,7 @@ From: python:3.12-slim-bookworm
         chromium \
         htop \
         nano \
+        git \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -73,10 +74,18 @@ EOF
     chmod -R 755 /usr/lib/playwright
 
 %runscript
+    %runscript
     cd /workspace
     mkdir -p /tmp/.config /tmp/.cache /tmp/.data /tmp/.npm
     
     echo "------------------------------------------------"
-    echo "🛠️ Luminara DEV AUDITOR Executing"
+    echo "🛠️ Luminara DEVELOPMENT AUDITOR"
     echo "------------------------------------------------"
-    exec "$@"
+    
+    # SRE FIX: The Human Fallback
+    if [ $# -eq 0 ]; then
+        echo "No script provided. Dropping to interactive shell..."
+        exec /bin/bash
+    else
+        exec "$@"
+    fi
