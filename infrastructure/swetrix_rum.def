@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: swetrix/api:latest
+From: swetrix/swetrix-api:latest
 
 %labels
     Maintainer Luminara-SRE
