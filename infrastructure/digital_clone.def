@@ -1,0 +1,50 @@
+Bootstrap: docker
+From: node:24-slim
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-Target-Clone
+    Role Audit-Target
+
+%environment
+    export PORT=${PORT:-3000}
+    export NODE_ENV=production
+    
+    export PNPM_HOME="/tmp/pnpm"
+    export PATH="$PNPM_HOME:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+
+    mkdir -p /data
+    mkdir -p /workspace
+
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    npm install -g pnpm@latest
+    npm cache clean --force
+
+%runscript
+    cd /workspace
+    
+    echo "------------------------------------------------"
+    echo "🎯 TARGET ACQUIRED: Decathlon Web Clone"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "------------------------------------------------"
+
+    # SRE FIX: We do NOT run pnpm install here. 
+    # The container assumes the code mapped to /workspace is already built 
+    # (e.g., you ran 'pnpm build' before starting the container).
+    
+    # We use the production server command to serve the optimized build.
+    exec pnpm start --port $PORT --hostname 0.0.0.0
+
+%help
+    Luminara Decathlon Target Clone
+    -------------------------------
+    This is a PRODUCTION-grade target designed for Lighthouse auditing.
+    It expects the code in /workspace to already be built via 'pnpm build'.
