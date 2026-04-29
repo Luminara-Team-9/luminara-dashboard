@@ -1,0 +1,49 @@
+Bootstrap: docker
+From: clickhouse/clickhouse-server:24.3
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service ClickHouse-Development
+    Team_Size 5
+
+%environment
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+    
+    # DEV PARITY: Isolated data and temp folders
+    mkdir -p /data/clickhouse_dev
+    mkdir -p /tmp/clickhouse_logs_dev
+    mkdir -p /tmp/clickhouse_tmp_dev
+    mkdir -p /tmp/clickhouse_user_files_dev
+
+    # Dev Tools
+    apt-get update && apt-get install -y --no-install-recommends \
+        htop \
+        nano \
+        procps \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+%runscript
+    echo "------------------------------------------------"
+    echo "📊 Luminara DEVELOPMENT: CLICKHOUSE Starting"
+    echo "🌐 HTTP: 8124 | Native: 9001"
+    echo "------------------------------------------------"
+    
+    # SRE FIX: Override hardcoded paths AND force port offsets via CLI
+    exec clickhouse-server --config-file=$CLICKHOUSE_CONFIG \
+        --http_port=8124 \
+        --tcp_port=9001 \
+        -- --path=/data/clickhouse_dev/ \
+        --logger.log=/tmp/clickhouse_logs_dev/clickhouse-server.log \
+        --logger.errorlog=/tmp/clickhouse_logs_dev/clickhouse-server.err.log \
+        --tmp_path=/tmp/clickhouse_tmp_dev/ \
+        --user_files_path=/tmp/clickhouse_user_files_dev/

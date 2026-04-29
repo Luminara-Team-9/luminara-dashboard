@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: swetrix/swetrix-api:latest
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service Swetrix-API-Development
+    Team_Size 5
+
+%environment
+    export PORT=${PORT:-5006}
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+
+    # Dev Tools
+    apt-get update && apt-get install -y --no-install-recommends \
+        htop \
+        nano \
+        procps \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+    
+    # NPM Cache Bomb defusal
+    npm cache clean --force || true
+
+%runscript
+    echo "------------------------------------------------"
+    echo "📈 Luminara DEVELOPMENT: SWETRIX API Starting"
+    echo "🌐 Port: $PORT"
+    echo "------------------------------------------------"
+    
+    exec node dist/main.js

@@ -1,0 +1,44 @@
+Bootstrap: docker
+From: redis:7-bookworm
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service Redis-Development
+    Team_Size 5
+
+%environment
+    export PORT=6380
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+    
+    # DEV PARITY: Isolated data folder
+    mkdir -p /data/redis_dev
+
+    # SRE FIX: Bypassing the statvfs error & adding Dev Tools
+    mkdir -p /tmp/apt-cache
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        htop \
+        nano \
+        procps
+    apt-get clean
+    rm -rf /tmp/apt-cache
+
+%runscript
+    echo "------------------------------------------------"
+    echo "🔴 Luminara DEVELOPMENT: REDIS Starting"
+    echo "🌐 Port: $PORT | Data: /data/redis_dev"
+    echo "------------------------------------------------"
+    
+    # DEV PARITY: Run on offset port with isolated pid and data files
+    exec redis-server --port $PORT --dir /data/redis_dev --dbfilename dump.rdb --appendonly yes --pidfile /tmp/redis_dev.pid
