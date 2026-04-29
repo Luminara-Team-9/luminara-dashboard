@@ -74,7 +74,6 @@ EOF
     chmod -R 755 /usr/lib/playwright
 
 %runscript
-    %runscript
     cd /workspace
     mkdir -p /tmp/.config /tmp/.cache /tmp/.data /tmp/.npm
     
