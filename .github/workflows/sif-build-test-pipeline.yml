@@ -73,16 +73,17 @@ jobs:
             echo "TIER=Production" >> $GITHUB_ENV
             echo "Detected PROD environment. Routing to release."
           fi
+
       - name: 🧹 SRE Fix: Maximize Build Space
-          uses: jlumbroso/free-disk-space@main
-          with:
-            tool-cache: false
-            android: true
-            dotnet: true
-            haskell: true
-            large-packages: true
-            docker-images: true
-            swap-storage: false
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
       - name: Build SIF (Auto-Healing & Cleanup Hardened & Sudo-Free)
         run: |
