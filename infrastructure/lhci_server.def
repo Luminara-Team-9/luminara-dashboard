@@ -47,8 +47,8 @@ From: node:24.15.0-slim
         echo "The LHCI server cannot connect to Postgres without this file."
         exit 1
     fi
-
-    exec lhci server --port=$PORT
+    # SRE FIX: Explicitly target the configuration file
+    exec lhci server --port=$PORT --config=/workspace/lighthouserc.json
 
 %help
     Luminara Production LHCI Server
