@@ -1,0 +1,123 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+/* ── 헤더 ── */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header_left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.subtitle {
+  font-size: 11px;
+  color: #475569;
+}
+
+/* ── 필터 탭 ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  background-color: #0d1424;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 3px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.tab:hover  { color: #94a3b8; background-color: #1a2234; }
+.tab_active { color: #f1f5f9; background-color: #1e3a5f; }
+
+/* 활성화 시 우선순위 색상 */
+.tab_critical.tab_active { background-color: rgba(239, 68, 68, 0.2);  color: #ef4444; }
+.tab_high.tab_active     { background-color: rgba(249, 115, 22, 0.2); color: #f97316; }
+.tab_medium.tab_active   { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+.tab_low.tab_active      { background-color: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+.count {
+  font-size: 10px;
+  background-color: #1e293b;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  color: #94a3b8;
+}
+
+/* ── 카드 그리드 ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* ── 빈 상태 ── */
+.empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #475569;
+  font-size: 13px;
+  padding: 40px;
+}
+
+/* ── 로딩 / 에러 ── */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #1e293b;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error {
+  text-align: center;
+  color: #ef4444;
+  padding: 40px;
+  font-size: 14px;
+}

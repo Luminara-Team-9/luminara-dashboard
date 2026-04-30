@@ -1,0 +1,99 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+  background-color: #111827;
+  border-left-width: 3px;
+  transition: box-shadow 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* 우선순위별 왼쪽 border 색상 */
+.critical { border-left-color: #ef4444; }
+.high     { border-left-color: #f97316; }
+.medium   { border-left-color: #f59e0b; }
+.low      { border-left-color: #10b981; }
+
+/* ── 상단 행 ── */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.priority {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+.priority_critical { color: #ef4444; background-color: rgba(239, 68, 68, 0.12); }
+.priority_high     { color: #f97316; background-color: rgba(249, 115, 22, 0.12); }
+.priority_medium   { color: #f59e0b; background-color: rgba(245, 158, 11, 0.12); }
+.priority_low      { color: #10b981; background-color: rgba(16, 185, 129, 0.12); }
+
+.metric {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background-color: #1e293b;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+/* ── 제목 ── */
+.title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ── 설명 ── */
+.desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── 하단 행 ── */
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #1e293b;
+}
+
+.impact {
+  font-size: 12px;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+.effort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.dot_on  { width: 7px; height: 7px; border-radius: 50%; background-color: #3b82f6; display: inline-block; }
+.dot_off { width: 7px; height: 7px; border-radius: 50%; background-color: #1e293b; display: inline-block; }

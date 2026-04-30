@@ -1,0 +1,158 @@
+.wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+}
+
+/* ── 테이블 ── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.th,
+.th_bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: left;
+  background-color: #0d1424;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #1e293b;
+  white-space: nowrap;
+}
+
+.th_bar { min-width: 120px; }
+
+.row {
+  border-bottom: 1px solid #1a2234;
+  transition: background-color 0.15s ease;
+}
+
+.row:last-child { border-bottom: none; }
+.row:hover      { background-color: #131d2e; }
+
+.td,
+.td_step,
+.td_bar {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+/* ── 단계 셀 ── */
+.td_step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.step_num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #1e3a5f;
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── 트래픽 ── */
+.sessions {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 비율 바 ── */
+.td_bar { min-width: 120px; }
+
+.bar_track {
+  width: 100%;
+  height: 6px;
+  background-color: #1e293b;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.bar_fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+/* ── 이탈률 ── */
+.dropoff {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dropoff_mid  { color: #f59e0b; }
+.dropoff_high { color: #ef4444; }
+.dropoff_none { color: #475569; font-size: 12px; }
+
+/* ── 체류 시간 ── */
+.time {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 로딩 / 에러 ── */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #1e293b;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error {
+  text-align: center;
+  color: #ef4444;
+  padding: 40px;
+  font-size: 14px;
+}

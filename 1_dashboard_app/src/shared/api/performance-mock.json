@@ -1,0 +1,196 @@
+{
+  "timestamp": "2026-04-26T15:00:00Z",
+
+  "executiveSummary": {
+    "globalScore": 72,
+    "status": "needs-improvement",
+    "roiImpact": {
+      "cvrLift": 9.1,
+      "annualRevenueImpact": 284000000
+    },
+    "seoHealth": {
+      "rankPercentile": 34,
+      "estimatedChange": 12
+    },
+    "carbonFootprint": {
+      "gramsPerPageView": 1.84,
+      "savedGrams": 0.72
+    }
+  },
+
+  "benchmarks": [
+    {
+      "brand": "Decathlon",
+      "isTarget": true,
+      "scores": { "lighthouse": 72, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 3.8,  "unit": "s",     "target": 2.5,  "label": "LCP" },
+        "cls":        { "value": 0.08, "unit": "score",  "target": 0.1,  "label": "CLS" },
+        "tbt":        { "value": 420,  "unit": "ms",     "target": 200,  "label": "INP/TBT" },
+        "fcp":        { "value": 2.1,  "unit": "s",      "target": 1.8,  "label": "FCP" },
+        "speedIndex": { "value": 4.2,  "unit": "s",      "target": 3.4,  "label": "Speed Index" },
+        "assetSize":  { "value": 312,  "unit": "KB",     "target": 200,  "label": "Asset Size" }
+      }
+    },
+    {
+      "brand": "Coupang",
+      "isTarget": false,
+      "scores": { "lighthouse": 58, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 5.1,  "unit": "s",     "target": 2.5,  "label": "LCP" },
+        "cls":        { "value": 0.22, "unit": "score",  "target": 0.1,  "label": "CLS" },
+        "tbt":        { "value": 890,  "unit": "ms",     "target": 200,  "label": "INP/TBT" },
+        "fcp":        { "value": 3.2,  "unit": "s",      "target": 1.8,  "label": "FCP" },
+        "speedIndex": { "value": 6.3,  "unit": "s",      "target": 3.4,  "label": "Speed Index" },
+        "assetSize":  { "value": 780,  "unit": "KB",     "target": 200,  "label": "Asset Size" }
+      }
+    },
+    {
+      "brand": "Musinsa",
+      "isTarget": false,
+      "scores": { "lighthouse": 65, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 4.3,  "unit": "s",     "target": 2.5,  "label": "LCP" },
+        "cls":        { "value": 0.14, "unit": "score",  "target": 0.1,  "label": "CLS" },
+        "tbt":        { "value": 610,  "unit": "ms",     "target": 200,  "label": "INP/TBT" },
+        "fcp":        { "value": 2.7,  "unit": "s",      "target": 1.8,  "label": "FCP" },
+        "speedIndex": { "value": 5.1,  "unit": "s",      "target": 3.4,  "label": "Speed Index" },
+        "assetSize":  { "value": 520,  "unit": "KB",     "target": 200,  "label": "Asset Size" }
+      }
+    }
+  ],
+
+  "trends": {
+    "labels": [
+      "2026-03-01", "2026-03-08", "2026-03-15", "2026-03-22",
+      "2026-03-29", "2026-04-05", "2026-04-12", "2026-04-19", "2026-04-26"
+    ],
+    "datasets": [
+      { "brand": "Decathlon", "metricKey": "lighthouse", "values": [61, 62, 63, 65, 66, 68, 69, 71, 72] },
+      { "brand": "Coupang",   "metricKey": "lighthouse", "values": [55, 55, 56, 57, 57, 58, 57, 58, 58] },
+      { "brand": "Musinsa",   "metricKey": "lighthouse", "values": [62, 63, 63, 64, 64, 65, 64, 65, 65] },
+
+      { "brand": "Decathlon", "metricKey": "lcp", "values": [5.2, 5.0, 4.9, 4.7, 4.5, 4.3, 4.1, 3.9, 3.8] },
+      { "brand": "Coupang",   "metricKey": "lcp", "values": [5.3, 5.3, 5.2, 5.2, 5.1, 5.1, 5.1, 5.1, 5.1] },
+      { "brand": "Musinsa",   "metricKey": "lcp", "values": [4.5, 4.4, 4.4, 4.4, 4.3, 4.3, 4.3, 4.3, 4.3] },
+
+      { "brand": "Decathlon", "metricKey": "tbt", "values": [480, 472, 465, 458, 450, 442, 435, 428, 420] },
+      { "brand": "Coupang",   "metricKey": "tbt", "values": [910, 905, 900, 898, 895, 892, 891, 890, 890] },
+      { "brand": "Musinsa",   "metricKey": "tbt", "values": [650, 642, 635, 628, 620, 615, 612, 611, 610] }
+    ],
+    "releases": [
+      {
+        "date": "2026-03-08",
+        "version": "v2.1.0",
+        "description": "히어로 이미지 WebP 전환"
+      },
+      {
+        "date": "2026-03-29",
+        "version": "v2.2.0",
+        "description": "서드파티 스크립트 defer 처리"
+      },
+      {
+        "date": "2026-04-12",
+        "version": "v2.3.0",
+        "description": "JS 코드 스플리팅 적용"
+      }
+    ]
+  },
+
+  "rum": {
+    "regionalData": [
+      { "region": "서울", "isp": "SK",  "avgLatency": 210, "status": "good" },
+      { "region": "서울", "isp": "KT",  "avgLatency": 195, "status": "good" },
+      { "region": "서울", "isp": "LG",  "avgLatency": 230, "status": "good" },
+      { "region": "경기", "isp": "SK",  "avgLatency": 260, "status": "good" },
+      { "region": "경기", "isp": "KT",  "avgLatency": 245, "status": "good" },
+      { "region": "경기", "isp": "LG",  "avgLatency": 275, "status": "good" },
+      { "region": "부산", "isp": "SK",  "avgLatency": 340, "status": "warning" },
+      { "region": "부산", "isp": "KT",  "avgLatency": 310, "status": "warning" },
+      { "region": "부산", "isp": "LG",  "avgLatency": 360, "status": "warning" },
+      { "region": "대구", "isp": "SK",  "avgLatency": 390, "status": "warning" },
+      { "region": "대구", "isp": "KT",  "avgLatency": 375, "status": "warning" },
+      { "region": "대구", "isp": "LG",  "avgLatency": 420, "status": "poor" },
+      { "region": "인천", "isp": "SK",  "avgLatency": 225, "status": "good" },
+      { "region": "인천", "isp": "KT",  "avgLatency": 210, "status": "good" },
+      { "region": "인천", "isp": "LG",  "avgLatency": 248, "status": "good" },
+      { "region": "광주", "isp": "SK",  "avgLatency": 445, "status": "poor" },
+      { "region": "광주", "isp": "KT",  "avgLatency": 420, "status": "poor" },
+      { "region": "광주", "isp": "LG",  "avgLatency": 480, "status": "poor" },
+      { "region": "대전", "isp": "SK",  "avgLatency": 320, "status": "warning" },
+      { "region": "대전", "isp": "KT",  "avgLatency": 298, "status": "warning" },
+      { "region": "대전", "isp": "LG",  "avgLatency": 345, "status": "warning" }
+    ],
+    "userJourney": [
+      { "step": "메인",     "sessions": 100000, "dropoffRate": 0,    "avgTime": 3.2 },
+      { "step": "검색",     "sessions": 68000,  "dropoffRate": 32.0, "avgTime": 5.8 },
+      { "step": "상품 상세", "sessions": 41000,  "dropoffRate": 39.7, "avgTime": 12.4 },
+      { "step": "장바구니", "sessions": 18000,  "dropoffRate": 56.1, "avgTime": 4.1 },
+      { "step": "결제",     "sessions": 9200,   "dropoffRate": 48.9, "avgTime": 8.7 },
+      { "step": "완료",     "sessions": 6100,   "dropoffRate": 33.7, "avgTime": 0 }
+    ]
+  },
+
+  "aiFixPlans": [
+    {
+      "id": "fix-001",
+      "brand": "Decathlon",
+      "metricKey": "lcp",
+      "title": "히어로 이미지 preload 및 WebP 전환",
+      "description": "메인 페이지 히어로 배너 이미지(평균 480KB)가 LCP의 주요 원인입니다. <link rel='preload'> 태그 추가와 WebP 포맷 전환으로 약 1.2초 단축이 예상됩니다.",
+      "priority": "critical",
+      "estimatedImpact": "LCP -1.2s",
+      "effort": "low"
+    },
+    {
+      "id": "fix-002",
+      "brand": "Decathlon",
+      "metricKey": "tbt",
+      "title": "서드파티 스크립트 지연 로딩 적용",
+      "description": "Google Analytics, Hotjar, Criteo 스크립트가 메인 스레드를 420ms 이상 점유합니다. defer/async 속성 부여 또는 Partytown 도입으로 TBT를 목표치(200ms) 이하로 낮출 수 있습니다.",
+      "priority": "critical",
+      "estimatedImpact": "TBT -220ms",
+      "effort": "medium"
+    },
+    {
+      "id": "fix-003",
+      "brand": "Decathlon",
+      "metricKey": "assetSize",
+      "title": "JavaScript 번들 코드 스플리팅",
+      "description": "현재 메인 번들(312KB)에 상품 상세, 장바구니 로직이 포함되어 있습니다. Next.js dynamic import 적용 시 초기 로드 번들을 목표(200KB) 이하로 감소시킬 수 있습니다.",
+      "priority": "high",
+      "estimatedImpact": "Asset Size -112KB",
+      "effort": "medium"
+    },
+    {
+      "id": "fix-004",
+      "brand": "Decathlon",
+      "metricKey": "fcp",
+      "title": "폰트 로딩 전략 최적화",
+      "description": "커스텀 폰트 2종이 FOIT(Flash of Invisible Text)를 유발합니다. font-display: swap 설정 및 WOFF2 포맷 전환으로 FCP를 약 0.3초 단축할 수 있습니다.",
+      "priority": "medium",
+      "estimatedImpact": "FCP -0.3s",
+      "effort": "low"
+    },
+    {
+      "id": "fix-005",
+      "brand": "Decathlon",
+      "metricKey": "lcp",
+      "title": "[P0 INFRASTRUCTURE] 영남권 CDN 엣지 노드 추가",
+      "description": "부산/대구/광주 사용자의 평균 레이턴시가 350ms 이상입니다. 현재 CDN 엣지가 수도권에 집중되어 있어 영남/호남권 응답 지연이 발생합니다. 부산 리전 엣지 노드 추가 시 해당 지역 LCP 약 0.9초 단축 예상.",
+      "priority": "critical",
+      "estimatedImpact": "지역 LCP -0.9s",
+      "effort": "high"
+    },
+    {
+      "id": "fix-006",
+      "brand": "Decathlon",
+      "metricKey": "tbt",
+      "title": "[P1 FRONTEND] 결제 페이지 동기식 JS 번들 분리",
+      "description": "결제 페이지에서 동기식으로 로드되는 PG사 SDK(이니시스, KakaoPay)가 TBT의 38%를 차지합니다. 결제 단계 진입 시점에만 동적 로드하도록 변경하면 장바구니→결제 이탈률(현재 48.9%)을 낮출 수 있습니다.",
+      "priority": "high",
+      "estimatedImpact": "CVR +2.1%",
+      "effort": "medium"
+    }
+  ]
+}

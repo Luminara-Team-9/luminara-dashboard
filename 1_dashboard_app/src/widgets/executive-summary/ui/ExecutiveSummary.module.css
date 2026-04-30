@@ -1,0 +1,81 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background-color: #111827;
+  border-bottom: 1px solid #1e293b;
+  padding: 0 24px;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ── KPI 카드 ── */
+.card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 28px 14px 0;
+  flex: 1;
+}
+
+.card_icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.card_info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card_label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.card_value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f1f5f9;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.card_sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* ── 상태 뱃지 (글로벌 점수 카드) ── */
+.status_badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 6px;
+  width: fit-content;
+}
+
+/* ── 카드 사이 구분선 ── */
+.divider {
+  width: 1px;
+  height: 40px;
+  background-color: #1e293b;
+  flex-shrink: 0;
+  margin-right: 28px;
+}
+
+/* ── 로딩 스켈레톤 ── */
+.skeleton {
+  height: 72px;
+  background-color: #111827;
+  border-bottom: 1px solid #1e293b;
+}
