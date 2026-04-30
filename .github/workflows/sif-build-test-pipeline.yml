@@ -88,33 +88,41 @@ jobs:
 
       - name: Build SIF (Auto-Healing & Cleanup Hardened & Sudo-Free)
         run: |
-          # 1. Isolate the temp directory per matrix job to prevent collisions
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
           
-          # SRE FIX: Route away from /var/tmp and into your massive persistent storage drive
-          # Replace this base path if your team's massive drive is located elsewhere!
           export MASSIVE_DRIVE_PATH="/abr/coss41/shared_workspace/tmp_builds"
           export SINGULARITY_TMPDIR="$MASSIVE_DRIVE_PATH/singularity-${{ github.run_id }}-${SAFE_NAME}"
           
-          # Clean orphaned caches from the previous failed runs that are eating your space
-          singularity cache clean --force
-
-          # Clear any ghost files from previous runs, then create and permission
+          # SRE FIX 1: Hybrid Cache Routing
+          # Route the cache back to the local drive to avoid NFS "directory not empty" ghost locks.
+          export SINGULARITY_CACHEDIR="/var/tmp/sing_cache_${{ github.run_id }}_${SAFE_NAME}"
+          mkdir -p $SINGULARITY_CACHEDIR
+          
+          # SRE FIX 2: The Fakeroot Traversal Pass-Through
+          # We grant execute (+x) to the parent folders. This DOES NOT let other users read or edit your files,
+          # it only allows the '--fakeroot' background user to pass through the directories to reach the TMPDIR.
+          mkdir -p $MASSIVE_DRIVE_PATH
+          chmod a+x /abr/coss41 /abr/coss41/shared_workspace /abr/coss41/shared_workspace/tmp_builds || true
+          
+          # Clear previous artifacts
           rm -rf $SINGULARITY_TMPDIR || true
           mkdir -p $SINGULARITY_TMPDIR
+          
+          # SRE FIX 3: Go-Routine Alignment
+          # Sometimes Singularity's internal Go code ignores SINGULARITY_TMPDIR and looks for TMPDIR. We explicitly link them.
+          export TMPDIR=$SINGULARITY_TMPDIR
           chmod 777 $SINGULARITY_TMPDIR
           
           echo "🚀 Attempting standard build..."
           
-          # 2. AUTO-HEALING LOGIC: If the build fails, catch it and retry without cache
           if ! singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}; then
               echo "⚠️ Build failed! Suspected cache corruption or network drop."
-              echo "🧹 Initiating SRE Auto-Healing: Purging Singularity cache..."
+              echo "🧹 Initiating SRE Auto-Healing: Purging isolated cache..."
               
-              # Force clear the local Singularity cache
-              singularity cache clean --force
+              # Safely wipe the local cache instead of using the buggy global 'singularity cache clean' command
+              rm -rf $SINGULARITY_CACHEDIR || true
+              mkdir -p $SINGULARITY_CACHEDIR
               
-              # SRE FIX: Fully reset the environment for the retry
               rm -rf $SINGULARITY_TMPDIR || true
               mkdir -p $SINGULARITY_TMPDIR
               chmod 777 $SINGULARITY_TMPDIR
@@ -124,11 +132,9 @@ jobs:
           fi
           
           echo "✅ Build successful. Initiating secure cleanup..."
-          
-          # 3. CLEANUP FIX: Give the host user write permissions to the fake-root files
-          # This completely prevents the 'rm: cannot remove... Permission denied' error
           chmod -R u+rwX $SINGULARITY_TMPDIR 2>/dev/null || true
           rm -rf $SINGULARITY_TMPDIR
+          rm -rf $SINGULARITY_CACHEDIR || true
           
       - name: Smart Verification
         run: |

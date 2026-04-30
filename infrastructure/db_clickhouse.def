@@ -28,7 +28,7 @@ From: clickhouse/clickhouse-server:24.3
 %runscript
     echo "------------------------------------------------"
     echo "📊 Luminara RUM: CLICKHOUSE Starting"
-    echo "🌐 HTTP: 8123 | Native: 9000"
+    echo "🌐 HTTP: $CLICKHOUSE_HTTP_PORT | Native: $CLICKHOUSE_TCP_PORT"
     echo "------------------------------------------------"
     
     # SRE FIX: Override hardcoded paths AND bind the dynamic ports

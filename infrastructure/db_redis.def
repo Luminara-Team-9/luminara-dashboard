@@ -32,7 +32,7 @@ From: redis:7-bookworm
 %runscript
     echo "------------------------------------------------"
     echo "🔴 Luminara RUM: REDIS Starting"
-    echo "🌐 Port: 6379 | Data: /data/redis"
+    echo "🌐 Port: $PORT | Data: /data/redis"
     echo "------------------------------------------------"
     
     # SRE FIX 3: Direct data and PID to writable locations, bypassing read-only /var/run
