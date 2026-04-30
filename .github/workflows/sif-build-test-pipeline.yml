@@ -86,27 +86,19 @@ jobs:
             echo "Detected PROD environment. Routing to release."
           fi
 
-      - name: SRE Maximize Build Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
-
       - name: Build SIF (Auto-Healing & Cleanup Hardened & Sudo-Free)
         run: |
           # 1. Isolate the temp directory per matrix job to prevent collisions
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
           
-          # SRE FIX: The Catch-22 Resolution.
-          # Use /var/tmp (Large, persistent local disk) and force wide-open permissions 
-          # so the --fakeroot user is not rejected by strict filesystem rules.
-          export SINGULARITY_TMPDIR=/var/tmp/singularity-${{ github.run_id }}-${SAFE_NAME}
+          # SRE FIX: Route away from /var/tmp and into your massive persistent storage drive
+          # Replace this base path if your team's massive drive is located elsewhere!
+          export MASSIVE_DRIVE_PATH="/abr/coss41/shared_workspace/tmp_builds"
+          export SINGULARITY_TMPDIR="$MASSIVE_DRIVE_PATH/singularity-${{ github.run_id }}-${SAFE_NAME}"
           
+          # Clean orphaned caches from the previous failed runs that are eating your space
+          singularity cache clean --force
+
           # Clear any ghost files from previous runs, then create and permission
           rm -rf $SINGULARITY_TMPDIR || true
           mkdir -p $SINGULARITY_TMPDIR

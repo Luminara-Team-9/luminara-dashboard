@@ -53,7 +53,7 @@ From: python:3.12-slim-bookworm
     pip install --no-cache-dir --upgrade pip
     export MAX_JOBS=4
 
-# ---------------------------------------------------------
+    # ---------------------------------------------------------
     # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
     # ---------------------------------------------------------
     
