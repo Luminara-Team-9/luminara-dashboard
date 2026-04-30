@@ -35,4 +35,9 @@ From: swetrix/swetrix-api:latest
     echo "🌐 Port: $PORT"
     echo "------------------------------------------------"
     
-    exec node dist/main.js
+    # SRE FIX: The Human Fallback UX
+    if [ $# -gt 0 ]; then
+        exec "$@"
+    else
+        exec node dist/main.js
+    fi
