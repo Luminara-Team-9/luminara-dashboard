@@ -34,7 +34,7 @@ jobs:
           files: "**/*.def"
           escape_json: false
           json: true
-          
+
       - name: SRE Matrix Safety Intercept
         id: safe_output
         run: |
@@ -86,7 +86,7 @@ jobs:
             echo "Detected PROD environment. Routing to release."
           fi
 
-      - name: 🧹 SRE Fix: Maximize Build Space
+      - name: SRE Maximize Build Space
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false
