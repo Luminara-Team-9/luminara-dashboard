@@ -90,40 +90,34 @@ jobs:
         run: |
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
           
+          # 1. THE MASSIVE DRIVE (For the final 8GB .sif file output only)
           export MASSIVE_DRIVE_PATH="/abr/coss41/shared_workspace/tmp_builds"
-          export SINGULARITY_TMPDIR="$MASSIVE_DRIVE_PATH/singularity-${{ github.run_id }}-${SAFE_NAME}"
+          mkdir -p $MASSIVE_DRIVE_PATH
           
-          # SRE FIX 1: Hybrid Cache Routing
-          # Route the cache back to the local drive to avoid NFS "directory not empty" ghost locks.
+          # 2. THE LOCAL SANDBOX (For fakeroot to extract the Linux OS without NFS blocking it)
+          # We force this into /var/tmp (the local server disk) to bypass the network drive restrictions.
+          export SINGULARITY_TMPDIR="/var/tmp/singularity_build_${{ github.run_id }}_${SAFE_NAME}"
+          
+          # 3. THE ISOLATED CACHE (Also local, to prevent NFS ghost locks)
           export SINGULARITY_CACHEDIR="/var/tmp/sing_cache_${{ github.run_id }}_${SAFE_NAME}"
+          
+          # Clean up any previous runs
+          rm -rf $SINGULARITY_TMPDIR || true
+          rm -rf $SINGULARITY_CACHEDIR || true
+          mkdir -p $SINGULARITY_TMPDIR
           mkdir -p $SINGULARITY_CACHEDIR
           
-          # SRE FIX 2: The Fakeroot Traversal Pass-Through
-          # We grant execute (+x) to the parent folders. This DOES NOT let other users read or edit your files,
-          # it only allows the '--fakeroot' background user to pass through the directories to reach the TMPDIR.
-          mkdir -p $MASSIVE_DRIVE_PATH
-          chmod a+x /abr/coss41 /abr/coss41/shared_workspace /abr/coss41/shared_workspace/tmp_builds || true
-          
-          # Clear previous artifacts
-          rm -rf $SINGULARITY_TMPDIR || true
-          mkdir -p $SINGULARITY_TMPDIR
-          
-          # SRE FIX 3: Go-Routine Alignment
-          # Sometimes Singularity's internal Go code ignores SINGULARITY_TMPDIR and looks for TMPDIR. We explicitly link them.
-          export TMPDIR=$SINGULARITY_TMPDIR
+          # Open the local sandbox completely so fakeroot can work
           chmod 777 $SINGULARITY_TMPDIR
           
-          echo "🚀 Attempting standard build..."
+          echo "🚀 Attempting hybrid build: Local Sandbox -> NFS Output..."
           
           if ! singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}; then
-              echo "⚠️ Build failed! Suspected cache corruption or network drop."
-              echo "🧹 Initiating SRE Auto-Healing: Purging isolated cache..."
+              echo "⚠️ Build failed! Purging isolated cache and retrying..."
               
-              # Safely wipe the local cache instead of using the buggy global 'singularity cache clean' command
               rm -rf $SINGULARITY_CACHEDIR || true
-              mkdir -p $SINGULARITY_CACHEDIR
-              
               rm -rf $SINGULARITY_TMPDIR || true
+              mkdir -p $SINGULARITY_CACHEDIR
               mkdir -p $SINGULARITY_TMPDIR
               chmod 777 $SINGULARITY_TMPDIR
 
@@ -132,6 +126,7 @@ jobs:
           fi
           
           echo "✅ Build successful. Initiating secure cleanup..."
+          # Reclaim permissions before deletion to prevent permission denied errors
           chmod -R u+rwX $SINGULARITY_TMPDIR 2>/dev/null || true
           rm -rf $SINGULARITY_TMPDIR
           rm -rf $SINGULARITY_CACHEDIR || true
