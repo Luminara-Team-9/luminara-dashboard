@@ -23,7 +23,8 @@ jobs:
   detect-changes:
     runs-on: [self-hosted, Linux]
     outputs:
-      def_files: ${{ steps.filter.outputs.all_changed_files }}
+      # SRE FIX: Point to our safe, intercepted output
+      def_files: ${{ steps.safe_output.outputs.files }}
     steps:
       - uses: actions/checkout@v4
       - name: Get changed .def files
@@ -33,6 +34,17 @@ jobs:
           files: "**/*.def"
           escape_json: false
           json: true
+          
+      - name: SRE Matrix Safety Intercept
+        id: safe_output
+        run: |
+          FILES='${{ steps.filter.outputs.all_changed_files }}'
+          # If the array is empty, inject a dummy value to prevent the GHA Matrix Crash
+          if [ "$FILES" = "[]" ] || [ -z "$FILES" ]; then
+            echo "files=[\"skip\"]" >> $GITHUB_OUTPUT
+          else
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
 
   build-and-deploy:
     needs: detect-changes
