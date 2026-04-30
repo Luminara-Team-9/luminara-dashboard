@@ -88,8 +88,6 @@ psycopg2-binary>=2.9.10
 redis>=5.3.0
 rich>=13.9.4
 GitPython>=3.1.0
-transformers>=5.6.1
-accelerate>=1.13.0
 langgraph>=1.1.9
 langgraph-sdk>=0.3.13
 sentence-transformers>=5.4.1
@@ -115,4 +113,11 @@ EOF
     fi
 
     # DEV DIFFERENCE: Boots into hot-reloading for the backend team
-    exec python -m luminara_core.remediation_agent.train_or_debug --port $PORT --hot-reload
+    # SRE FIX: The Human Fallback
+    # If a developer passes arguments (e.g. 'bash'), run that.
+    # Otherwise, default to launching the hot-reloading AI server.
+    if [ $# -gt 0 ]; then
+        exec "$@"
+    else
+        exec python -m luminara_core.remediation_agent.train_or_debug --port $PORT --hot-reload
+    fi
