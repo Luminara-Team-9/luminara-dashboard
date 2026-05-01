@@ -9,6 +9,11 @@ From: python:3.12-slim-bookworm
 %post
     set -e
     export DEBIAN_FRONTEND=noninteractive
+    
+    # --- SRE Standard Mount Anchors ---
+    mkdir -p /data
+    mkdir -p /workspace
+    chmod 777 /data /workspace
 
     # 1. Core System & Compilation Foundations
     apt-get update && apt-get install -y --no-install-recommends \
@@ -17,9 +22,6 @@ From: python:3.12-slim-bookworm
         gnupg \
         libpq-dev \
         build-essential \
-        git \
-        htop \
-        nano \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     pip install --no-cache-dir --upgrade pip
