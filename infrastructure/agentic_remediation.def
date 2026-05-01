@@ -1,5 +1,5 @@
 Bootstrap: localimage
-From: /abr/coss41/shared_workspace/images_dev/luminara_ai_base.sif
+From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
 
 %labels
     Maintainer Luminara-SRE-Agent
