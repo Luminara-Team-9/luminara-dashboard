@@ -11,7 +11,7 @@ on:
 # SRE FIX: Only one build per branch/PR. New pushes cancel old ones.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
