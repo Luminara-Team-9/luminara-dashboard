@@ -114,7 +114,8 @@ jobs:
 
           # 2. THE LOCAL SANDBOX (For fakeroot to extract the Linux OS without NFS blocking it)
           # We force this into /var/tmp (the local server disk) to bypass the network drive restrictions.
-          export SINGULARITY_TMPDIR="/var/tmp/singularity_build_${{ github.run_id }}_${SAFE_NAME}"
+          export SINGULARITY_TMPDIR="/dev/shm/sing_build_${{ github.run_id }}_${SAFE_NAME}"
+          export TMPDIR=$SINGULARITY_TMPDIR
           
           # Clean up any previous runs
           rm -rf $SINGULARITY_TMPDIR || true
