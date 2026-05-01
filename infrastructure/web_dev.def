@@ -25,10 +25,13 @@ From: node:24-slim
 %post
     set -e
 
-    # Identical to Production: Ensure tools are present
+    # SRE FIX: Added basic DX tools (git, nano, htop) for debugging
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
+        git \
+        nano \
+        htop \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     npm install -g pnpm@latest
@@ -50,10 +53,25 @@ From: node:24-slim
 
     # DEV DIFFERENCE: We do not use --frozen-lockfile in dev
     # to allow teammates to add packages easily.
-    pnpm install
+    # SRE FIX: The Human Fallback
+    if [ $# -gt 0 ]; then
+        # If the developer passed commands (like 'bash' or 'pnpm lint'), execute those
+        exec "$@"
+    else
+        # SRE FIX: The Empty Workspace Trap Prevention
+        if [ ! -f "package.json" ]; then
+            echo "⚠️ WARNING: No package.json found in /workspace."
+            echo "Please initialize your Next.js app or clone the repository."
+            echo "Dropping you into an interactive shell..."
+            exec /bin/bash
+        fi
 
-    # DEV DIFFERENCE: Launch Next.js in dev mode (hot reloading)
-    exec pnpm dev --port $PORT --hostname 0.0.0.0
+        # DEV DIFFERENCE: We do not use --frozen-lockfile in dev
+        pnpm install
+
+        # DEV DIFFERENCE: Launch Next.js in dev mode (hot reloading)
+        exec pnpm dev --port $PORT --hostname 0.0.0.0
+    fi
 
 %help
     Luminara Development Dashboard
