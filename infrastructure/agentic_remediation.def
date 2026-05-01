@@ -1,4 +1,3 @@
-# SRE FIX: Bootstrapping from the heavy local Base Image!
 Bootstrap: localimage
 From: /abr/coss41/shared_workspace/images_dev/luminara_ai_base.sif
 

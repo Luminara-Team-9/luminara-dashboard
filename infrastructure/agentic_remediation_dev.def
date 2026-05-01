@@ -5,7 +5,6 @@ From: /abr/coss41/shared_workspace/images_dev/luminara_ai_base.sif
     Maintainer Luminara-SRE-Agent-Dev
     Project Luminara-AI-Remediation
     Tier Development-Agent
-    Team_Size 5
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data
@@ -35,7 +34,7 @@ From: /abr/coss41/shared_workspace/images_dev/luminara_ai_base.sif
         htop \
         nano \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
-
+    
     # 2. GitHub CLI
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
