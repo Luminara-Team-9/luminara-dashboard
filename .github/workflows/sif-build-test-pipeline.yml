@@ -86,44 +86,38 @@ jobs:
             echo "Detected PROD environment. Routing to release."
           fi
 
-      - name: SRE Maximize Build Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
-
       - name: Build SIF (Auto-Healing & Cleanup Hardened & Sudo-Free)
         run: |
-          # 1. Isolate the temp directory per matrix job to prevent collisions
           SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
           
-          # SRE FIX: The Catch-22 Resolution.
-          # Use /var/tmp (Large, persistent local disk) and force wide-open permissions 
-          # so the --fakeroot user is not rejected by strict filesystem rules.
-          export SINGULARITY_TMPDIR=/var/tmp/singularity-${{ github.run_id }}-${SAFE_NAME}
+          # 1. THE MASSIVE DRIVE (For the final 8GB .sif file output only)
+          export MASSIVE_DRIVE_PATH="/abr/coss41/shared_workspace/tmp_builds"
+          mkdir -p $MASSIVE_DRIVE_PATH
           
-          # Clear any ghost files from previous runs, then create and permission
+          # 2. THE LOCAL SANDBOX (For fakeroot to extract the Linux OS without NFS blocking it)
+          # We force this into /var/tmp (the local server disk) to bypass the network drive restrictions.
+          export SINGULARITY_TMPDIR="/var/tmp/singularity_build_${{ github.run_id }}_${SAFE_NAME}"
+          
+          # 3. THE ISOLATED CACHE (Also local, to prevent NFS ghost locks)
+          export SINGULARITY_CACHEDIR="/var/tmp/sing_cache_${{ github.run_id }}_${SAFE_NAME}"
+          
+          # Clean up any previous runs
           rm -rf $SINGULARITY_TMPDIR || true
+          rm -rf $SINGULARITY_CACHEDIR || true
           mkdir -p $SINGULARITY_TMPDIR
+          mkdir -p $SINGULARITY_CACHEDIR
+          
+          # Open the local sandbox completely so fakeroot can work
           chmod 777 $SINGULARITY_TMPDIR
           
-          echo "🚀 Attempting standard build..."
+          echo "🚀 Attempting hybrid build: Local Sandbox -> NFS Output..."
           
-          # 2. AUTO-HEALING LOGIC: If the build fails, catch it and retry without cache
           if ! singularity build --fakeroot ${{ env.SIF_NAME }} ${{ matrix.def_file }}; then
-              echo "⚠️ Build failed! Suspected cache corruption or network drop."
-              echo "🧹 Initiating SRE Auto-Healing: Purging Singularity cache..."
+              echo "⚠️ Build failed! Purging isolated cache and retrying..."
               
-              # Force clear the local Singularity cache
-              singularity cache clean --force
-              
-              # SRE FIX: Fully reset the environment for the retry
+              rm -rf $SINGULARITY_CACHEDIR || true
               rm -rf $SINGULARITY_TMPDIR || true
+              mkdir -p $SINGULARITY_CACHEDIR
               mkdir -p $SINGULARITY_TMPDIR
               chmod 777 $SINGULARITY_TMPDIR
 
@@ -132,11 +126,10 @@ jobs:
           fi
           
           echo "✅ Build successful. Initiating secure cleanup..."
-          
-          # 3. CLEANUP FIX: Give the host user write permissions to the fake-root files
-          # This completely prevents the 'rm: cannot remove... Permission denied' error
+          # Reclaim permissions before deletion to prevent permission denied errors
           chmod -R u+rwX $SINGULARITY_TMPDIR 2>/dev/null || true
           rm -rf $SINGULARITY_TMPDIR
+          rm -rf $SINGULARITY_CACHEDIR || true
           
       - name: Smart Verification
         run: |

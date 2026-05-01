@@ -26,7 +26,7 @@ From: swetrix/swetrix-api:latest
 %runscript
     echo "------------------------------------------------"
     echo "📈 Luminara RUM: SWETRIX API Starting"
-    echo "🌐 Port: $PORT"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
     
     # Swetrix is a compiled NestJS app. We bypass npm and execute Node directly.

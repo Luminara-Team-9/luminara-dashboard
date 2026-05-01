@@ -8,7 +8,7 @@ From: postgres:15.6-bookworm
     Hardware ABRM02-ABR-COSS41
 
 %environment
-    export PGPORT=5432
+    export PGPORT=${PGPORT:-5432}
     # SRE RULE: All data MUST be in a persistent bound folder
     export PGDATA=/data/postgres
     # SRE FIX: Bypasses read-only /var/run for socket locks
@@ -55,12 +55,15 @@ From: postgres:15.6-bookworm
             exit 1
         fi
         echo "🐘 First-time boot: Initializing Production Database Cluster..."
-        initdb -D "$PGDATA" --auth=md5 --pwfile=<(echo "$POSTGRES_PASSWORD")
+        # SRE FIX: POSIX-compliant password injection (No Bashisms)
+        echo "$POSTGRES_PASSWORD" > /tmp/pg_pw.txt
+        initdb -D "$PGDATA" --auth=md5 --pwfile=/tmp/pg_pw.txt
+        rm /tmp/pg_pw.tx
     fi
 
     echo "------------------------------------------------"
     echo "🐘 Luminara PRODUCTION POSTGRESQL Starting"
-    echo "🌐 Port: 5432 | Socket: /tmp"
+    echo "🌐 Port: $PGPORT | Socket: /tmp"
     echo "------------------------------------------------"
 
     # 2. Execution (Hardened for Singularity/No-Sudo environments)
@@ -74,6 +77,6 @@ From: postgres:15.6-bookworm
     Requires environment variable: POSTGRES_PASSWORD
     
     To run:
-    singularity run --env POSTGRES_PASSWORD=your_secure_pwd \
-                    --bind /path/to/persistent/storage:/data \
-                    postgres_prod.sif
+    singularity instance start --env-file .env.db \
+                               --bind /path/to/persistent/storage:/data \
+                               postgres_prod.sif postgres_live
