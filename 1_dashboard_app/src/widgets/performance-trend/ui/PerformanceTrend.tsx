@@ -7,6 +7,7 @@ import {
   Legend, ReferenceLine,
 } from 'recharts';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { Skeleton } from '@/shared/ui';
 import type { Trends } from '@/shared/lib/types';
 import styles from './PerformanceTrend.module.css';
 
@@ -66,12 +67,34 @@ export function PerformanceTrend() {
   const { data, loading, error } = usePerformanceData();
   const [activeMetric, setActiveMetric] = useState('lighthouse');
 
-  if (error)   return <p className={styles.error}>{error}</p>;
+  if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
     return (
-      <div className={styles.loading}>
-        <div className={styles.spinner} />
-      </div>
+      <section className={styles.wrapper}>
+        <div className={styles.header}>
+          <Skeleton width="130px" height="18px" />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} width="72px" height="30px" radius="7px" />
+            ))}
+          </div>
+        </div>
+        <div className={styles.chart_wrap} style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flex: 1, paddingTop: 8 }}>
+            {[60, 80, 55, 90, 70, 85, 65, 95, 75].map((h, i) => (
+              <Skeleton key={i} width="100%" height={`${h}%`} radius="4px 4px 0 0" />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, paddingTop: 8 }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Skeleton width="24px" height="3px" radius="2px" />
+                <Skeleton width="60px" height="12px" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     );
   }
 

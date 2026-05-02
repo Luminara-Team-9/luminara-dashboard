@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AiFixCard } from '@/entities/ai-plan';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { Skeleton } from '@/shared/ui';
 import type { FixPriority } from '@/shared/lib/types';
 import styles from './AiFixPanel.module.css';
 
@@ -23,7 +24,39 @@ export function AiFixPanel() {
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
-    return <div className={styles.loading}><div className={styles.spinner} /></div>;
+    return (
+      <section className={styles.wrapper}>
+        <div className={styles.header}>
+          <div className={styles.header_left}>
+            <Skeleton width="160px" height="18px" />
+            <Skeleton width="110px" height="12px" />
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} width="72px" height="28px" radius="7px" />
+            ))}
+          </div>
+        </div>
+        <div className={styles.grid}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 14, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Skeleton width="60px" height="20px" radius="6px" />
+                <Skeleton width="72px" height="20px" radius="6px" />
+              </div>
+              <Skeleton width="80%" height="16px" />
+              <Skeleton width="100%" height="12px" />
+              <Skeleton width="90%" height="12px" />
+              <Skeleton width="70%" height="12px" />
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <Skeleton width="80px" height="24px" radius="6px" />
+                <Skeleton width="80px" height="24px" radius="6px" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   }
 
   const plans = filter === '전체'

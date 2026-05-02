@@ -1,6 +1,7 @@
 'use client';
 
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { Skeleton } from '@/shared/ui';
 import type { GlobalStatus } from '@/shared/lib/types';
 import styles from './ExecutiveSummary.module.css';
 
@@ -46,7 +47,23 @@ function ScoreArc({ score, color }: { score: number; color: string }) {
 export function ExecutiveSummary() {
   const { data, loading } = usePerformanceData();
 
-  if (loading || !data) return <div className={styles.skeleton} />;
+  if (loading || !data) {
+    return (
+      <div className={styles.strip}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className={styles.card}>
+            <Skeleton width="68px" height="68px" radius="50%" />
+            <div className={styles.card_info}>
+              <Skeleton width="72px" height="10px" />
+              <Skeleton width="100px" height="22px" />
+              <Skeleton width="88px" height="10px" />
+            </div>
+            {i < 3 && <div className={styles.divider} />}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const { executiveSummary: es } = data;
   const { label: statusLabel, color: statusColor } = STATUS_META[es.status];

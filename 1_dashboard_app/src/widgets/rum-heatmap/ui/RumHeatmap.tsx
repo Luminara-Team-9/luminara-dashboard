@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { Skeleton } from '@/shared/ui';
 import type { RegionalData } from '@/shared/lib/types';
 import styles from './RumHeatmap.module.css';
 
@@ -35,7 +36,28 @@ export function RumHeatmap() {
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
-    return <div className={styles.loading}><div className={styles.spinner} /></div>;
+    return (
+      <section className={styles.wrapper}>
+        <div className={styles.header}>
+          <Skeleton width="160px" height="18px" />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} width="44px" height="28px" radius="7px" />
+            ))}
+          </div>
+        </div>
+        <div className={styles.scroll}>
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 14px', borderBottom: '1px solid #1a2234' }}>
+              <Skeleton width="48px" height="16px" />
+              {[0, 1, 2].map((j) => (
+                <Skeleton key={j} width="72px" height="24px" radius="6px" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   }
 
   const { regionalData } = data.rum;

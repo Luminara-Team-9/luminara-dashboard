@@ -74,19 +74,28 @@ export interface RUM {
   userJourney: UserJourneyStep[];
 }
 
+// ─── 벤치마크 지표 키 (entities/metric과 공유) ────────────────
+export type MetricKey = 'lcp' | 'cls' | 'tbt' | 'fcp' | 'speedIndex' | 'assetSize';
+
+export interface MetricItem {
+  value: number;
+  unit: string;
+  target: number;
+  label: string;
+}
+
+export interface BenchmarkEntry {
+  brand: string;
+  isTarget: boolean;
+  scores: { lighthouse: number; target_lighthouse: number };
+  metrics: Record<MetricKey, MetricItem>;
+}
+
 // ─── 최종 API 응답 (route.ts 반환 타입) ───────────────────────
 export interface PerformanceApiResponse {
   timestamp: string;
   executiveSummary: ExecutiveSummary;
-  benchmarks: {
-    brand: string;
-    isTarget: boolean;
-    scores: { lighthouse: number; target_lighthouse: number };
-    metrics: Record<
-      string,
-      { value: number; unit: string; target: number; label: string }
-    >;
-  }[];
+  benchmarks: BenchmarkEntry[];
   trends: Trends;
   rum: RUM;
   aiFixPlans: AiFixPlan[];

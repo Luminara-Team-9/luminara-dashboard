@@ -1,1 +1,1 @@
-export {};
+export { AiOptimizationPage } from './ui/AiOptimizationPage';

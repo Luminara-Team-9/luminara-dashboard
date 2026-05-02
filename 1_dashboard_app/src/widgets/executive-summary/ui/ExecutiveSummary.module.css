@@ -2,9 +2,9 @@
   display: flex;
   align-items: center;
   gap: 0;
-  background-color: #111827;
-  border-bottom: 1px solid #1e293b;
-  padding: 0 24px;
+  background: linear-gradient(180deg, #111827 0%, #0f1a2e 100%);
+  border-bottom: 1px solid #1a2234;
+  padding: 0 28px;
   max-width: 1440px;
   width: 100%;
   margin: 0 auto;
@@ -15,15 +15,22 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 28px 14px 0;
+  gap: 16px;
+  padding: 16px 32px 16px 0;
   flex: 1;
 }
 
 .card_icon {
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1;
   flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1a2234;
+  border-radius: 10px;
 }
 
 .card_info {
@@ -36,46 +43,41 @@
   font-size: 10px;
   font-weight: 700;
   color: #475569;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .card_value {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
   color: #f1f5f9;
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .card_sub {
   font-size: 11px;
   color: #64748b;
+  font-weight: 500;
 }
 
-/* ── 상태 뱃지 (글로벌 점수 카드) ── */
+/* ── 상태 뱃지 ── */
 .status_badge {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   border: 1px solid;
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: 5px;
+  padding: 2px 7px;
   width: fit-content;
+  text-transform: uppercase;
 }
 
 /* ── 카드 사이 구분선 ── */
 .divider {
   width: 1px;
-  height: 40px;
-  background-color: #1e293b;
+  height: 44px;
+  background: linear-gradient(180deg, transparent, #1e293b 30%, #1e293b 70%, transparent);
   flex-shrink: 0;
-  margin-right: 28px;
-}
-
-/* ── 로딩 스켈레톤 ── */
-.skeleton {
-  height: 72px;
-  background-color: #111827;
-  border-bottom: 1px solid #1e293b;
+  margin-right: 32px;
 }

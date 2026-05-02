@@ -1,13 +1,10 @@
+import type { MetricKey, MetricItem } from '@/shared/lib/types';
+
+// shared/lib/types의 공통 타입을 re-export하여 단일 진실 공급원 유지
+export type { MetricKey, MetricItem };
+
 export type MetricUnit = 's' | 'ms' | 'score' | 'KB';
 export type MetricStatus = 'pass' | 'warning' | 'fail';
-export type MetricKey = 'lcp' | 'cls' | 'tbt' | 'fcp' | 'speedIndex' | 'assetSize';
-
-export interface MetricItem {
-  value: number;
-  unit: MetricUnit;
-  target: number;
-  label: string;
-}
 
 export interface BenchmarkScores {
   lighthouse: number;

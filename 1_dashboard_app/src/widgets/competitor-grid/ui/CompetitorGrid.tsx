@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchPerformanceReport, getMetricStatus } from '@/entities/metric';
-import type { PerformanceReport, MetricKey } from '@/entities/metric';
+import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { getMetricStatus } from '@/entities/metric';
+import { Skeleton } from '@/shared/ui';
+import type { MetricKey } from '@/entities/metric';
 import styles from './CompetitorGrid.module.css';
 
 const METRIC_COLS: { key: MetricKey; label: string }[] = [
@@ -15,23 +16,24 @@ const METRIC_COLS: { key: MetricKey; label: string }[] = [
 ];
 
 export function CompetitorGrid() {
-  const [report, setReport] = useState<PerformanceReport | null>(null);
-  const [error, setError]   = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchPerformanceReport()
-      .then(setReport)
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다.');
-      });
-  }, []);
+  const { data, loading, error } = usePerformanceData();
 
   if (error) return <p className={styles.error}>{error}</p>;
-  if (!report) {
+  if (loading || !data) {
     return (
-      <div className={styles.loading}>
-        <div className={styles.spinner} />
-      </div>
+      <section className={styles.wrapper}>
+        <Skeleton width="160px" height="18px" />
+        <div className={styles.scroll} style={{ borderRadius: 16, overflow: 'hidden' }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderBottom: '1px solid #1a2234' }}>
+              <Skeleton width="120px" height="16px" />
+              {[0, 1, 2, 3, 4, 5, 6].map((j) => (
+                <Skeleton key={j} width="72px" height="24px" radius="6px" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
     );
   }
 
@@ -50,7 +52,7 @@ export function CompetitorGrid() {
             </tr>
           </thead>
           <tbody>
-            {report.benchmarks.map((brand) => (
+            {data.benchmarks.map((brand) => (
               <tr
                 key={brand.brand}
                 className={`${styles.row} ${brand.isTarget ? styles.row_target : ''}`}

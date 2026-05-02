@@ -1,6 +1,7 @@
 'use client';
 
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { Skeleton } from '@/shared/ui';
 import styles from './UserJourney.module.css';
 
 export function UserJourney() {
@@ -8,7 +9,23 @@ export function UserJourney() {
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
-    return <div className={styles.loading}><div className={styles.spinner} /></div>;
+    return (
+      <section className={styles.wrapper}>
+        <Skeleton width="110px" height="18px" />
+        <div className={styles.scroll}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderBottom: '1px solid #1a2234' }}>
+              <Skeleton width="20px" height="20px" radius="50%" />
+              <Skeleton width="64px" height="14px" />
+              <Skeleton width="56px" height="14px" />
+              <Skeleton width="80px" height="10px" radius="3px" />
+              <Skeleton width="52px" height="14px" />
+              <Skeleton width="44px" height="14px" />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   }
 
   const { userJourney } = data.rum;
