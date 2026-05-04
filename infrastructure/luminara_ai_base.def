@@ -4,7 +4,7 @@ From: python:3.12-slim-bookworm
 %labels
     Maintainer Luminara-SRE
     Project Luminara-AI-Foundation
-    Description Heavy AI Dependencies (PyTorch, vLLM, Flash-Attn)
+    Description Base for the Logic Agent (LangGraph, DB Connectors, Node.js tools)
 
 %post
     set -e
@@ -15,36 +15,40 @@ From: python:3.12-slim-bookworm
     mkdir -p /workspace
     chmod 777 /data /workspace
 
-    # 1. Core System & Compilation Foundations
+   # 1. System Essentials & Workspace Tools
+    # We add Git (for PRs) and Node.js foundation (for auditing the websites)
     apt-get update && apt-get install -y --no-install-recommends \
         curl \
+        git \
         ca-certificates \
         gnupg \
         libpq-dev \
         build-essential \
+        && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+        && apt-get install -y nodejs \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-    pip install --no-cache-dir --upgrade pip
-    export MAX_JOBS=4
-
-    # ---------------------------------------------------------
-    # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
-    # ---------------------------------------------------------
     
-    echo "Installing PyTorch CUDA Foundation..."
-    pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
-    echo "Installing pre-compiled Flash Attention..."
-    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
-    pip install --no-cache-dir $FLASH_WHEEL
+    # ---------------------------------------------------------
+    # "LIGHTWEIGHT" AI FOUNDATION (CPU-ONLY)
+    # ---------------------------------------------------------
+    # We remove the 5GB CUDA version of Torch and install the CPU version.
+    # This allows the Agent to still run "Sentence-Transformers" for RAG
+    # without needing a GPU on the main server.
+    
+    echo "Installing CPU-only PyTorch for RAG/Embeddings..."
+    pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 
-    # 2. Heavy, Slow-Moving AI Inference Engines
+    # 2. Orchestration & Database Connectors
+    # These are the "heavy" libraries for the Agent's logic.
     cat > base_requirements.txt <<EOF
-vllm==0.6.4
-transformers>=4.48.0
-accelerate>=1.3.0
-sentence-transformers>=5.4.1
-numpy>=1.26.4,<2.0.0
+langgraph>=0.2.0
+langchain-openai>=0.1.0
+psycopg2-binary>=2.9.9
+clickhouse-connect>=0.7.0
+sentence-transformers>=3.0.0
+pydantic>=2.7.0
+openai>=1.30.0
 EOF
 
     echo "Installing Heavy Inference Libraries..."
