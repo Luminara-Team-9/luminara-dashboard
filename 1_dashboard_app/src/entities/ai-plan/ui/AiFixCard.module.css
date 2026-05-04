@@ -97,3 +97,126 @@
 
 .dot_on  { width: 7px; height: 7px; border-radius: 50%; background-color: #3b82f6; display: inline-block; }
 .dot_off { width: 7px; height: 7px; border-radius: 50%; background-color: #1e293b; display: inline-block; }
+
+/* ── 하단 오른쪽 그룹 ── */
+.bottom_right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── 브랜치 반영 버튼 ── */
+.btn_apply {
+  font-size: 11px;
+  font-weight: 700;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn_apply:hover { background: rgba(59, 130, 246, 0.2); }
+
+.btn_applied {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+/* ── 오버레이 ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* ── 확인 모달 ── */
+.modal {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+  padding: 28px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.modal_label {
+  font-size: 10px;
+  font-weight: 800;
+  color: #3b82f6;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+
+.modal_title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.modal_body {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.7;
+  margin: 0 0 16px;
+}
+
+.modal_meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #1e293b;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 20px;
+}
+
+.modal_actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn_cancel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  background: #1e293b;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn_cancel:hover { background: #243044; }
+
+.btn_confirm {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: #3b82f6;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn_confirm:hover { background: #2563eb; }

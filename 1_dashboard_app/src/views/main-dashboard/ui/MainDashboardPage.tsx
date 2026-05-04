@@ -1,12 +1,13 @@
 'use client';
 
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
-import { ExecutiveSummary } from '@/widgets/executive-summary';
-import { CompetitorGrid }   from '@/widgets/competitor-grid';
-import { PerformanceTrend } from '@/widgets/performance-trend';
-import { RumHeatmap }       from '@/widgets/rum-heatmap';
-import { UserJourney }      from '@/widgets/user-journey';
-import { AiFixPanel }       from '@/widgets/ai-chat-panel';
+import { ExecutiveSummary }  from '@/widgets/executive-summary';
+import { CompetitorGrid }    from '@/widgets/competitor-grid';
+import { PerformanceTrend }  from '@/widgets/performance-trend';
+import { RumHeatmap }        from '@/widgets/rum-heatmap';
+import { UserJourney }       from '@/widgets/user-journey';
+import { AiFixPanel }        from '@/widgets/ai-chat-panel';
+import { BusinessImpactMatrix } from '@/widgets/business-impact-matrix';
 import styles from './MainDashboardPage.module.css';
 
 function Header() {
@@ -65,15 +66,22 @@ export function MainDashboardPage() {
       <Header />
       <ExecutiveSummary />
 
+      {/* Row 2: 벤치마킹 + 성능 트렌드 */}
       <div className={styles.row_two}>
         <section className={styles.section}><CompetitorGrid /></section>
-        <section className={styles.section}><PerformanceTrend /></section>
+        <section className={`${styles.section} ${styles.section_overflow_visible}`}><PerformanceTrend /></section>
       </div>
 
+      {/* Row 3: RUM 히트맵 + 사용자 여정(LCP 오버레이) + AI 액션 플랜 */}
       <div className={styles.row_three}>
         <section className={styles.section}><RumHeatmap /></section>
         <section className={styles.section}><UserJourney /></section>
         <section className={styles.section}><AiFixPanel /></section>
+      </div>
+
+      {/* Row 4: Business Impact Matrix */}
+      <div className={styles.row_four}>
+        <section className={styles.section}><BusinessImpactMatrix /></section>
       </div>
     </main>
   );

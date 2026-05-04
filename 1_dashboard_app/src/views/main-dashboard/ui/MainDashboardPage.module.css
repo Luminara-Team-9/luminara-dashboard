@@ -127,7 +127,9 @@
 
 /* ── 공통 행 ── */
 .row_two,
-.row_three {
+.row_three,
+.row_four,
+.row_five {
   box-sizing: border-box;
   padding: 20px 28px;
   max-width: 1440px;
@@ -137,15 +139,10 @@
   gap: 18px;
 }
 
-.row_two   { height: calc(50vh - 28px); }
-.row_three { height: calc(100vh - 56px); padding-bottom: 28px; }
-
-.row_three {
-  border-top: 1px solid #1a2234;
-}
-
-.row_two   { grid-template-columns: 1fr 1fr; }
-.row_three { grid-template-columns: 1fr 1fr 1fr; }
+.row_two   { height: calc(50vh - 28px); grid-template-columns: 1.4fr 1fr; }
+.row_three { height: calc(100vh - 56px); padding-bottom: 28px; border-top: 1px solid #1a2234; grid-template-columns: 1fr 1fr 1fr; }
+.row_four  { height: 420px; border-top: 1px solid #1a2234; grid-template-columns: 1fr; }
+.row_five  { height: 400px; padding-bottom: 28px; border-top: 1px solid #1a2234; grid-template-columns: 1fr; }
 
 .section {
   min-height: 0;
@@ -154,12 +151,17 @@
   flex-direction: column;
 }
 
+/* PerformanceTrend의 delta overlay가 잘리지 않도록 */
+.section_overflow_visible {
+  overflow: visible;
+}
+
 /* ── 모바일 ── */
 @media (max-width: 1024px) {
   .header { padding: 0 16px; }
   .last_updated { display: none; }
 
-  .row_two, .row_three {
+  .row_two, .row_three, .row_four, .row_five {
     grid-template-columns: 1fr;
     height: auto;
     padding: 16px;

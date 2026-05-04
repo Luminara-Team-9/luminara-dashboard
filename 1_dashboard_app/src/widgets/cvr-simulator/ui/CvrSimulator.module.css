@@ -1,0 +1,345 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header_left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.subtitle {
+  font-size: 11px;
+  color: #475569;
+}
+
+.source_link {
+  font-size: 10px;
+  color: #3b82f6;
+  text-decoration: none;
+  padding: 3px 8px;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+
+.source_link:hover { background-color: #1e3a5f; }
+
+/* ── body: 슬라이더 + 결과 ── */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* ── 슬라이더 영역 ── */
+.sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.slider_row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider_label_row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slider_label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.slider_value {
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.target_badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #10b981;
+  background-color: rgba(16, 185, 129, 0.15);
+  padding: 2px 6px;
+  border-radius: 9999px;
+}
+
+.slider_track {
+  position: relative;
+  height: 6px;
+}
+
+.slider_fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #3b82f6);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.slider {
+  position: absolute;
+  top: -5px;
+  left: 0;
+  width: 100%;
+  height: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #0f172a;
+  margin-top: -5px;
+}
+
+.slider::-moz-range-track {
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #0f172a;
+}
+
+.target_line {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 14px;
+  background-color: #10b981;
+  border-radius: 1px;
+  pointer-events: none;
+  transform: translateX(-1px);
+}
+
+.slider_range {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #475569;
+}
+
+.target_hint {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* ── 연 매출 입력 ── */
+.revenue_row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid #1e293b;
+}
+
+.revenue_label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.revenue_hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: #475569;
+}
+
+.revenue_input_wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.revenue_input {
+  width: 120px;
+  padding: 6px 10px;
+  background-color: #0d1424;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+}
+
+.revenue_input:focus { border-color: #3b82f6; }
+
+.revenue_unit {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ── 결과 패널 ── */
+.result_panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background-color: #0d1424;
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+}
+
+.result_main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result_label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.result_value {
+  font-size: 36px;
+  font-weight: 800;
+  color: #10b981;
+  line-height: 1;
+}
+
+.result_revenue {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.result_sub {
+  font-size: 10px;
+  color: #475569;
+}
+
+.result_revenue_val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+/* ── 기여 분해 ── */
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.breakdown_title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.breakdown_row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.breakdown_label {
+  font-size: 10px;
+  color: #64748b;
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.breakdown_track {
+  flex: 1;
+  height: 4px;
+  background-color: #1e293b;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.breakdown_fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #3b82f6);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.breakdown_val {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  width: 36px;
+  text-align: right;
+}
+
+/* ── 면책 고지 ── */
+.disclaimer {
+  font-size: 9px;
+  color: #334155;
+  line-height: 1.5;
+  border-top: 1px solid #1e293b;
+  padding-top: 10px;
+}
+
+/* ── 에러 ── */
+.error {
+  text-align: center;
+  color: #ef4444;
+  padding: 40px;
+  font-size: 14px;
+}

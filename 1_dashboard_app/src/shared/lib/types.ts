@@ -11,6 +11,7 @@ export interface AiFixPlan {
   priority: FixPriority;
   estimatedImpact: string;
   effort: FixEffort;
+  impactScore: number;   // 0–10, ROI 매트릭스 y축용
 }
 
 // ─── Executive Summary ────────────────────────────────────────
@@ -19,10 +20,8 @@ export type GlobalStatus = 'optimal' | 'needs-improvement' | 'critical';
 export interface ExecutiveSummary {
   globalScore: number;
   status: GlobalStatus;
-  roiImpact: {
-    cvrLift: number;              // 전환율 상승 예측 (%)
-    annualRevenueImpact: number;  // 연간 매출 증가 예측 (원)
-  };
+  /** CVR/매출은 cvr.ts calcCvrLift()로 동적 계산 — baselineRevenue만 저장 */
+  baselineAnnualRevenue: number;  // 연 매출 기준값 (원), CVR 계산 입력
   seoHealth: {
     rankPercentile: number;       // 상위 N%
     estimatedChange: number;      // 목표 달성 시 예상 변동 포인트
@@ -67,6 +66,7 @@ export interface UserJourneyStep {
   sessions: number;
   dropoffRate: number; // %
   avgTime: number;     // seconds
+  pageType: PageType;  // 해당 단계가 속한 페이지 유형 (latency 연계용)
 }
 
 export interface RUM {
@@ -75,7 +75,7 @@ export interface RUM {
 }
 
 // ─── 벤치마크 지표 키 (entities/metric과 공유) ────────────────
-export type MetricKey = 'lcp' | 'cls' | 'tbt' | 'fcp' | 'speedIndex' | 'assetSize';
+export type MetricKey = 'lcp' | 'cls' | 'inp' | 'tbt' | 'fcp' | 'speedIndex' | 'assetSize';
 
 export interface MetricItem {
   value: number;
@@ -87,7 +87,17 @@ export interface MetricItem {
 export interface BenchmarkEntry {
   brand: string;
   isTarget: boolean;
-  scores: { lighthouse: number; target_lighthouse: number };
+  scores: { lighthouse: number; seo: number; target_lighthouse: number };
+  metrics: Record<MetricKey, MetricItem>;
+}
+
+// ─── 페이지별 벤치마크 (메인 / 상품 / 결제) ──────────────────
+export type PageType = 'main' | 'product' | 'checkout';
+
+export interface PageBenchmarkEntry {
+  brand: string;
+  page: PageType;
+  scores: { lighthouse: number; seo: number; target_lighthouse: number };
   metrics: Record<MetricKey, MetricItem>;
 }
 
@@ -96,6 +106,7 @@ export interface PerformanceApiResponse {
   timestamp: string;
   executiveSummary: ExecutiveSummary;
   benchmarks: BenchmarkEntry[];
+  pageMetrics: PageBenchmarkEntry[];
   trends: Trends;
   rum: RUM;
   aiFixPlans: AiFixPlan[];

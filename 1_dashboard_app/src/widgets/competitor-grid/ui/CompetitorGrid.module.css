@@ -5,13 +5,54 @@
   gap: 12px;
 }
 
-.title {
+/* ── 헤더 + 탭 ── */
+.header {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.title {
   font-size: 16px;
   font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.tabs {
+  display: flex;
+  gap: 3px;
+  background-color: #0d1424;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.tab {
+  padding: 4px 12px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.tab:hover    { color: #94a3b8; background-color: #1a2234; }
+.tab_active   { color: #f1f5f9; background-color: #1e3a5f; }
+
+.empty_row {
+  text-align: center;
+  color: #475569;
+  font-size: 13px;
+  padding: 32px;
 }
 
 /* 내부 스크롤 허용 */
@@ -48,7 +89,8 @@
 }
 
 .th_brand { min-width: 140px; }
-.th       { min-width: 90px; }
+.th       { min-width: 90px;  }
+.th_seo   { color: #a78bfa; }
 
 /* ── 행 ── */
 .row {

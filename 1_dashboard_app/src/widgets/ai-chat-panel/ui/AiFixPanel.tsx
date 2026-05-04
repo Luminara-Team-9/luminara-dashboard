@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { AiFixCard } from '@/entities/ai-plan';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
 import { Skeleton } from '@/shared/ui';
@@ -68,8 +69,9 @@ export function AiFixPanel() {
       <div className={styles.header}>
         <div className={styles.header_left}>
           <h2 className={styles.title}>AI 최적화 액션 플랜</h2>
-          <span className={styles.subtitle}>DeepSeek-R1 분석 결과</span>
+          <span className={styles.subtitle}>Qwen 분석 결과</span>
         </div>
+        <Link href="/ai-optimization" className={styles.view_all}>전체보기</Link>
         <div className={styles.tabs}>
           {FILTERS.map((f) => (
             <button

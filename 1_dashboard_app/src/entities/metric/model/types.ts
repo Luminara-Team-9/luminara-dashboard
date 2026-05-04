@@ -14,6 +14,7 @@ export interface BenchmarkScores {
 export interface BenchmarkMetrics {
   lcp: MetricItem;
   cls: MetricItem;
+  inp: MetricItem;
   tbt: MetricItem;
   fcp: MetricItem;
   speedIndex: MetricItem;

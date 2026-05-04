@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { RoiMatrix } from '@/widgets/roi-matrix';
 import { Skeleton } from '@/shared/ui';
 import type { AiFixPlan, FixPriority } from '@/shared/lib/types';
 import styles from './AiOptimizationPage.module.css';
@@ -18,7 +19,7 @@ const PRIORITY_META: Record<FixPriority, { label: string; color: string }> = {
 const EFFORT_LABEL = { low: '낮음', medium: '중간', high: '높음' } as const;
 
 const METRIC_LABEL: Record<string, string> = {
-  lcp: 'LCP', cls: 'CLS', tbt: 'TBT',
+  lcp: 'LCP', cls: 'CLS', inp: 'INP', tbt: 'TBT',
   fcp: 'FCP', speedIndex: 'Speed Index', assetSize: 'Asset Size',
 };
 
@@ -136,7 +137,7 @@ export function AiOptimizationPage() {
         </Link>
         <div className={styles.page_title_wrap}>
           <h1 className={styles.page_title}>AI 최적화 액션 플랜</h1>
-          <p className={styles.page_subtitle}>DeepSeek-R1 분석 결과 — 전체 개선 항목</p>
+          <p className={styles.page_subtitle}>Qwen 분석 결과 — 전체 개선 항목</p>
         </div>
       </div>
 
@@ -199,6 +200,11 @@ export function AiOptimizationPage() {
           <p className={styles.result_count}>
             {filtered.length}개 항목
           </p>
+
+          {/* ── ROI 매트릭스 ── */}
+          <div className={styles.roi_wrap}>
+            <RoiMatrix />
+          </div>
 
           {/* ── 카드 그리드 ── */}
           {filtered.length > 0 ? (

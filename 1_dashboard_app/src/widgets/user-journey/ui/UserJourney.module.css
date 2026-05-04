@@ -2,11 +2,25 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+/* ── 헤더 ── */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header_left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .title {
-  flex-shrink: 0;
   font-size: 16px;
   font-weight: 700;
   color: #94a3b8;
@@ -14,72 +28,67 @@
   letter-spacing: 0.08em;
 }
 
-.scroll {
+.subtitle {
+  font-size: 11px;
+  color: #475569;
+}
+
+/* ── 전체 전환율 배지 ── */
+.conv_rate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.conv_label {
+  font-size: 9px;
+  color: #475569;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.conv_value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #3b82f6;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 퍼널 컨테이너 ── */
+.funnel {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  border-radius: 14px;
-  border: 1px solid #1e293b;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
 }
 
-/* ── 테이블 ── */
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.th,
-.th_bar {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  text-align: left;
-  background-color: #0d1424;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-bottom: 1px solid #1e293b;
-  white-space: nowrap;
-}
-
-.th_bar { min-width: 120px; }
-
-.row {
-  border-bottom: 1px solid #1a2234;
-  transition: background-color 0.15s ease;
-}
-
-.row:last-child { border-bottom: none; }
-.row:hover      { background-color: #131d2e; }
-
-.td,
-.td_step,
-.td_bar {
-  padding: 12px 16px;
-  vertical-align: middle;
-}
-
-/* ── 단계 셀 ── */
-.td_step {
+/* ── 스텝 행 ── */
+.step_row {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #e2e8f0;
-  white-space: nowrap;
+  padding: 5px 4px;
+}
+
+.step_label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 68px;
+  flex-shrink: 0;
 }
 
 .step_num {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background-color: #1e3a5f;
   color: #60a5fa;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -87,69 +96,97 @@
   flex-shrink: 0;
 }
 
-/* ── 트래픽 ── */
-.sessions {
-  font-size: 13px;
-  font-weight: 700;
-  color: #cbd5e1;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── 비율 바 ── */
-.td_bar { min-width: 120px; }
-
-.bar_track {
-  width: 100%;
-  height: 6px;
-  background-color: #1e293b;
-  border-radius: 9999px;
-  overflow: hidden;
-}
-
-.bar_fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #60a5fa);
-  border-radius: 9999px;
-  transition: width 0.4s ease;
-}
-
-/* ── 이탈률 ── */
-.dropoff {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.dropoff_mid  { color: #f59e0b; }
-.dropoff_high { color: #ef4444; }
-.dropoff_none { color: #475569; font-size: 12px; }
-
-/* ── 체류 시간 ── */
-.time {
+.step_name {
   font-size: 12px;
   font-weight: 600;
   color: #94a3b8;
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ── 로딩 / 에러 ── */
-.loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+/* ── 퍼널 막대 ── */
+.bar_area {
   flex: 1;
+  height: 26px;
+  background-color: #0b1120;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #1e293b;
 }
 
-.spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid #1e293b;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+/* ── 세션 수 ── */
+.sessions {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
 
+/* ── LCP 뱃지 ── */
+.lcp_badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  width: 46px;
+  flex-shrink: 0;
+}
+
+.lcp_none {
+  color: #334155;
+  font-size: 11px;
+  width: 46px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ── 이탈률 연결부 ── */
+.connector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  padding-left: calc(68px + 8px + 4px);
+  padding-right: calc(34px + 8px + 46px + 8px + 4px);
+  min-height: 18px;
+}
+
+.connector_line {
+  flex: 1;
+  height: 1px;
+  background-color: #1e293b;
+}
+
+.dropoff_badge {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── 각주 ── */
+.footnote {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+/* ── 에러 ── */
 .error {
   text-align: center;
   color: #ef4444;

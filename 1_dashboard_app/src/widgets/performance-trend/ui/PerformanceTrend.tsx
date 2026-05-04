@@ -7,8 +7,9 @@ import {
   Legend, ReferenceLine,
 } from 'recharts';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { calcCvrBreakdown, calcRevenueImpact } from '@/shared/lib/cvr';
 import { Skeleton } from '@/shared/ui';
-import type { Trends } from '@/shared/lib/types';
+import type { Trends, TrendDataset } from '@/shared/lib/types';
 import styles from './PerformanceTrend.module.css';
 
 // ── 지표 설정 ──────────────────────────────────────────────────
@@ -19,9 +20,26 @@ const METRIC_CONFIG: Record<string, { label: string; unit: string; domain: [numb
 };
 
 const BRAND_COLORS: Record<string, string> = {
-  Decathlon: '#3b82f6',
-  Coupang:   '#f59e0b',
-  Musinsa:   '#a78bfa',
+  Decathlon:        '#3b82f6',
+  Coupang:          '#f59e0b',
+  'Naver Shopping': '#10b981',
+  'SSG.com':        '#a78bfa',
+  'Nike Korea':     '#f43f5e',
+};
+
+const METRIC_TARGET: Record<string, number> = {
+  lighthouse: 90,
+  lcp:        2.5,
+  tbt:        200,
+};
+
+const METRIC_THRESHOLD: Record<string, {
+  label: string; unit: string;
+  target: number; higherIsBetter: boolean; targetLabel: string;
+}> = {
+  lighthouse: { label: 'Lighthouse', unit: 'pt',  target: 90,  higherIsBetter: true,  targetLabel: '≥ 90'    },
+  lcp:        { label: 'LCP',        unit: 's',   target: 2.5, higherIsBetter: false, targetLabel: '≤ 2.5s'  },
+  tbt:        { label: 'TBT',        unit: 'ms',  target: 200, higherIsBetter: false, targetLabel: '≤ 200ms' },
 };
 
 // ── 날짜 포맷 ("2026-03-08" → "3/8") ─────────────────────────
@@ -40,6 +58,41 @@ function buildChartData(trends: Trends, metricKey: string) {
   });
 }
 
+// ── 특정 날짜의 Decathlon 스냅샷 ─────────────────────────────
+function getDecathlonSnapshot(trends: Trends, date: string): Record<string, number> | null {
+  const idx = trends.labels.indexOf(date);
+  if (idx < 0) return null;
+  const result: Record<string, number> = {};
+  trends.datasets
+    .filter((ds: TrendDataset) => ds.brand === 'Decathlon')
+    .forEach((ds: TrendDataset) => { result[ds.metricKey] = ds.values[idx]; });
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+// ── 릴리즈 전후 delta 계산 (Decathlon 전용) ──────────────────
+function calcDeltas(trends: Trends, releaseDate: string) {
+  const relIdx = trends.labels.indexOf(releaseDate);
+  if (relIdx < 1) return [];
+
+  const results: {
+    metricKey: string;
+    before: number; after: number; delta: number; pct: number;
+  }[] = [];
+
+  trends.datasets
+    .filter((ds: TrendDataset) => ds.brand === 'Decathlon')
+    .forEach((ds: TrendDataset) => {
+      const before = ds.values[relIdx - 1];
+      const after  = ds.values[relIdx];
+      if (before == null || after == null) return;
+      const delta = Math.round((after - before) * 100) / 100;
+      const pct   = Math.round((delta / before) * 1000) / 10;
+      results.push({ metricKey: ds.metricKey, before, after, delta, pct });
+    });
+
+  return results;
+}
+
 // ── 커스텀 툴팁 ───────────────────────────────────────────────
 interface TooltipEntry { name: string; value: number; color: string }
 interface TooltipProps  { active?: boolean; payload?: TooltipEntry[]; label?: string; unit: string }
@@ -53,11 +106,49 @@ function CustomTooltip({ active, payload, label, unit }: TooltipProps) {
         <p key={entry.name} className={styles.tooltip_row}>
           <span className={styles.tooltip_dot} style={{ backgroundColor: entry.color }} />
           <span style={{ color: entry.color }}>{entry.name}</span>
-          <span style={{ color: '#e2e8f0' }}>
-            {entry.value}{unit}
-          </span>
+          <span style={{ color: '#e2e8f0' }}>{entry.value}{unit}</span>
         </p>
       ))}
+    </div>
+  );
+}
+
+// ── 델타 카드 ─────────────────────────────────────────────────
+function DeltaCard({ metricKey, before, after, delta, pct }: {
+  metricKey: string;
+  before: number; after: number; delta: number; pct: number;
+}) {
+  const cfg = METRIC_THRESHOLD[metricKey];
+  if (!cfg) return null;
+
+  const improved   = cfg.higherIsBetter ? delta > 0 : delta < 0;
+  const neutral    = delta === 0;
+  const deltaColor = neutral ? '#64748b' : improved ? '#10b981' : '#ef4444';
+  const sign       = delta > 0 ? '+' : '';
+
+  const passAfter = cfg.higherIsBetter ? after >= cfg.target : after <= cfg.target;
+
+  return (
+    <div className={styles.delta_card}>
+      <div className={styles.delta_card_top}>
+        <span className={styles.delta_metric_name}>{cfg.label}</span>
+        <span className={styles.delta_target}>{cfg.targetLabel}</span>
+      </div>
+      <div className={styles.delta_values}>
+        <span className={styles.delta_before}>{before}{cfg.unit}</span>
+        <span className={styles.delta_arrow}>→</span>
+        <span className={`${styles.delta_after} ${passAfter ? styles.pass : styles.fail}`}>
+          {after}{cfg.unit}
+        </span>
+      </div>
+      <div className={styles.delta_footer}>
+        <span className={styles.delta_change} style={{ color: deltaColor }}>
+          {neutral ? '변화 없음' : `${sign}${delta}${cfg.unit} (${sign}${pct}%)`}
+        </span>
+        <span className={`${styles.delta_status} ${passAfter ? styles.status_pass : styles.status_fail}`}>
+          {passAfter ? '✓ 달성' : '✗ 미달'}
+        </span>
+      </div>
     </div>
   );
 }
@@ -66,6 +157,7 @@ function CustomTooltip({ active, payload, label, unit }: TooltipProps) {
 export function PerformanceTrend() {
   const { data, loading, error } = usePerformanceData();
   const [activeMetric, setActiveMetric] = useState('lighthouse');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
@@ -85,14 +177,6 @@ export function PerformanceTrend() {
               <Skeleton key={i} width="100%" height={`${h}%`} radius="4px 4px 0 0" />
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 16, paddingTop: 8 }}>
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Skeleton width="24px" height="3px" radius="2px" />
-                <Skeleton width="60px" height="12px" />
-              </div>
-            ))}
-          </div>
         </div>
       </section>
     );
@@ -102,16 +186,47 @@ export function PerformanceTrend() {
   const availableMetrics = Object.keys(METRIC_CONFIG).filter((key) =>
     trends.datasets.some((d) => d.metricKey === key),
   );
-  const config      = METRIC_CONFIG[activeMetric];
-  const chartData   = buildChartData(trends, activeMetric);
+  const config       = METRIC_CONFIG[activeMetric];
+  const chartData    = buildChartData(trends, activeMetric);
   const activeBrands = [...new Set(
     trends.datasets.filter((d) => d.metricKey === activeMetric).map((d) => d.brand),
   )];
 
+  // ── 클릭된 날짜 기반 계산 ──
+  const selectedReleaseInfo = selectedDate
+    ? trends.releases.find((r) => r.date === selectedDate)
+    : null;
+
+  const snapshot = selectedDate ? getDecathlonSnapshot(trends, selectedDate) : null;
+
+  const decathlon = data.benchmarks.find((b) => b.isTarget);
+  const cvrBreakdown = snapshot && decathlon
+    ? calcCvrBreakdown({
+        lcpCurrent: snapshot.lcp  ?? decathlon.metrics.lcp.value,
+        lcpTarget:  2.5,
+        inpCurrent: decathlon.metrics.inp.value,
+        inpTarget:  200,
+        clsCurrent: decathlon.metrics.cls.value,
+        clsTarget:  0.1,
+      })
+    : null;
+
+  const revenueB = cvrBreakdown
+    ? (calcRevenueImpact(cvrBreakdown.total, data.executiveSummary.baselineAnnualRevenue) / 100_000_000).toFixed(1)
+    : null;
+
+  const releaseDeltas = selectedReleaseInfo && selectedDate
+    ? calcDeltas(trends, selectedDate)
+    : [];
+
   return (
     <section className={styles.wrapper}>
+      {/* ── 헤더 ── */}
       <div className={styles.header}>
-        <h2 className={styles.title}>성능 트렌드</h2>
+        <div>
+          <h2 className={styles.title}>성능 트렌드</h2>
+          <span className={styles.click_hint}>그래프 클릭 시 비즈니스 지표 확인</span>
+        </div>
         <div className={styles.tabs}>
           {availableMetrics.map((key) => (
             <button
@@ -125,71 +240,175 @@ export function PerformanceTrend() {
         </div>
       </div>
 
+      {/* ── 차트 ── */}
       <div className={styles.chart_wrap}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <div className={styles.chart_inner}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 16, left: 0, bottom: 0 }}
+              style={{ cursor: 'pointer' }}
+              onClick={(payload) => {
+                if (!payload?.activeLabel) return;
+                const origDate = trends.labels.find((l) => fmtDate(l) === payload.activeLabel);
+                if (!origDate) { setSelectedDate(null); return; }
+                setSelectedDate((prev) => (prev === origDate ? null : origDate));
+              }}
+            >
+              <CartesianGrid strokeDasharray="2 4" stroke="#1e2d45" vertical={false} />
 
-            <XAxis
-              dataKey="date"
-              tick={{ fill: '#64748b', fontSize: 12 }}
-              axisLine={{ stroke: '#1e293b' }}
-              tickLine={false}
-            />
-            <YAxis
-              domain={config.domain}
-              tick={{ fill: '#64748b', fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(v) => `${v}${config.unit}`}
-              width={52}
-            />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: '#64748b', fontSize: 11 }}
+                axisLine={{ stroke: '#1e293b' }}
+                tickLine={false}
+              />
+              <YAxis
+                domain={config.domain}
+                tick={{ fill: '#64748b', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `${v}${config.unit}`}
+                width={48}
+              />
 
-            <Tooltip
-              content={(props) => (
-                <CustomTooltip
-                  active={props.active}
-                  payload={props.payload as unknown as TooltipEntry[]}
-                  label={props.label as string}
-                  unit={config.unit}
+              <Tooltip
+                content={(props) => (
+                  <CustomTooltip
+                    active={props.active}
+                    payload={props.payload as unknown as TooltipEntry[]}
+                    label={props.label as string}
+                    unit={config.unit}
+                  />
+                )}
+              />
+
+              <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8', paddingTop: '8px' }} />
+
+              {METRIC_TARGET[activeMetric] !== undefined && (
+                <ReferenceLine
+                  y={METRIC_TARGET[activeMetric]}
+                  stroke="#22c55e"
+                  strokeDasharray="5 3"
+                  strokeOpacity={0.6}
+                  label={{ value: '목표', position: 'insideTopRight', fill: '#22c55e', fontSize: 10 }}
                 />
               )}
-            />
 
-            <Legend
-              wrapperStyle={{ fontSize: '13px', color: '#94a3b8', paddingTop: '12px' }}
-            />
+              {trends.releases.map((r) => {
+                const isSelected = selectedDate === r.date;
+                return (
+                  <ReferenceLine
+                    key={r.version}
+                    x={fmtDate(r.date)}
+                    stroke={isSelected ? '#3b82f6' : '#334155'}
+                    strokeWidth={isSelected ? 2 : 1}
+                    strokeDasharray={isSelected ? undefined : '4 3'}
+                    label={{
+                      value: r.version,
+                      position: 'top',
+                      fill: isSelected ? '#60a5fa' : '#475569',
+                      fontSize: 10,
+                    }}
+                  />
+                );
+              })}
 
-            {/* 릴리스 마커 */}
-            {trends.releases.map((r) => (
-              <ReferenceLine
-                key={r.version}
-                x={fmtDate(r.date)}
-                stroke="#334155"
-                strokeDasharray="4 3"
-                label={{
-                  value: r.version,
-                  position: 'top',
-                  fill: '#475569',
-                  fontSize: 10,
-                }}
-              />
-            ))}
+              {activeBrands.map((brand) => {
+                const color = BRAND_COLORS[brand] ?? '#94a3b8';
+                return (
+                  <Line
+                    key={brand}
+                    type="monotone"
+                    dataKey={brand}
+                    stroke={color}
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#0f172a' }}
+                    isAnimationActive={false}
+                  />
+                );
+              })}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
 
-            {/* 브랜드별 라인 */}
-            {activeBrands.map((brand) => (
-              <Line
-                key={brand}
-                type="monotone"
-                dataKey={brand}
-                stroke={BRAND_COLORS[brand] ?? '#94a3b8'}
-                strokeWidth={brand === 'Decathlon' ? 2.5 : 1.5}
-                dot={false}
-                activeDot={{ r: 4, strokeWidth: 0 }}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
+        {/* ── 비즈니스 지표 오버레이 패널 ── */}
+        {selectedDate && cvrBreakdown && snapshot && (
+          <div className={styles.overlay_panel}>
+            {/* 패널 헤더 */}
+            <div className={styles.panel_header}>
+              <div className={styles.panel_title_row}>
+                <span className={styles.panel_date}>{selectedDate}</span>
+                {selectedReleaseInfo && (
+                  <span className={styles.panel_version}>{selectedReleaseInfo.version}</span>
+                )}
+                {selectedReleaseInfo?.description && (
+                  <span className={styles.panel_desc}>{selectedReleaseInfo.description}</span>
+                )}
+              </div>
+              <button
+                className={styles.panel_close}
+                onClick={(e) => { e.stopPropagation(); setSelectedDate(null); }}
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 비즈니스 지표 섹션 */}
+            <div className={styles.biz_section}>
+              <p className={styles.section_label}>목표 달성 시 CVR 개선 잠재량</p>
+              <div className={styles.biz_main}>
+                <div className={styles.biz_cvr_wrap}>
+                  <span className={styles.biz_cvr}>+{cvrBreakdown.total}%</span>
+                  <span className={styles.biz_cvr_sub}>CVR 향상</span>
+                </div>
+                <div className={styles.biz_revenue_wrap}>
+                  <span className={styles.biz_revenue}>+₩{revenueB}억</span>
+                  <span className={styles.biz_revenue_sub}>연간 추가 매출</span>
+                </div>
+              </div>
+              <div className={styles.biz_breakdown}>
+                {cvrBreakdown.lcp > 0 && (
+                  <span className={styles.biz_item}>
+                    LCP {snapshot.lcp}s → 2.5s
+                    <strong> +{cvrBreakdown.lcp}%</strong>
+                  </span>
+                )}
+                {cvrBreakdown.inp > 0 && (
+                  <span className={styles.biz_item}>
+                    INP
+                    <strong> +{cvrBreakdown.inp}%</strong>
+                  </span>
+                )}
+                {cvrBreakdown.cls > 0 && (
+                  <span className={styles.biz_item}>
+                    CLS
+                    <strong> +{cvrBreakdown.cls}%</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 릴리즈 delta 섹션 (릴리즈 날짜일 때만) */}
+            {selectedReleaseInfo && releaseDeltas.length > 0 && (
+              <>
+                <div className={styles.section_divider} />
+                <div className={styles.release_section}>
+                  <p className={styles.section_label}>배포 전후 지표 변화</p>
+                  <div className={styles.delta_grid}>
+                    {releaseDeltas.map((d) => (
+                      <DeltaCard key={d.metricKey} {...d} />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <p className={styles.panel_footnote}>WPO Stats 기반 보수 추정 · INP·CLS는 현재 기준값 적용</p>
+          </div>
+        )}
       </div>
     </section>
   );
