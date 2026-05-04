@@ -222,13 +222,13 @@ export function ExecutiveSummary() {
 
         <div className={styles.divider} />
 
-        {/* ── 카드 4: 탄소 발자국 ── */}
-        <div className={styles.card}>
+        {/* ── 카드 4: 탄소 발자국 (secondary) ── */}
+        <div className={`${styles.card} ${styles.card_carbon}`}>
           <div className={styles.card_icon}>🌿</div>
           <div className={styles.card_info}>
             <span className={styles.card_label}>CARBON / PV</span>
-            <span className={styles.card_value}>{es.carbonFootprint.gramsPerPageView}g</span>
-            <span className={styles.card_sub}>최적화 시 −{es.carbonFootprint.savedGrams}g 절감</span>
+            <span className={styles.card_value_sm}>{es.carbonFootprint.gramsPerPageView}g</span>
+            <span className={styles.card_sub_sm}>최적화 시 −{es.carbonFootprint.savedGrams}g</span>
           </div>
         </div>
 

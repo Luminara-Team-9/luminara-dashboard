@@ -73,6 +73,23 @@
   text-transform: uppercase;
 }
 
+/* ── 탄소 카드 (secondary, 작게) ── */
+.card_carbon {
+  flex: 0.6;
+}
+.card_value_sm {
+  font-size: 15px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.card_sub_sm {
+  font-size: 10px;
+  color: #334155;
+  font-weight: 400;
+}
+
 /* ── 카드 사이 구분선 ── */
 .divider {
   width: 1px;

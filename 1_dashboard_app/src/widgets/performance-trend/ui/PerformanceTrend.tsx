@@ -2,21 +2,25 @@
 
 import { useState } from 'react';
 import {
-  ResponsiveContainer, LineChart, Line,
+  ResponsiveContainer, ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ReferenceLine,
 } from 'recharts';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
-import { calcCvrBreakdown, calcRevenueImpact } from '@/shared/lib/cvr';
+import { calcCvrBreakdown, calcRevenueImpact, WPO_COEFFICIENTS } from '@/shared/lib/cvr';
 import { Skeleton } from '@/shared/ui';
 import type { Trends, TrendDataset } from '@/shared/lib/types';
 import styles from './PerformanceTrend.module.css';
 
-// ── 지표 설정 ──────────────────────────────────────────────────
-const METRIC_CONFIG: Record<string, { label: string; unit: string; domain: [number, number] }> = {
-  lighthouse: { label: 'Lighthouse',  unit: '',   domain: [40, 100] },
-  lcp:        { label: 'LCP',         unit: 's',  domain: [0, 7]   },
-  tbt:        { label: 'TBT',         unit: 'ms', domain: [0, 600] },
+// ── 지표 설정 (차트 + 델타 카드 공통) ─────────────────────────
+const METRIC_DEFS: Record<string, {
+  label: string; unit: string; domain: [number, number];
+  target: number; higherIsBetter: boolean; targetLabel: string;
+}> = {
+  lighthouse: { label: 'Lighthouse', unit: 'pt',  domain: [40, 100], target: 90,  higherIsBetter: true,  targetLabel: '≥ 90'    },
+  lcp:        { label: 'LCP',        unit: 's',   domain: [0, 7],    target: 2.5, higherIsBetter: false, targetLabel: '≤ 2.5s'  },
+  tbt:        { label: 'TBT',        unit: 'ms',  domain: [0, 600],  target: 200, higherIsBetter: false, targetLabel: '≤ 200ms' },
+  inp:        { label: 'INP',        unit: 'ms',  domain: [0, 400],  target: 200, higherIsBetter: false, targetLabel: '≤ 200ms' },
 };
 
 const BRAND_COLORS: Record<string, string> = {
@@ -27,19 +31,11 @@ const BRAND_COLORS: Record<string, string> = {
   'Nike Korea':     '#f43f5e',
 };
 
-const METRIC_TARGET: Record<string, number> = {
-  lighthouse: 90,
-  lcp:        2.5,
-  tbt:        200,
-};
-
-const METRIC_THRESHOLD: Record<string, {
-  label: string; unit: string;
-  target: number; higherIsBetter: boolean; targetLabel: string;
-}> = {
-  lighthouse: { label: 'Lighthouse', unit: 'pt',  target: 90,  higherIsBetter: true,  targetLabel: '≥ 90'    },
-  lcp:        { label: 'LCP',        unit: 's',   target: 2.5, higherIsBetter: false, targetLabel: '≤ 2.5s'  },
-  tbt:        { label: 'TBT',        unit: 'ms',  target: 200, higherIsBetter: false, targetLabel: '≤ 200ms' },
+// ── CVR 잠재량 라인 (이중 Y축) ───────────────────────────────
+const CVR_LINE_KEY = 'CVR 잠재량(%)';
+const CVR_CALC: Record<string, (v: number) => number> = {
+  lcp: (v) => Math.max(0, Math.round((v - 2.5) * WPO_COEFFICIENTS.LCP_PER_SECOND * 10) / 10),
+  inp: (v) => Math.max(0, Math.round(((v - 200) / 100) * WPO_COEFFICIENTS.INP_PER_100MS * 10) / 10),
 };
 
 // ── 날짜 포맷 ("2026-03-08" → "3/8") ─────────────────────────
@@ -50,10 +46,16 @@ function fmtDate(iso: string) {
 
 // ── Recharts용 데이터 변환 ────────────────────────────────────
 function buildChartData(trends: Trends, metricKey: string) {
-  const datasets = trends.datasets.filter((d) => d.metricKey === metricKey);
+  const datasets    = trends.datasets.filter((d) => d.metricKey === metricKey);
+  const decathlonDs = datasets.find((d) => d.brand === 'Decathlon');
+  const cvrFn       = CVR_CALC[metricKey];
+
   return trends.labels.map((label, i) => {
     const point: Record<string, string | number> = { date: fmtDate(label) };
     datasets.forEach((d) => { point[d.brand] = d.values[i]; });
+    if (cvrFn && decathlonDs) {
+      point[CVR_LINE_KEY] = cvrFn(decathlonDs.values[i]);
+    }
     return point;
   });
 }
@@ -106,7 +108,9 @@ function CustomTooltip({ active, payload, label, unit }: TooltipProps) {
         <p key={entry.name} className={styles.tooltip_row}>
           <span className={styles.tooltip_dot} style={{ backgroundColor: entry.color }} />
           <span style={{ color: entry.color }}>{entry.name}</span>
-          <span style={{ color: '#e2e8f0' }}>{entry.value}{unit}</span>
+          <span style={{ color: '#e2e8f0' }}>
+            {entry.name === CVR_LINE_KEY ? `+${entry.value}%` : `${entry.value}${unit}`}
+          </span>
         </p>
       ))}
     </div>
@@ -118,7 +122,7 @@ function DeltaCard({ metricKey, before, after, delta, pct }: {
   metricKey: string;
   before: number; after: number; delta: number; pct: number;
 }) {
-  const cfg = METRIC_THRESHOLD[metricKey];
+  const cfg = METRIC_DEFS[metricKey];
   if (!cfg) return null;
 
   const improved   = cfg.higherIsBetter ? delta > 0 : delta < 0;
@@ -183,14 +187,19 @@ export function PerformanceTrend() {
   }
 
   const { trends } = data;
-  const availableMetrics = Object.keys(METRIC_CONFIG).filter((key) =>
+  const availableMetrics = Object.keys(METRIC_DEFS).filter((key) =>
     trends.datasets.some((d) => d.metricKey === key),
   );
-  const config       = METRIC_CONFIG[activeMetric];
+  const config       = METRIC_DEFS[activeMetric];
   const chartData    = buildChartData(trends, activeMetric);
   const activeBrands = [...new Set(
     trends.datasets.filter((d) => d.metricKey === activeMetric).map((d) => d.brand),
   )];
+
+  const showCvr = activeMetric in CVR_CALC;
+  const cvrMax  = showCvr
+    ? Math.ceil(Math.max(...chartData.map((d) => (d[CVR_LINE_KEY] as number) ?? 0)) * 1.5 * 10) / 10
+    : 0;
 
   // ── 클릭된 날짜 기반 계산 ──
   const selectedReleaseInfo = selectedDate
@@ -225,7 +234,9 @@ export function PerformanceTrend() {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>성능 트렌드</h2>
-          <span className={styles.click_hint}>그래프 클릭 시 비즈니스 지표 확인</span>
+          <span className={styles.click_hint}>
+            {showCvr ? 'CVR 잠재량 상관관계 포함 · 클릭 시 상세 확인' : '그래프 클릭 시 비즈니스 지표 확인'}
+          </span>
         </div>
         <div className={styles.tabs}>
           {availableMetrics.map((key) => (
@@ -234,7 +245,7 @@ export function PerformanceTrend() {
               className={`${styles.tab} ${activeMetric === key ? styles.tab_active : ''}`}
               onClick={() => setActiveMetric(key)}
             >
-              {METRIC_CONFIG[key].label}
+              {METRIC_DEFS[key].label}
             </button>
           ))}
         </div>
@@ -244,9 +255,9 @@ export function PerformanceTrend() {
       <div className={styles.chart_wrap}>
         <div className={styles.chart_inner}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
+            <ComposedChart
               data={chartData}
-              margin={{ top: 10, right: 16, left: 0, bottom: 0 }}
+              margin={{ top: 10, right: showCvr ? 4 : 16, left: 0, bottom: 0 }}
               style={{ cursor: 'pointer' }}
               onClick={(payload) => {
                 if (!payload?.activeLabel) return;
@@ -263,7 +274,10 @@ export function PerformanceTrend() {
                 axisLine={{ stroke: '#1e293b' }}
                 tickLine={false}
               />
+
+              {/* 좌측 Y축: 성능 지표 */}
               <YAxis
+                yAxisId="left"
                 domain={config.domain}
                 tick={{ fill: '#64748b', fontSize: 11 }}
                 axisLine={false}
@@ -271,6 +285,20 @@ export function PerformanceTrend() {
                 tickFormatter={(v) => `${v}${config.unit}`}
                 width={48}
               />
+
+              {/* 우측 Y축: CVR 잠재량 (LCP·INP만) */}
+              {showCvr && (
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  domain={[0, cvrMax]}
+                  tick={{ fill: '#10b981', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `+${v}%`}
+                  width={44}
+                />
+              )}
 
               <Tooltip
                 content={(props) => (
@@ -285,9 +313,10 @@ export function PerformanceTrend() {
 
               <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8', paddingTop: '8px' }} />
 
-              {METRIC_TARGET[activeMetric] !== undefined && (
+              {config.target !== undefined && (
                 <ReferenceLine
-                  y={METRIC_TARGET[activeMetric]}
+                  yAxisId="left"
+                  y={config.target}
                   stroke="#22c55e"
                   strokeDasharray="5 3"
                   strokeOpacity={0.6}
@@ -300,6 +329,7 @@ export function PerformanceTrend() {
                 return (
                   <ReferenceLine
                     key={r.version}
+                    yAxisId="left"
                     x={fmtDate(r.date)}
                     stroke={isSelected ? '#3b82f6' : '#334155'}
                     strokeWidth={isSelected ? 2 : 1}
@@ -319,6 +349,7 @@ export function PerformanceTrend() {
                 return (
                   <Line
                     key={brand}
+                    yAxisId="left"
                     type="monotone"
                     dataKey={brand}
                     stroke={color}
@@ -329,7 +360,22 @@ export function PerformanceTrend() {
                   />
                 );
               })}
-            </LineChart>
+
+              {/* CVR 잠재량 라인 (우측 Y축) */}
+              {showCvr && (
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey={CVR_LINE_KEY}
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: '#10b981', fill: '#0f172a' }}
+                  isAnimationActive={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 

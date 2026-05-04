@@ -205,6 +205,80 @@
         "speedIndex": { "value": 3.2,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
         "assetSize":  { "value": 295,  "unit": "KB",   "target": 200, "label": "Asset Size" }
       }
+    },
+
+    { "brand": "SSG.com", "page": "main",
+      "scores": { "lighthouse": 64, "seo": 73, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 4.1,  "unit": "s",    "target": 2.5, "label": "LCP" },
+        "cls":        { "value": 0.14, "unit": "score", "target": 0.1, "label": "CLS" },
+        "inp":        { "value": 185,  "unit": "ms",   "target": 200, "label": "INP" },
+        "tbt":        { "value": 650,  "unit": "ms",   "target": 200, "label": "TBT" },
+        "fcp":        { "value": 2.6,  "unit": "s",    "target": 1.8, "label": "FCP" },
+        "speedIndex": { "value": 5.1,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
+        "assetSize":  { "value": 580,  "unit": "KB",   "target": 200, "label": "Asset Size" }
+      }
+    },
+    { "brand": "SSG.com", "page": "product",
+      "scores": { "lighthouse": 59, "seo": 70, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 4.8,  "unit": "s",    "target": 2.5, "label": "LCP" },
+        "cls":        { "value": 0.21, "unit": "score", "target": 0.1, "label": "CLS" },
+        "inp":        { "value": 230,  "unit": "ms",   "target": 200, "label": "INP" },
+        "tbt":        { "value": 780,  "unit": "ms",   "target": 200, "label": "TBT" },
+        "fcp":        { "value": 3.1,  "unit": "s",    "target": 1.8, "label": "FCP" },
+        "speedIndex": { "value": 5.8,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
+        "assetSize":  { "value": 670,  "unit": "KB",   "target": 200, "label": "Asset Size" }
+      }
+    },
+    { "brand": "SSG.com", "page": "checkout",
+      "scores": { "lighthouse": 60, "seo": 69, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 5.0,  "unit": "s",    "target": 2.5, "label": "LCP" },
+        "cls":        { "value": 0.18, "unit": "score", "target": 0.1, "label": "CLS" },
+        "inp":        { "value": 215,  "unit": "ms",   "target": 200, "label": "INP" },
+        "tbt":        { "value": 730,  "unit": "ms",   "target": 200, "label": "TBT" },
+        "fcp":        { "value": 3.0,  "unit": "s",    "target": 1.8, "label": "FCP" },
+        "speedIndex": { "value": 6.0,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
+        "assetSize":  { "value": 630,  "unit": "KB",   "target": 200, "label": "Asset Size" }
+      }
+    },
+
+    { "brand": "Nike Korea", "page": "main",
+      "scores": { "lighthouse": 71, "seo": 84, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 3.0,  "unit": "s",    "target": 2.5, "label": "LCP" },
+        "cls":        { "value": 0.09, "unit": "score", "target": 0.1, "label": "CLS" },
+        "inp":        { "value": 280,  "unit": "ms",   "target": 200, "label": "INP" },
+        "tbt":        { "value": 480,  "unit": "ms",   "target": 200, "label": "TBT" },
+        "fcp":        { "value": 2.1,  "unit": "s",    "target": 1.8, "label": "FCP" },
+        "speedIndex": { "value": 3.7,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
+        "assetSize":  { "value": 420,  "unit": "KB",   "target": 200, "label": "Asset Size" }
+      }
+    },
+    { "brand": "Nike Korea", "page": "product",
+      "scores": { "lighthouse": 66, "seo": 81, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 3.6,  "unit": "s",    "target": 2.5, "label": "LCP" },
+        "cls":        { "value": 0.13, "unit": "score", "target": 0.1, "label": "CLS" },
+        "inp":        { "value": 320,  "unit": "ms",   "target": 200, "label": "INP" },
+        "tbt":        { "value": 580,  "unit": "ms",   "target": 200, "label": "TBT" },
+        "fcp":        { "value": 2.5,  "unit": "s",    "target": 1.8, "label": "FCP" },
+        "speedIndex": { "value": 4.2,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
+        "assetSize":  { "value": 490,  "unit": "KB",   "target": 200, "label": "Asset Size" }
+      }
+    },
+    { "brand": "Nike Korea", "page": "checkout",
+      "scores": { "lighthouse": 67, "seo": 80, "target_lighthouse": 90 },
+      "metrics": {
+        "lcp":        { "value": 3.8,  "unit": "s",    "target": 2.5, "label": "LCP" },
+        "cls":        { "value": 0.11, "unit": "score", "target": 0.1, "label": "CLS" },
+        "inp":        { "value": 315,  "unit": "ms",   "target": 200, "label": "INP" },
+        "tbt":        { "value": 562,  "unit": "ms",   "target": 200, "label": "TBT" },
+        "fcp":        { "value": 2.4,  "unit": "s",    "target": 1.8, "label": "FCP" },
+        "speedIndex": { "value": 4.2,  "unit": "s",    "target": 3.4, "label": "Speed Index" },
+        "assetSize":  { "value": 465,  "unit": "KB",   "target": 200, "label": "Asset Size" }
+      }
     }
   ],
 
@@ -224,7 +298,11 @@
 
       { "brand": "Decathlon",      "metricKey": "tbt", "values": [480, 472, 465, 458, 450, 442, 435, 428, 420] },
       { "brand": "Coupang",        "metricKey": "tbt", "values": [910, 905, 900, 898, 895, 892, 891, 890, 890] },
-      { "brand": "Naver Shopping", "metricKey": "tbt", "values": [320, 318, 316, 314, 312, 311, 311, 310, 310] }
+      { "brand": "Naver Shopping", "metricKey": "tbt", "values": [320, 318, 316, 314, 312, 311, 311, 310, 310] },
+
+      { "brand": "Decathlon",      "metricKey": "inp", "values": [330, 322, 318, 312, 305, 298, 292, 288, 285] },
+      { "brand": "Coupang",        "metricKey": "inp", "values": [175, 173, 172, 170, 170, 169, 169, 168, 168] },
+      { "brand": "Naver Shopping", "metricKey": "inp", "values": [150, 148, 147, 145, 144, 143, 143, 142, 142] }
     ],
     "releases": [
       { "date": "2026-03-08", "version": "v2.1.0", "description": "히어로 이미지 WebP 전환" },

@@ -1,14 +1,67 @@
 'use client';
 
+import Link from 'next/link';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
-import { ExecutiveSummary }  from '@/widgets/executive-summary';
-import { CompetitorGrid }    from '@/widgets/competitor-grid';
-import { PerformanceTrend }  from '@/widgets/performance-trend';
-import { RumHeatmap }        from '@/widgets/rum-heatmap';
-import { UserJourney }       from '@/widgets/user-journey';
-import { AiFixPanel }        from '@/widgets/ai-chat-panel';
+import { calcCvrLift, calcRevenueImpact } from '@/shared/lib/cvr';
+import { ExecutiveSummary }     from '@/widgets/executive-summary';
+import { CompetitorGrid }       from '@/widgets/competitor-grid';
+import { PerformanceTrend }     from '@/widgets/performance-trend';
+import { RumHeatmap }           from '@/widgets/rum-heatmap';
+import { UserJourney }          from '@/widgets/user-journey';
+import { AiFixPanel }           from '@/widgets/ai-chat-panel';
 import { BusinessImpactMatrix } from '@/widgets/business-impact-matrix';
 import styles from './MainDashboardPage.module.css';
+
+function AlertBanner() {
+  const { data, loading } = usePerformanceData();
+  if (loading || !data) return null;
+
+  const decathlon = data.benchmarks.find((b) => b.isTarget);
+  if (!decathlon) return null;
+
+  const m = decathlon.metrics;
+  const failing = ([
+    m.lcp.value       > m.lcp.target       && 'LCP',
+    m.inp.value       > m.inp.target       && 'INP',
+    m.tbt.value       > m.tbt.target       && 'TBT',
+    m.fcp.value       > m.fcp.target       && 'FCP',
+    m.assetSize.value > m.assetSize.target && 'Asset Size',
+  ] as (string | false)[]).filter(Boolean) as string[];
+
+  if (failing.length === 0) return null;
+
+  const cvrLift = calcCvrLift({
+    lcpCurrent: m.lcp.value, lcpTarget: m.lcp.target,
+    inpCurrent: m.inp.value, inpTarget: m.inp.target,
+    clsCurrent: m.cls.value, clsTarget: m.cls.target,
+  });
+  const monthlyLossB = (
+    calcRevenueImpact(cvrLift, data.executiveSummary.baselineAnnualRevenue) / 12 / 100_000_000
+  ).toFixed(1);
+
+  const isCritical = failing.length >= 3;
+
+  return (
+    <div className={`${styles.alert_banner} ${isCritical ? styles.alert_critical : ''}`}>
+      <div className={styles.alert_inner}>
+        <div className={styles.alert_left}>
+          <span className={styles.alert_icon}>{isCritical ? '⚠' : '!'}</span>
+          <div className={styles.alert_text}>
+            <span className={styles.alert_title}>{failing.length}개 지표 목표 미달</span>
+            <span className={styles.alert_sub}>{failing.join(' · ')}</span>
+          </div>
+        </div>
+        <div className={styles.alert_center}>
+          <span className={styles.alert_loss_label}>월 추정 기회손실</span>
+          <span className={styles.alert_loss_value}>~₩{monthlyLossB}억</span>
+        </div>
+        <Link href="/ai-optimization" className={styles.alert_cta}>
+          AI 액션 플랜 보기 →
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 function Header() {
   const { data, loading, refetch } = usePerformanceData();
@@ -64,24 +117,29 @@ export function MainDashboardPage() {
   return (
     <main className={styles.page}>
       <Header />
+      <AlertBanner />
       <ExecutiveSummary />
 
-      {/* Row 2: 벤치마킹 + 성능 트렌드 */}
-      <div className={styles.row_two}>
-        <section className={styles.section}><CompetitorGrid /></section>
+      {/* 어디서 잃고 있나 + 성능 추세·CVR 상관관계 */}
+      <div className={styles.row_insight}>
+        <section className={styles.section}><UserJourney /></section>
         <section className={`${styles.section} ${styles.section_overflow_visible}`}><PerformanceTrend /></section>
       </div>
 
-      {/* Row 3: RUM 히트맵 + 사용자 여정(LCP 오버레이) + AI 액션 플랜 */}
-      <div className={styles.row_three}>
-        <section className={styles.section}><RumHeatmap /></section>
-        <section className={styles.section}><UserJourney /></section>
+      {/* AI 액션 플랜 (승격 — 가장 중요한 아웃풋) */}
+      <div className={styles.row_action}>
         <section className={styles.section}><AiFixPanel /></section>
       </div>
 
-      {/* Row 4: Business Impact Matrix */}
-      <div className={styles.row_four}>
+      {/* 비즈니스 임팩트 + 경쟁사 맥락 */}
+      <div className={styles.row_analysis}>
         <section className={styles.section}><BusinessImpactMatrix /></section>
+        <section className={styles.section}><CompetitorGrid /></section>
+      </div>
+
+      {/* 지역·통신사 레이턴시 (참고용) */}
+      <div className={styles.row_regional}>
+        <section className={styles.section}><RumHeatmap /></section>
       </div>
     </main>
   );

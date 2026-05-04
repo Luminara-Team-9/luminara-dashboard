@@ -25,8 +25,12 @@ interface Props {
 }
 
 export function AiFixCard({ plan }: Props) {
+  const STORAGE_KEY = `luminara_applied_${plan.id}`;
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [applied, setApplied]         = useState(false);
+  const [applied, setApplied]         = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(`luminara_applied_${plan.id}`) === 'true';
+  });
   const dots = EFFORT_DOTS[plan.effort];
 
   return (
@@ -83,7 +87,7 @@ export function AiFixCard({ plan }: Props) {
               <button className={styles.btn_cancel} onClick={() => setConfirmOpen(false)}>취소</button>
               <button
                 className={styles.btn_confirm}
-                onClick={() => { setApplied(true); setConfirmOpen(false); }}
+                onClick={() => { localStorage.setItem(STORAGE_KEY, 'true'); setApplied(true); setConfirmOpen(false); }}
               >
                 확인 · 적용
               </button>
