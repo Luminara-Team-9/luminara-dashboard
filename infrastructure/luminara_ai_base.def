@@ -4,7 +4,7 @@ From: python:3.12-slim-bookworm
 %labels
     Maintainer Luminara-SRE
     Project Luminara-AI-Foundation
-    Description Base for the Logic Agent (LangGraph, DB Connectors, Node.js tools)
+    Description Base for the agentic_remediation (LangGraph, DB Connectors, Node.js tools)
 
 %post
     set -e

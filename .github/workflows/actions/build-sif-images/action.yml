@@ -1,0 +1,116 @@
+name: "Universal SIF Builder (Hardened)"
+description: "Safely builds, verifies, and deploys ANY Singularity container with auto-healing."
+
+inputs:
+  def_file_path:
+    description: "The path to the .def file"
+    required: true
+  cache_key_suffix:
+    description: "Unique string to prevent parallel collisions"
+    required: true
+  output_path:
+    description: "Where to save the final compiled .sif file"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    # 🚨 SRE FIX: Total Parallel Isolation
+    # We create a perfectly unique environment variable for this specific job BEFORE caching starts.
+    # This prevents Runner A from nuking Runner B's cache during an auto-heal event.
+    # Create a unique path using the pipeline ID and the container name
+    - name: Set up Environment & Cache
+      shell: bash
+      run: |
+        ISOLATED_PATH="/abr/coss41/singularity_cache/cache_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        echo "ISOLATED_CACHE_DIR=$ISOLATED_PATH" >> $GITHUB_ENV
+
+    # SRE FIX 2: Cache Singularity layers. 
+    # This prevents re-downloading the Ubuntu/CUDA base image every single time.
+    - name: Cache Singularity Layers
+      uses: actions/cache@v4
+      with:
+        # Now the GitHub Action targets our mathematically unique NFS folder
+        path: ${{ env.ISOLATED_CACHE_DIR }}
+        key: singularity-cache-${{ inputs.cache_key_suffix }}-${{ runner.os }}-${{ hashFiles(inputs.def_file_path) }}
+        restore-keys: |
+          singularity-cache-${{ inputs.cache_key_suffix }}-${{ runner.os }}-
+
+    - name: Build SIF in Local Sandbox
+      shell: bash
+      run: |
+        # 1. Point Singularity to the isolated cache we created in the earlier step
+        export SINGULARITY_CACHEDIR=${{ env.ISOLATED_CACHE_DIR }}
+
+        # 2. THE LOCAL SANDBOX (For fakeroot to extract the Linux OS without NFS blocking it)
+        # We force this into /var/tmp (the local server disk) to bypass the network drive restrictions.
+        export SINGULARITY_TMPDIR="/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        export TMPDIR=$SINGULARITY_TMPDIR
+        
+        # Clean up any previous runs
+        rm -rf $SINGULARITY_TMPDIR || true
+        mkdir -p $SINGULARITY_TMPDIR
+
+        # Open the local sandbox completely so fakeroot can work
+        chmod 777 $SINGULARITY_TMPDIR
+        
+        echo "🚀 Attempting hybrid build: Local Sandbox -> NFS Output..."
+
+        # 🚨 THE FIX: Target the local RAM disk first, not the NFS drive
+        # Perfectly isolated local file
+        LOCAL_SIF_PATH="$SINGULARITY_TMPDIR/output.sif"
+        echo "LOCAL_SIF_PATH=$LOCAL_SIF_PATH" >> $GITHUB_ENV
+        
+        echo "🚀 Executing Local Sandbox Build for ${{ inputs.def_file_path }}..."
+        if ! singularity build --fakeroot $LOCAL_SIF_PATH ${{ inputs.def_file_path }}; then
+            echo "⚠️ Build failed! Purging cache and retrying..."
+            rm -rf $SINGULARITY_TMPDIR || true
+            mkdir -p $SINGULARITY_TMPDIR
+            chmod 777 $SINGULARITY_TMPDIR
+            singularity cache clean --force
+            singularity build --fakeroot $LOCAL_SIF_PATH ${{ inputs.def_file_path }}
+        fi
+
+    - name: Smart Verification (Pre-Flight Checks)
+      shell: bash
+      run: |
+        echo "🔍 Testing SIF Integrity in RAM Disk..."
+        singularity exec ${{ env.LOCAL_SIF_PATH }} ls -d /workspace || echo "ℹ️ No /workspace found."
+        singularity exec ${{ env.LOCAL_SIF_PATH }} ls -d /data || echo "ℹ️ No /data found."
+
+        # Conditional Node.js/pnpm Check
+        if grep -qE "npm install.*pnpm|curl.*pnpm" "${{ inputs.def_file_path }}"; then
+          echo "✅ Node.js detected. Verifying pnpm..."
+          singularity exec ${{ env.LOCAL_SIF_PATH }} pnpm --version
+        fi
+
+        # Conditional Python/Pip Check
+        if grep -qE "^From:.*python|pip install" "${{ inputs.def_file_path }}"; then
+          echo "✅ Python ecosystem detected. Verifying binaries..."
+          singularity exec ${{ env.LOCAL_SIF_PATH }} bash -c 'if command -v python3 >/dev/null 2>&1; then python3 --version; elif command -v python >/dev/null 2>&1; then python --version; else exit 1; fi'
+          singularity exec ${{ env.LOCAL_SIF_PATH }} bash -c 'if command -v pip3 >/dev/null 2>&1; then pip3 --version; elif command -v pip >/dev/null 2>&1; then pip --version; else exit 1; fi'
+        fi
+
+        # Conditional AI/GPU Check
+        if grep -qE "^From:.*(nvidia|cuda)|pip install.*(torch|vllm|flash-attn)" "${{ inputs.def_file_path }}"; then
+          echo "✅ AI/GPU payload detected. Verifying toolchain..."
+          singularity exec ${{ env.LOCAL_SIF_PATH }} bash -c 'if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi --version; else echo "⚠️ nvidia-smi not available without --nv flag."; fi'
+          singularity exec ${{ env.LOCAL_SIF_PATH }} bash -c 'if command -v python3 >/dev/null 2>&1; then python3 -c "import sys; import importlib.util; sys.exit(0) if importlib.util.find_spec(\"torch\") or importlib.util.find_spec(\"vllm\") else sys.exit(1)" 2>/dev/null && echo "✅ AI Python Libraries verified." || echo "⚠️ Warning: AI libraries not found in Python path."; fi'
+        fi
+
+    - name: Route to Final Destination & Cleanup
+      shell: bash
+      run: |
+        echo "📦 Verifications passed. Moving to Requested Output Path: ${{ inputs.output_path }}"
+        
+        # Ensure the destination directory exists
+        DEST_DIR=$(dirname "${{ inputs.output_path }}")
+        mkdir -p "$DEST_DIR"
+        
+        # Move it to staging/production/dev
+        mv ${{ env.LOCAL_SIF_PATH }} ${{ inputs.output_path }}
+        
+        echo "🧹 Force-cleaning local RAM disk..."
+        export SINGULARITY_TMPDIR="/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        chmod -R u+rwX $SINGULARITY_TMPDIR 2>/dev/null || true
+        rm -rf $SINGULARITY_TMPDIR
