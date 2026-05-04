@@ -43,6 +43,7 @@ From: node:24-slim
     npm cache clean --force
     
 %runscript
+    # SRE FIX: Start at the ROOT of the bound monorepo workspace
     cd /workspace
     
     echo "------------------------------------------------"
@@ -51,28 +52,31 @@ From: node:24-slim
     echo "📂 Data Source: $DATA_PATH"
     echo "------------------------------------------------"
 
-    # DEV DIFFERENCE: We do not use --frozen-lockfile in dev
-    # to allow teammates to add packages easily.
     # SRE FIX: The Human Fallback
     if [ $# -gt 0 ]; then
         # If the developer passed commands (like 'bash' or 'pnpm lint'), execute those
         exec "$@"
     else
-        # SRE FIX: The Empty Workspace Trap Prevention
-        if [ ! -f "package.json" ]; then
-            echo "⚠️ WARNING: No package.json found in /workspace."
-            echo "Please initialize your Next.js app or clone the repository."
+        # SRE FIX: Monorepo Empty Workspace Trap
+        # We check if the root package.json AND the dashboard folder exist
+        if [ ! -f "package.json" ] || [ ! -d "1_dashboard_app" ]; then
+            echo "⚠️ WARNING: Monorepo root structure not found in /workspace."
+            echo "Please ensure you bind the ROOT of the repository, not just the dashboard folder."
             echo "Dropping you into an interactive shell..."
             exec /bin/bash
         fi
 
-        # DEV DIFFERENCE: We do not use --frozen-lockfile in dev
+        # DEV DIFFERENCE: Install at the ROOT so PNPM wires up 0_shared_packages correctly!
+        echo "📦 Syncing Monorepo Workspace Dependencies..."
         pnpm install
 
-        # DEV DIFFERENCE: Launch Next.js in dev mode (hot reloading)
+        # DEV DIFFERENCE: Now we move into the app and launch Next.js
+        echo "🚀 Launching Next.js Dev Server..."
+        cd 1_dashboard_app
         exec pnpm dev --port $PORT --hostname 0.0.0.0
     fi
 
+    
 %help
     Luminara Development Dashboard
     ------------------------------

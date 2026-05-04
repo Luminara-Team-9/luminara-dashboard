@@ -11,7 +11,7 @@ on:
 # SRE FIX: Only one build per branch/PR. New pushes cancel old ones.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -126,6 +126,9 @@ jobs:
           chmod 777 $SINGULARITY_TMPDIR
           
           echo "🚀 Attempting hybrid build: Local Sandbox -> NFS Output..."
+          
+          # 🚨 THE FIX: Target the local RAM disk first, not the NFS drive
+          LOCAL_SIF_PATH="$SINGULARITY_TMPDIR/${{ env.SIF_NAME }}"
           
           if ! singularity build --fakeroot $MASSIVE_DRIVE_PATH/${{ env.SIF_NAME }} ${{ matrix.def_file }}; then
               echo "⚠️ Build failed! Purging local sandbox and global cache, then retrying..."
