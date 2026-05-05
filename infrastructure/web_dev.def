@@ -26,7 +26,7 @@ From: node:24-slim
     set -e
 
     # SRE FIX: Added basic DX tools (git, nano, htop) for debugging
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
         ca-certificates \
         git \

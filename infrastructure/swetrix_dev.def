@@ -20,7 +20,7 @@ From: swetrix/swetrix-api:latest
     mkdir -p /workspace
 
     # Dev Tools
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         htop \
         nano \
         procps \

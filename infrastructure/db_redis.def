@@ -23,8 +23,8 @@ From: redis:7-bookworm
     
     # SRE FIX 2: Bypassing the statvfs error
     mkdir -p /tmp/apt-cache
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3 
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
         ca-certificates \
         curl
     apt-get clean

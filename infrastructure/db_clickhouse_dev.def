@@ -27,7 +27,7 @@ From: clickhouse/clickhouse-server:24.3
     mkdir -p /tmp/clickhouse_user_files_dev
 
     # Dev Tools
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         htop \
         nano \
         procps \
