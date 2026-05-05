@@ -5,6 +5,7 @@ From: python:3.12-slim-bookworm
     Maintainer Luminara-SRE
     Project Luminara-AI-Foundation
     Description Base for the agentic_remediation (LangGraph, DB Connectors, Node.js tools)
+    Tested
 
 %post
     set -e
@@ -17,7 +18,7 @@ From: python:3.12-slim-bookworm
 
    # 1. System Essentials & Workspace Tools
     # We add Git (for PRs) and Node.js foundation (for auditing the websites)
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
         git \
         ca-certificates \

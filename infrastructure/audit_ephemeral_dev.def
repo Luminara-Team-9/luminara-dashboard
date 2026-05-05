@@ -6,6 +6,7 @@ From: python:3.12-slim-bookworm
     Project Luminara-Auditor
     Tier Ephemeral-Development
     Team_Size 5
+    Tested
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data
@@ -27,7 +28,7 @@ From: python:3.12-slim-bookworm
 %post
     set -e
 
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
         ca-certificates \
         gnupg \

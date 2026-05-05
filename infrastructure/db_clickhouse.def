@@ -5,6 +5,7 @@ From: clickhouse/clickhouse-server:24.3
     Maintainer Luminara-SRE
     Project Luminara-RUM
     Service ClickHouse-Production
+    Tested
 
 %environment
     # SRE FIX: Restore dynamic port routing for the host machine

@@ -5,6 +5,7 @@ From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
     Maintainer Luminara-SRE-Agent-Dev
     Project Luminara-AI-Remediation
     Tier Development-Agent
+    Tested
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data
@@ -29,7 +30,7 @@ From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
     set -e
 
     # 1. Dev Tools Included (htop, nano)
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         htop \
         nano \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
