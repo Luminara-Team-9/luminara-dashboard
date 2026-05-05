@@ -1,4 +1,4 @@
-name: 2. [Push-All] Luminara Container Deployer
+name: "2. [Push-All] Luminara Container Deployer"
 
 on:
   push:
@@ -109,7 +109,7 @@ jobs:
       # ---------------------------------------------------------
       - name: Run Emergency Fallback Build
         if: steps.staging_check.outputs.found == 'false'
-        uses: ./.github/actions/build-sif
+        uses: ./.github/actions/build-sif-images
         with:
           def_file_path: "${{ matrix.def_file }}"
           cache_key_suffix: "emergency_${{ env.SAFE_NAME }}"

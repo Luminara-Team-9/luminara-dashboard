@@ -1,4 +1,4 @@
-name: 1. [PR-All] Luminara Container Builder
+name: "1. [PR-All] Luminara Container Builder"
 
 on:
   pull_request:
@@ -68,7 +68,7 @@ jobs:
       # PHASE 2: HARDENED SIF BUILDER (Includes Verification & Staging)
       # ---------------------------------------------------------
       - name: Build Matrix Container
-        uses: ./.github/actions/build-sif
+        uses: ./.github/actions/build-sif-images
         with:
           def_file_path: "${{ matrix.def_file }}"
           cache_key_suffix: "${{ env.SAFE_NAME }}"
