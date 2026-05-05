@@ -20,6 +20,8 @@ From: node:24-slim
 
     mkdir -p /data
     mkdir -p /workspace
+    mkdir -p /app/web_mirror
+    chmod 777 /app/web_mirror
 
     apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
