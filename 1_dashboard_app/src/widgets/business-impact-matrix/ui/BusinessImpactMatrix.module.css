@@ -1,0 +1,311 @@
+.wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── 헤더 ── */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.subtitle {
+  display: block;
+  font-size: 11px;
+  color: #475569;
+  margin-top: 2px;
+}
+
+/* ── 매출 입력 ── */
+.revenue_input {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.revenue_label {
+  font-size: 10px;
+  color: #475569;
+  letter-spacing: 0.04em;
+}
+
+.revenue_wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #0d1424;
+  border: 1px solid #1e293b;
+  border-radius: 7px;
+  padding: 3px 10px 3px 8px;
+}
+
+.revenue_field {
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  width: 64px;
+  text-align: right;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.revenue_unit {
+  font-size: 11px;
+  color: #475569;
+}
+
+/* ── 총합 요약 ── */
+.summary {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background-color: #0d1829;
+  border: 1px solid #1e3a5f;
+  border-radius: 12px;
+  padding: 10px 20px;
+}
+
+.summary_item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.summary_divider {
+  width: 1px;
+  height: 32px;
+  background: #1e293b;
+}
+
+.summary_label {
+  font-size: 10px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.summary_cvr {
+  font-size: 22px;
+  font-weight: 800;
+  color: #10b981;
+  line-height: 1.1;
+}
+
+.summary_revenue {
+  font-size: 20px;
+  font-weight: 800;
+  color: #60a5fa;
+  line-height: 1.1;
+}
+
+.summary_fail {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f87171;
+  line-height: 1.1;
+}
+
+/* ── 테이블 ── */
+.table_wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid #1e293b;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.th,
+.th_cvr,
+.th_revenue {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 14px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: left;
+  background-color: #0d1424;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #1e293b;
+  white-space: nowrap;
+}
+
+.th_cvr     { text-align: center; }
+.th_revenue { text-align: right;  }
+
+.row {
+  border-bottom: 1px solid #131d2e;
+  transition: background-color 0.12s;
+}
+
+.row:last-child { border-bottom: none; }
+.row:hover      { background-color: #0f1a2e; }
+.row_pass       { opacity: 0.55; }
+
+.td,
+.td_label,
+.td_cvr,
+.td_revenue {
+  padding: 11px 14px;
+  vertical-align: middle;
+}
+
+.td_cvr     { text-align: center; }
+.td_revenue { text-align: right;  }
+
+/* 지표명 셀 */
+.td_label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric_name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.status_dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot_pass { background-color: #10b981; }
+.dot_fail { background-color: #ef4444; }
+
+/* 값 */
+.val_pass   { font-size: 13px; font-weight: 600; color: #10b981; }
+.val_fail   { font-size: 13px; font-weight: 600; color: #f87171; }
+.val_target { font-size: 12px; color: #475569; }
+
+.achieved {
+  font-size: 12px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.gap {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+/* CVR */
+.cvr_val {
+  font-size: 13px;
+  font-weight: 800;
+  color: #10b981;
+}
+
+.cvr_achieved {
+  font-size: 13px;
+  color: #10b981;
+}
+
+.no_coeff {
+  font-size: 11px;
+  color: #334155;
+}
+
+.coeff {
+  font-size: 10px;
+  color: #475569;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* 매출 */
+.revenue_val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.revenue_none {
+  font-size: 12px;
+  color: #334155;
+}
+
+/* 합계 행 */
+.total_row {
+  background-color: #0d1424;
+  border-top: 1px solid #1e293b;
+}
+
+.total_label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.total_cvr {
+  font-size: 15px;
+  font-weight: 800;
+  color: #10b981;
+}
+
+.total_revenue {
+  font-size: 15px;
+  font-weight: 800;
+  color: #60a5fa;
+}
+
+/* ── 스켈레톤 ── */
+.skeleton_rows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── 각주 ── */
+.footnote {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+/* ── 에러 ── */
+.error {
+  text-align: center;
+  color: #ef4444;
+  padding: 40px;
+  font-size: 14px;
+}

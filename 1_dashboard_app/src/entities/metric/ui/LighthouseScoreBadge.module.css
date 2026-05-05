@@ -1,0 +1,63 @@
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  border: 2px solid transparent;
+  transition: box-shadow 0.2s ease;
+}
+
+.badge:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.pass    { border-color: rgba(16, 185, 129, 0.35); background-color: rgba(16, 185, 129, 0.08); }
+.warning { border-color: rgba(245, 158, 11, 0.35);  background-color: rgba(245, 158, 11, 0.08); }
+.fail    { border-color: rgba(239, 68, 68, 0.35);   background-color: rgba(239, 68, 68, 0.08); }
+
+.target_brand {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.score {
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  color: #f1f5f9;
+  min-width: 72px;
+  text-align: center;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brand_row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.target_label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.15);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.target_score {
+  font-size: 13px;
+  color: #64748b;
+}
