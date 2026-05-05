@@ -6,6 +6,7 @@ From: postgres:15.6-bookworm
     Project Luminara-Infrastructure
     Service Database-Production
     Hardware ABRM02-ABR-COSS41
+    Tested
 
 %environment
     export PGPORT=${PGPORT:-5432}
@@ -27,10 +28,10 @@ From: postgres:15.6-bookworm
     # We tell apt to use /tmp for its archives so it doesn't get confused by the overlay.
     mkdir -p /tmp/apt-cache
     
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3
     
     # SRE FIX 3: Disable disk space check and install tools
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
         ca-certificates \
         curl
         

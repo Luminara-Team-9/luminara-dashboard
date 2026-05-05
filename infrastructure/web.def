@@ -35,27 +35,28 @@ From: node:24-slim
     npm cache clean --force
 
 %runscript
-    cd /workspace
+    # 1. Navigate deep into the monorepo structure
+    cd /workspace/1_dashboard_app
     
     echo "------------------------------------------------"
     echo "🚀 Luminara PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
 
-    # SRE FIX: Instant validation
-    if [ ! -d "/workspace/.next" ]; then
-        echo "CRITICAL ERROR: No compiled Next.js build found in /workspace/.next"
-        echo "Did you run 'pnpm build' on the host before starting the container?"
+    # 2. Instant validation
+    if [ ! -d ".next" ]; then
+        # SRE FIX: Updated the error log to point to the correct monorepo path
+        echo "CRITICAL ERROR: No compiled Next.js build found in /workspace/1_dashboard_app/.next"
+        echo "Did the CI/CD pipeline correctly sync the 1_dashboard_app directory?"
         exit 1
     fi
 
-    # SRE FIX: Use PM2 to run the production server. 
-    # PM2 automatically restarts the node process if it crashes, without rebooting the whole container.
-    exec pm2-runtime start npm --name "luminara-dashboard" -- run start -- -p $PORT
+    # 3. PM2 Execution
+    exec pm2-runtime start npm --name "luminara-dashboard-prod" -- run start -- -p $PORT
 
 %help
     Luminara Production Dashboard
     ------------------------------
     This image is strictly for SERVING compiled Next.js code.
-    You must run `pnpm install` and `pnpm build` on the host machine (or CI pipeline) 
+    You must run `pnpm install` and `pnpm build` on the host machine (or via the CI/CD pipeline) 
     BEFORE launching this container.
