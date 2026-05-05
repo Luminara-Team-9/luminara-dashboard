@@ -1,15 +1,7 @@
-import Image from 'next/image';
-import type { Product } from '../model/types';
-import { formatPrice } from '@/shared/lib';
+import type { Product } from "../model/types";
 
 type ProductCardProps = {
   product: Product;
-};
-
-const badgeStyles = {
-  new: 'bg-green-500',
-  sale: 'bg-red-500',
-  best: 'bg-orange-500',
 };
 
 export function ProductCard({ product }: ProductCardProps) {
@@ -18,43 +10,62 @@ export function ProductCard({ product }: ProductCardProps) {
     : null;
 
   return (
-    <div className="group bg-white rounded-lg overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-200 cursor-pointer">
-      {/* Image Container */}
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
-        <Image
+    <div style={{
+      backgroundColor: "white", borderRadius: "8px", overflow: "hidden",
+      border: "1px solid #e5e7eb", cursor: "pointer",
+    }}>
+      <div style={{ position: "relative", backgroundColor: "#f9fafb" }}>
+        <img
           src={product.imageUrl}
           alt={product.name}
-          fill
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          width={400}
+          height={400}
+          style={{ width: "100%", height: "200px", objectFit: "cover", display: "block" }}
         />
         {product.badge && (
-          <span
-            className={`absolute top-2 left-2 ${badgeStyles[product.badge]} text-white text-xs font-bold px-2 py-1 rounded`}
-          >
+          <div style={{
+            position: "absolute", top: "8px", left: "8px",
+            backgroundColor: product.badge === "sale" ? "#ef4444" : product.badge === "new" ? "#22c55e" : "#f97316",
+            color: "white", fontSize: "10px", fontWeight: 700,
+            padding: "2px 6px", borderRadius: "4px",
+          }}>
             {product.badge.toUpperCase()}
-          </span>
+          </div>
         )}
       </div>
-
-      {/* Info */}
-      <div className="p-3">
-        <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">{product.category}</p>
-        <h3 className="text-sm font-medium text-gray-800 line-clamp-2 mb-2 leading-snug">
+      <div style={{ padding: "12px" }}>
+        <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px", textTransform: "uppercase" }}>
+          {product.category}
+        </p>
+        <h3 style={{
+          fontSize: "13px", fontWeight: 500, color: "#111827",
+          marginBottom: "8px", lineHeight: "1.4",
+          display: "-webkit-box", WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
           {product.name}
         </h3>
-
-        {/* Price */}
-        <div className="flex items-center gap-2">
-          <span className="text-base font-bold text-gray-900">{formatPrice(product.price)}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "15px", fontWeight: 700, color: "#111827" }}>
+            {product.price.toLocaleString("ko-KR")}원
+          </span>
           {product.originalPrice && (
-            <>
-              <span className="text-xs text-gray-400 line-through">
-                {formatPrice(product.originalPrice)}
-              </span>
-              <span className="text-xs font-bold text-red-500">-{discount}%</span>
-            </>
+            <span style={{ fontSize: "12px", color: "#9ca3af", textDecoration: "line-through" }}>
+              {product.originalPrice.toLocaleString("ko-KR")}원
+            </span>
+          )}
+          {discount && (
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "#ef4444" }}>
+              -{discount}%
+            </span>
           )}
         </div>
+        {product.rating && (
+          <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "6px" }}>
+            <span style={{ color: "#fbbf24", fontSize: "12px" }}>★</span>
+            <span style={{ fontSize: "12px", color: "#6b7280" }}>{product.rating}</span>
+          </div>
+        )}
       </div>
     </div>
   );

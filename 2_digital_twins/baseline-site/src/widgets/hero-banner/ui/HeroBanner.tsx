@@ -1,41 +1,38 @@
-import { Button } from '@/shared/ui';
+const banners = [
+  {
+    src: 'https://contents.mediadecathlon.com/s1414033/k$de3973b0210cd72f5726758a129a021a/defaut.jpg?format=auto',
+    alt: '2026.05 리프레시 프로모션',
+  },
+  {
+    src: 'https://contents.mediadecathlon.com/s1408511/k$cc7d056986b685b3aec07c224beadb8b/defaut.jpg?format=auto',
+    alt: '2026.04 Real Recognizes Real',
+  },
+  {
+    src: 'https://contents.mediadecathlon.com/s1403907/k$c53c54d0a6e48c5b8074afbcd034bdc5/defaut.jpg?format=auto',
+    alt: '2026.04 Power in Every Pulse',
+  },
+  {
+    src: 'https://contents.mediadecathlon.com/s1401943/k$e8da2172cfebd8c5fe1fc951510dcca5/defaut.jpg?format=auto',
+    alt: '2026.04 The perfect all rounder pants MT500',
+  },
+];
 
 export function HeroBanner() {
   return (
-    <section className="relative bg-blue-600 overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 py-20 flex items-center justify-between">
-        {/* Text content */}
-        <div className="text-white max-w-lg">
-          <p className="text-blue-200 text-sm font-medium uppercase tracking-widest mb-3">
-            2026 Spring Collection
-          </p>
-          <h1 className="text-5xl font-black leading-tight mb-4">
-            스포츠의
-            <br />
-            모든 것을
-            <br />
-            데카트론에서
-          </h1>
-          <p className="text-blue-100 text-lg mb-8">
-            러닝부터 캠핑까지, 최고의 스포츠 장비를 합리적인 가격으로 만나보세요.
-          </p>
-          <div className="flex gap-3">
-            <Button variant="secondary" size="lg">
-              지금 쇼핑하기
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="border-white text-white hover:bg-white hover:text-blue-600"
-            >
-              카탈로그 보기
-            </Button>
-          </div>
-        </div>
-
-        {/* Decorative circle */}
-        <div className="hidden lg:block w-96 h-96 rounded-full bg-blue-500 opacity-50 absolute -right-20 -top-20" />
-        <div className="hidden lg:block w-64 h-64 rounded-full bg-blue-400 opacity-30 absolute right-32 bottom-0" />
+    <section style={{ width: '100%', backgroundColor: '#f3f4f6' }}>
+      {/* 
+        BASELINE: Using plain <img> tag intentionally.
+        No lazy loading, no next/image optimization.
+        This is deliberate for performance benchmarking.
+      */}
+      <div style={{ position: 'relative', width: '100%' }}>
+        <img
+          src={banners[0].src}
+          alt={banners[0].alt}
+          width={2880}
+          height={760}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
+        />
       </div>
     </section>
   );
