@@ -1,5 +1,5 @@
-Bootstrap: docker
-From: python:3.12-slim-bookworm
+Bootstrap: localimage
+From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
 
 %labels
     Maintainer Luminara-SRE-Agent
@@ -12,91 +12,81 @@ From: python:3.12-slim-bookworm
     mkdir -p ${SINGULARITY_ROOTFS}/usr/share/luminara-core
 
 %environment
+    # PRODUCTION STANDARDS
     export PORT=${PORT:-5000}
     export APP_ENV=production
     export DATA_PATH=/data
     export PIP_CACHE_DIR="/workspace/.pip-cache"
     export PIP_ROOT_USER_ACTION=ignore
+    
+    # Git & Persistence Configuration
     export XDG_CONFIG_HOME="/tmp/.config"
     export XDG_CACHE_HOME="/tmp/.cache"
     export GIT_CONFIG_NOSYSTEM=1
     export GIT_KNOWN_HOSTS_PATH="/workspace/.ssh/known_hosts"
-    export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
 
 %post
     set -e
+    export DEBIAN_FRONTEND=noninteractive
 
+    # 1. Agent Logic Dependencies (Git is required for remediation commits)
+    # SRE FIX: Removed dev-only tools like htop and nano for production security
     apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates \
-        gnupg \
-        libpq-dev \
-        build-essential \
         git \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+    # 2. GitHub CLI (Required for the Agent to open PRs)
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
     apt-get update && apt-get install -y gh && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    git config --global init.defaultBranch main
-    git config --global core.filemode false
-    
-    pip install --no-cache-dir --upgrade pip
 
-# ---------------------------------------------------------
-    # HARDWARE PARITY FIX (NVIDIA Driver 525.105.17 + Python 3.12)
-    # ---------------------------------------------------------
-    
-    echo "Installing PyTorch CUDA Foundation..."
-    pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-
-    # SRE FIX: The exact unified 'cu12' wheel for torch 2.5 and python 3.12
-    echo "Installing pre-compiled Flash Attention..."
-    export FLASH_WHEEL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
-    pip install --no-cache-dir $FLASH_WHEEL
-
-    # THE PURE INFERENCE STACK
+    # 3. Fast-Moving Application Logic & LangChain Stack
+    # SRE FIX: Removed heavy AI libs (torch, vllm) as they are baked into the Base Image
     cat > requirements.txt <<EOF
-langchain>=0.4.2
-langchain-community>=0.4.0
-openai>=1.65.0 
+# --- 1. Agent Logic & fallbacks ---
 anthropic>=0.52.0
-pydantic>=2.12.0
 python-dotenv>=1.0.1
-vllm==0.6.4
-numpy>=1.26.4,<2.0.0
+GitPython>=3.1.0
+langgraph-sdk>=0.3.13
+ormsgpack>=1.12.2
+
+# --- 2. Data & Analytics (Validation Layer) ---
 pandas>=2.3.1
-transformers>=4.48.0
-accelerate>=1.3.0
 scikit-learn>=1.7.0
+
+# --- 3. Utilities & Networking (The missing layer) ---
 requests>=2.33.1
 aiohttp>=3.11.2
 tqdm>=4.67.3
 psutil>=6.1.0
-clickhouse-driver>=0.2.10
-psycopg2-binary>=2.9.10 
 redis>=5.3.0
 rich>=13.9.4
-GitPython>=3.1.0
-transformers>=5.6.1
-accelerate>=1.13.0
-langgraph>=1.1.9
-langgraph-sdk>=0.3.13
-sentence-transformers>=5.4.1
-ormsgpack>=1.12.2
+
+# --- 4. Verification Engine ---
+playwright>=1.58.0
+lighthouse-python-plus==1.2.0
 EOF
 
-    echo "Installing remaining Dev AI Tooling..."
+    echo "Installing fast-moving Production AI Tooling..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
+
+    # 4. Verification Engine (Playwright)
+    # Required for the Agent to audit its own code patches before PR creation
+    echo "Installing Headless Browser Binaries..."
+    playwright install chromium --with-deps
     
-    echo "Luminara-SRE: Hardware-Matched AI Agent Container Hardening Complete ✅"
+    echo "Luminara-SRE: PRODUCTION AI Agent Container Hardening Complete ✅"
 
 %runscript
     cd /workspace
     echo "------------------------------------------------"
     echo "🚀 Luminara PURE AI AGENT Starting"
+    echo "🌐 Mode: $APP_ENV | Port: $PORT"
     echo "------------------------------------------------"
+    
+    # SRE FIX: Pure, stateless execution. No interactive shell fallbacks.
     exec python -m luminara_core.remediation_agent.run_agent --port $PORT

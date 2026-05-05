@@ -15,10 +15,8 @@ From: node:24-slim
     export NODE_ENV=production
     export DATA_PATH=/data
     
-    # THE FIX: Point PNPM_HOME to /tmp, which is always writable at runtime
     export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
-    export COREPACK_ENABLE_AUTO_PIN=0
 
 %post
     set -e
@@ -29,41 +27,36 @@ From: node:24-slim
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-
-    # Install pnpm
     npm install -g pnpm@latest
     
-    # Configure pnpm to use the bound workspace for its store
-    pnpm config set store-dir /workspace/.pnpm-store
-    # Disable the "update check" which causes the mkdir error
-    pnpm config set update-notifier false
-
-    # SRE FIX: Nuke the massive NPM cache before compression
+    # SRE FIX: Install PM2 for robust process management
+    npm install -g pm2
+    
     npm cache clean --force
 
 %runscript
-    cd /workspace
+    # 1. Navigate deep into the monorepo structure
+    cd /workspace/1_dashboard_app
     
     echo "------------------------------------------------"
     echo "🚀 Luminara PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
-    echo "📂 Data Source: $DATA_PATH"
     echo "------------------------------------------------"
 
-    # 1. Install dependencies (Production only to save space)
-    # Using --frozen-lockfile ensures the build is predictable
-    pnpm install --frozen-lockfile
+    # 2. Instant validation
+    if [ ! -d ".next" ]; then
+        # SRE FIX: Updated the error log to point to the correct monorepo path
+        echo "CRITICAL ERROR: No compiled Next.js build found in /workspace/1_dashboard_app/.next"
+        echo "Did the CI/CD pipeline correctly sync the 1_dashboard_app directory?"
+        exit 1
+    fi
 
-    # 2. Build the Next.js application
-    # This generates the optimized .next folder in the bound workspace
-    pnpm build
-
-    # 3. Start the production server
-    # Bound to 0.0.0.0 for external access
-    exec pnpm start --port $PORT --hostname 0.0.0.0
+    # 3. PM2 Execution
+    exec pm2-runtime start npm --name "luminara-dashboard-prod" -- run start -- -p $PORT
 
 %help
     Luminara Production Dashboard
     ------------------------------
-    This image runs the optimized Next.js build. 
-    It is recommended to use a dedicated production branch of your code.
+    This image is strictly for SERVING compiled Next.js code.
+    You must run `pnpm install` and `pnpm build` on the host machine (or via the CI/CD pipeline) 
+    BEFORE launching this container.

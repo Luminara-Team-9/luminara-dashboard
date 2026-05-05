@@ -9,6 +9,8 @@ From: swetrix/swetrix-api:latest
 %environment
     # Swetrix internal API defaults to 5005
     export PORT=${PORT:-5005}
+    # SRE FIX: Maximize Node.js performance
+    export NODE_ENV=production
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 %post
@@ -24,7 +26,7 @@ From: swetrix/swetrix-api:latest
 %runscript
     echo "------------------------------------------------"
     echo "📈 Luminara RUM: SWETRIX API Starting"
-    echo "🌐 Port: $PORT"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
     
     # Swetrix is a compiled NestJS app. We bypass npm and execute Node directly.

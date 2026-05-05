@@ -9,8 +9,8 @@ From: postgres:15.6-bookworm
 
 %environment
     # DEV PARITY: Offset port to 5433
-    export PGPORT=5433
-    export PGDATA=/data/postgres_dev
+    export PGPORT=${PGPORT:-5433}
+    export PGDATA=${PGDATA:-/data/postgres_dev}
     export PGSOCKETS=/tmp
     export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -52,7 +52,11 @@ From: postgres:15.6-bookworm
     # ------------------------------------------------------------------
     if [ ! -f "$PGDATA/PG_VERSION" ]; then
         echo "🛠️ Initializing DEVELOPMENT Database at $PGDATA..."
-        initdb -D "$PGDATA" --auth=md5 --pwfile=<(echo "${POSTGRES_PASSWORD:-admin}")
+        
+        # SRE FIX: Shell-safe password injection
+        echo "${POSTGRES_PASSWORD:-admin}" > /tmp/pg_pw.txt
+        initdb -D "$PGDATA" --auth=md5 --pwfile=/tmp/pg_pw.txt
+        rm /tmp/pg_pw.txt
     fi
 
     echo "------------------------------------------------"
