@@ -1,4 +1,4 @@
-name: "2. [Push-Prod] Dashboard Deployer"
+name: "4. [Push-Prod] Dashboard Deployer"
 
 on:
   push:
@@ -96,7 +96,7 @@ jobs:
       # ---------------------------------------------------------
       - name: Run Emergency Fallback Build
         if: env.EMERGENCY_BUILD == 'true'
-        uses: ./.github/actions/build-sif
+        uses: ./.github/actions/build-sif-images
         with:
           def_file_path: "infrastructure/web.def"
           cache_key_suffix: "emergency_dashboard"
