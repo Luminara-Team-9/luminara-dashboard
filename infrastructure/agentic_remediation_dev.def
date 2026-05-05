@@ -30,7 +30,6 @@ From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
 
     # 1. Dev Tools Included (htop, nano)
     apt-get update && apt-get install -y --no-install-recommends \
-        git \
         htop \
         nano \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -50,31 +49,38 @@ From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
 
     # 3. Fast-Moving Application Logic & LangChain Stack
     cat > requirements.txt <<EOF
-langchain>=0.4.2
-langchain-community>=0.4.0
-openai>=1.65.0 
+# --- 1. Agent Logic & fallbacks ---
 anthropic>=0.52.0
-pydantic>=2.12.0
 python-dotenv>=1.0.1
+GitPython>=3.1.0
+langgraph-sdk>=0.3.13
+ormsgpack>=1.12.2
+
+# --- 2. Data & Analytics (Validation Layer) ---
 pandas>=2.3.1
 scikit-learn>=1.7.0
+
+# --- 3. Utilities & Networking (The missing layer) ---
 requests>=2.33.1
 aiohttp>=3.11.2
 tqdm>=4.67.3
 psutil>=6.1.0
-clickhouse-driver>=0.2.10
-psycopg2-binary>=2.9.10 
 redis>=5.3.0
 rich>=13.9.4
-GitPython>=3.1.0
-langgraph>=1.1.9
-langgraph-sdk>=0.3.13
-ormsgpack>=1.12.2
+
+# --- 4. Verification Engine ---
+playwright>=1.58.0
+lighthouse-python-plus==1.2.0
 EOF
 
     echo "Installing fast-moving Dev AI Tooling..."
     pip install --no-cache-dir -r requirements.txt
     rm requirements.txt
+
+    # 3. Playwright Browser Installation
+    # The agent needs a headless chromium to perform the local "verification" audits
+    echo "Installing Headless Browsers for Auditing..."
+    playwright install chromium --with-deps
     
     echo "Luminara-SRE: DEV AI Agent Container Hardening Complete ✅"
 

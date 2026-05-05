@@ -125,7 +125,7 @@ jobs:
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
           # The wildcard handles any parallel matrix runs perfectly
           chmod -R u+rwX /dev/shm/sing_build_${{ github.run_id }}_* 2>/dev/null || true
-          rm -rf /dev/shm/sing_build_${{ github.run_id }}_* || true
+          rm -rf /dev/shm/sing_build_${{ github.run_id }}_${{ env.SAFE_NAME }} || true
           
           echo "🗑️ Running NFS Cache Garbage Collection..."
           find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
