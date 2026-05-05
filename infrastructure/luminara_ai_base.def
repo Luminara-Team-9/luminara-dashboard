@@ -5,6 +5,7 @@ From: python:3.12-slim-bookworm
     Maintainer Luminara-SRE
     Project Luminara-AI-Foundation
     Description Base for the agentic_remediation (LangGraph, DB Connectors, Node.js tools)
+    Tested
 
 %post
     set -e

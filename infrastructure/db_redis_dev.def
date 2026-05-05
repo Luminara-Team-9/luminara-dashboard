@@ -6,6 +6,7 @@ From: redis:7-bookworm
     Project Luminara-RUM
     Service Redis-Development
     Team_Size 5
+    Tested
 
 %environment
     # SRE FIX: Use dynamic fallbacks for absolute flexibility

@@ -6,6 +6,7 @@ From: postgres:15.6-bookworm
     Project Luminara-Infrastructure
     Service Database-Development
     Team_Size 5
+    Tested
 
 %environment
     # DEV PARITY: Offset port to 5433

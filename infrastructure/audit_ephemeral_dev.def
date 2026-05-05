@@ -6,7 +6,8 @@ From: python:3.12-slim-bookworm
     Project Luminara-Auditor
     Tier Ephemeral-Development
     Team_Size 5
-
+    Tested
+    
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data
     mkdir -p ${SINGULARITY_ROOTFS}/workspace

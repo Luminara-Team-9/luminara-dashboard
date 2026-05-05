@@ -5,6 +5,7 @@ From: node:24-slim
     Maintainer Luminara-SRE
     Project Luminara-Target-Clone
     Role Audit-Target
+    Tested
 
 %environment
     export PORT=${PORT:-3000}

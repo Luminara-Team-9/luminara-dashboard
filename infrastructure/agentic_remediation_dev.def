@@ -5,6 +5,7 @@ From: /abr/coss41/Luminara_App/images-prod/infrastructure_luminara_ai_base.sif
     Maintainer Luminara-SRE-Agent-Dev
     Project Luminara-AI-Remediation
     Tier Development-Agent
+    Tested
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data

@@ -5,7 +5,7 @@ From: node:24-slim
     Maintainer Luminara-SRE
     Project Luminara-Dashboard
     Tier Development
-    Team_Size 5
+    Tested
 
 %setup
     # Identical to Production: Pre-create anchors

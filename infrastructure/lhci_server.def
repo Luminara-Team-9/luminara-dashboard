@@ -5,6 +5,7 @@ From: node:24.15.0-slim
     Maintainer Luminara-SRE
     Project Luminara-Infrastructure
     Service LHCI-Production
+    Tested
 
 %environment
     export PORT=${PORT:-9001}

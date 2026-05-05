@@ -5,6 +5,7 @@ From: python:3.12-slim-bookworm
     Maintainer Luminara-SRE
     Project Luminara-Auditor
     Tier Ephemeral-Production
+    Tested
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/data

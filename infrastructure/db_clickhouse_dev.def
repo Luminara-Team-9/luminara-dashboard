@@ -6,6 +6,7 @@ From: clickhouse/clickhouse-server:24.3
     Project Luminara-RUM
     Service ClickHouse-Development
     Team_Size 5
+    Tested
 
 %environment
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

@@ -5,6 +5,7 @@ From: redis:7-bookworm
     Maintainer Luminara-SRE
     Project Luminara-RUM
     Service Redis-Production
+    Tested
 
 %environment
     export PORT=${PORT:-6379}

@@ -6,6 +6,7 @@ From: postgres:15.6-bookworm
     Project Luminara-Infrastructure
     Service Database-Production
     Hardware ABRM02-ABR-COSS41
+    Tested
 
 %environment
     export PGPORT=${PGPORT:-5432}
