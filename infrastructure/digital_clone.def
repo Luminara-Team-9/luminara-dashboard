@@ -22,6 +22,7 @@ From: node:22-slim
     chmod 777 /app/digital_twin
 
     apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+        libvips-dev \
         curl \
         ca-certificates \
         git \
