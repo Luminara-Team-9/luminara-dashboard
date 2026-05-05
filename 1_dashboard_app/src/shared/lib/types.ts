@@ -43,6 +43,7 @@ export interface ReleaseMarker {
   date: string;       // ISO date (YYYY-MM-DD)
   version: string;
   description: string;
+  changeLog?: string[];
 }
 
 export interface Trends {

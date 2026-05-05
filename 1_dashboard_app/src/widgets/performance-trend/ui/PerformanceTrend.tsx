@@ -7,9 +7,9 @@ import {
   Legend, ReferenceLine,
 } from 'recharts';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
-import { calcCvrBreakdown, calcRevenueImpact, WPO_COEFFICIENTS } from '@/shared/lib/cvr';
+import { WPO_COEFFICIENTS } from '@/shared/lib/cvr';
 import { Skeleton } from '@/shared/ui';
-import type { Trends, TrendDataset } from '@/shared/lib/types';
+import type { Trends, TrendDataset, BenchmarkEntry, MetricKey } from '@/shared/lib/types';
 import styles from './PerformanceTrend.module.css';
 
 // ── 지표 설정 (차트 + 델타 카드 공통) ─────────────────────────
@@ -37,6 +37,23 @@ const CVR_CALC: Record<string, (v: number) => number> = {
   lcp: (v) => Math.max(0, Math.round((v - 2.5) * WPO_COEFFICIENTS.LCP_PER_SECOND * 10) / 10),
   inp: (v) => Math.max(0, Math.round(((v - 200) / 100) * WPO_COEFFICIENTS.INP_PER_100MS * 10) / 10),
 };
+
+// ── 경쟁사 평균 계산 ──────────────────────────────────────────
+function getCompetitorAvg(benchmarks: BenchmarkEntry[], metricKey: string): number | null {
+  const competitors = benchmarks.filter(b => !b.isTarget);
+  if (!competitors.length) return null;
+
+  if (metricKey === 'lighthouse') {
+    const avg = competitors.reduce((s, b) => s + b.scores.lighthouse, 0) / competitors.length;
+    return Math.round(avg * 10) / 10;
+  }
+
+  const vals = competitors
+    .map(b => b.metrics[metricKey as MetricKey]?.value)
+    .filter((v): v is number => v != null);
+  if (!vals.length) return null;
+  return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10;
+}
 
 // ── 날짜 포맷 ("2026-03-08" → "3/8") ─────────────────────────
 function fmtDate(iso: string) {
@@ -192,9 +209,10 @@ export function PerformanceTrend() {
   );
   const config       = METRIC_DEFS[activeMetric];
   const chartData    = buildChartData(trends, activeMetric);
-  const activeBrands = [...new Set(
-    trends.datasets.filter((d) => d.metricKey === activeMetric).map((d) => d.brand),
-  )];
+  const activeBrands = ['Decathlon'].filter(brand =>
+    trends.datasets.some(d => d.metricKey === activeMetric && d.brand === brand),
+  );
+  const competitorAvg = getCompetitorAvg(data.benchmarks, activeMetric);
 
   const showCvr = activeMetric in CVR_CALC;
   const cvrMax  = showCvr
@@ -208,25 +226,7 @@ export function PerformanceTrend() {
 
   const snapshot = selectedDate ? getDecathlonSnapshot(trends, selectedDate) : null;
 
-  const decathlon = data.benchmarks.find((b) => b.isTarget);
-  const cvrBreakdown = snapshot && decathlon
-    ? calcCvrBreakdown({
-        lcpCurrent: snapshot.lcp  ?? decathlon.metrics.lcp.value,
-        lcpTarget:  2.5,
-        inpCurrent: decathlon.metrics.inp.value,
-        inpTarget:  200,
-        clsCurrent: decathlon.metrics.cls.value,
-        clsTarget:  0.1,
-      })
-    : null;
-
-  const revenueB = cvrBreakdown
-    ? (calcRevenueImpact(cvrBreakdown.total, data.executiveSummary.baselineAnnualRevenue) / 100_000_000).toFixed(1)
-    : null;
-
-  const releaseDeltas = selectedReleaseInfo && selectedDate
-    ? calcDeltas(trends, selectedDate)
-    : [];
+  const pointDeltas = selectedDate ? calcDeltas(trends, selectedDate) : [];
 
   return (
     <section className={styles.wrapper}>
@@ -235,7 +235,7 @@ export function PerformanceTrend() {
         <div>
           <h2 className={styles.title}>성능 트렌드</h2>
           <span className={styles.click_hint}>
-            {showCvr ? 'CVR 잠재량 상관관계 포함 · 클릭 시 상세 확인' : '그래프 클릭 시 비즈니스 지표 확인'}
+            {showCvr ? 'CVR 잠재량 상관관계 포함 · 클릭 시 상세 확인' : '그래프 클릭 시 릴리즈 내역과 지표 변화 확인'}
           </span>
         </div>
         <div className={styles.tabs}>
@@ -324,6 +324,22 @@ export function PerformanceTrend() {
                 />
               )}
 
+              {competitorAvg !== null && (
+                <ReferenceLine
+                  yAxisId="left"
+                  y={competitorAvg}
+                  stroke="#f59e0b"
+                  strokeDasharray="3 4"
+                  strokeOpacity={0.7}
+                  label={{
+                    value: `업계 평균 ${competitorAvg}${config.unit}`,
+                    position: 'insideBottomRight',
+                    fill: '#f59e0b',
+                    fontSize: 10,
+                  }}
+                />
+              )}
+
               {trends.releases.map((r) => {
                 const isSelected = selectedDate === r.date;
                 return (
@@ -379,8 +395,8 @@ export function PerformanceTrend() {
           </ResponsiveContainer>
         </div>
 
-        {/* ── 비즈니스 지표 오버레이 패널 ── */}
-        {selectedDate && cvrBreakdown && snapshot && (
+        {/* ── 변경 원인 오버레이 패널 ── */}
+        {selectedDate && (
           <div className={styles.overlay_panel}>
             {/* 패널 헤더 */}
             <div className={styles.panel_header}>
@@ -389,8 +405,8 @@ export function PerformanceTrend() {
                 {selectedReleaseInfo && (
                   <span className={styles.panel_version}>{selectedReleaseInfo.version}</span>
                 )}
-                {selectedReleaseInfo?.description && (
-                  <span className={styles.panel_desc}>{selectedReleaseInfo.description}</span>
+                {!selectedReleaseInfo && (
+                  <span className={styles.panel_desc}>일반 데이터 포인트</span>
                 )}
               </div>
               <button
@@ -402,49 +418,31 @@ export function PerformanceTrend() {
               </button>
             </div>
 
-            {/* 비즈니스 지표 섹션 */}
-            <div className={styles.biz_section}>
-              <p className={styles.section_label}>목표 달성 시 CVR 개선 잠재량</p>
-              <div className={styles.biz_main}>
-                <div className={styles.biz_cvr_wrap}>
-                  <span className={styles.biz_cvr}>+{cvrBreakdown.total}%</span>
-                  <span className={styles.biz_cvr_sub}>CVR 향상</span>
-                </div>
-                <div className={styles.biz_revenue_wrap}>
-                  <span className={styles.biz_revenue}>+₩{revenueB}억</span>
-                  <span className={styles.biz_revenue_sub}>연간 추가 매출</span>
-                </div>
-              </div>
-              <div className={styles.biz_breakdown}>
-                {cvrBreakdown.lcp > 0 && (
-                  <span className={styles.biz_item}>
-                    LCP {snapshot.lcp}s → 2.5s
-                    <strong> +{cvrBreakdown.lcp}%</strong>
-                  </span>
-                )}
-                {cvrBreakdown.inp > 0 && (
-                  <span className={styles.biz_item}>
-                    INP
-                    <strong> +{cvrBreakdown.inp}%</strong>
-                  </span>
-                )}
-                {cvrBreakdown.cls > 0 && (
-                  <span className={styles.biz_item}>
-                    CLS
-                    <strong> +{cvrBreakdown.cls}%</strong>
-                  </span>
+            {/* 릴리즈 변경 내역 */}
+            {selectedReleaseInfo && (
+              <div className={styles.cause_section}>
+                <p className={styles.section_label}>변경 내역</p>
+                <p className={styles.cause_desc}>{selectedReleaseInfo.description}</p>
+                {selectedReleaseInfo.changeLog && selectedReleaseInfo.changeLog.length > 0 && (
+                  <ul className={styles.changelog}>
+                    {selectedReleaseInfo.changeLog.map((item, i) => (
+                      <li key={i} className={styles.changelog_item}>{item}</li>
+                    ))}
+                  </ul>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* 릴리즈 delta 섹션 (릴리즈 날짜일 때만) */}
-            {selectedReleaseInfo && releaseDeltas.length > 0 && (
+            {/* 지표 변화 (릴리즈: 배포 전후 / 일반: 전주 대비) */}
+            {pointDeltas.length > 0 && (
               <>
                 <div className={styles.section_divider} />
                 <div className={styles.release_section}>
-                  <p className={styles.section_label}>배포 전후 지표 변화</p>
+                  <p className={styles.section_label}>
+                    {selectedReleaseInfo ? '배포 전후 지표 변화' : '전주 대비 지표 변화'}
+                  </p>
                   <div className={styles.delta_grid}>
-                    {releaseDeltas.map((d) => (
+                    {pointDeltas.map((d) => (
                       <DeltaCard key={d.metricKey} {...d} />
                     ))}
                   </div>
@@ -452,7 +450,28 @@ export function PerformanceTrend() {
               </>
             )}
 
-            <p className={styles.panel_footnote}>WPO Stats 기반 보수 추정 · INP·CLS는 현재 기준값 적용</p>
+            {/* 첫 데이터 포인트 — 이전 데이터 없음 */}
+            {!selectedReleaseInfo && pointDeltas.length === 0 && snapshot && (
+              <div className={styles.snapshot_section}>
+                <p className={styles.section_label}>지표 스냅샷</p>
+                <div className={styles.snapshot_grid}>
+                  {Object.entries(snapshot).map(([key, val]) => {
+                    const cfg = METRIC_DEFS[key];
+                    if (!cfg) return null;
+                    return (
+                      <div key={key} className={styles.snapshot_item}>
+                        <span className={styles.snapshot_label}>{cfg.label}</span>
+                        <span className={styles.snapshot_val}>{val}{cfg.unit}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <p className={styles.panel_footnote}>
+              {selectedReleaseInfo ? '이전 주 데이터 대비 변화량' : '전주 대비 변화량 · 해당 날짜 배포 없음'}
+            </p>
           </div>
         )}
       </div>

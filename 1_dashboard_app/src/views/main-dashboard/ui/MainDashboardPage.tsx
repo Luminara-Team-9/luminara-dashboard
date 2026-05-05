@@ -120,21 +120,21 @@ export function MainDashboardPage() {
       <AlertBanner />
       <ExecutiveSummary />
 
+      {/* 비즈니스 임팩트 + 경쟁사 맥락 (승격 — 핵심 비즈니스 지표) */}
+      <div className={styles.row_analysis}>
+        <section className={styles.section}><BusinessImpactMatrix /></section>
+        <section className={styles.section}><CompetitorGrid /></section>
+      </div>
+
       {/* 어디서 잃고 있나 + 성능 추세·CVR 상관관계 */}
       <div className={styles.row_insight}>
         <section className={styles.section}><UserJourney /></section>
         <section className={`${styles.section} ${styles.section_overflow_visible}`}><PerformanceTrend /></section>
       </div>
 
-      {/* AI 액션 플랜 (승격 — 가장 중요한 아웃풋) */}
+      {/* AI 액션 플랜 */}
       <div className={styles.row_action}>
         <section className={styles.section}><AiFixPanel /></section>
-      </div>
-
-      {/* 비즈니스 임팩트 + 경쟁사 맥락 */}
-      <div className={styles.row_analysis}>
-        <section className={styles.section}><BusinessImpactMatrix /></section>
-        <section className={styles.section}><CompetitorGrid /></section>
       </div>
 
       {/* 지역·통신사 레이턴시 (참고용) */}

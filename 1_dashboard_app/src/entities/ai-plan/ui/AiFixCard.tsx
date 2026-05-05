@@ -22,9 +22,10 @@ const METRIC_LABEL: Record<string, string> = {
 
 interface Props {
   plan: AiFixPlan;
+  revenueImpact?: number | null;
 }
 
-export function AiFixCard({ plan }: Props) {
+export function AiFixCard({ plan, revenueImpact }: Props) {
   const STORAGE_KEY = `luminara_applied_${plan.id}`;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applied, setApplied]         = useState(() => {
@@ -47,6 +48,13 @@ export function AiFixCard({ plan }: Props) {
 
         <h3 className={styles.title}>{plan.title}</h3>
         <p className={styles.desc}>{plan.description}</p>
+
+        {revenueImpact != null && revenueImpact > 0 && (
+          <div className={styles.roi_row}>
+            <span className={styles.roi_label}>연간 ROI 기여</span>
+            <span className={styles.roi_value}>+₩{(revenueImpact / 100_000_000).toFixed(1)}억</span>
+          </div>
+        )}
 
         <div className={styles.bottom}>
           <span className={styles.impact}>{plan.estimatedImpact}</span>

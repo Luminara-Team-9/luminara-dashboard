@@ -119,10 +119,10 @@ export function BusinessImpactMatrix() {
               type="number"
               className={styles.revenue_field}
               value={revenue}
-              min={100}
+              min={1}
               max={100000}
-              step={100}
-              onChange={(e) => setRevenue(Math.max(100, Number(e.target.value)))}
+              step={1}
+              onChange={(e) => setRevenue(Math.max(1, Number(e.target.value)))}
             />
             <span className={styles.revenue_unit}>억원</span>
           </div>

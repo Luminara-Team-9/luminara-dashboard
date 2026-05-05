@@ -99,6 +99,14 @@
   margin-right: 20px;
 }
 
+/* ── 경쟁사 평균 맥락 ── */
+.comp_avg {
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 /* ── 체크리스트 트리거 버튼 ── */
 .checklist_trigger {
   font-size: 12px;
@@ -244,7 +252,19 @@
   flex-shrink: 0;
 }
 
+.check_label_wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .check_label { font-size: 12px; }
+
+.check_detail {
+  font-size: 10px;
+  color: #334155;
+  line-height: 1.45;
+}
 
 .check_pass .check_icon  { color: #10b981; }
 .check_pass .check_label { color: #cbd5e1; }

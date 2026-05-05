@@ -52,12 +52,26 @@
   display: flex;
   gap: 16px;
   align-items: flex-start;
-  max-width: 640px;
+  width: 100%;
+}
+
+/* ── 지도 컬럼 (ISP 탭 + 지도) ── */
+.map_col {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── ISP 탭 + 초기화 버튼 행 ── */
+.map_controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ── 지도 영역 ── */
 .map_wrap {
-  flex: 0 0 220px;
   min-width: 0;
   overflow: hidden;
 }
@@ -150,7 +164,6 @@
 .legend_dot.poor    { color: #ef4444; }
 
 .clear_btn {
-  margin-left: auto;
   font-size: 10px;
   font-weight: 600;
   color: #475569;

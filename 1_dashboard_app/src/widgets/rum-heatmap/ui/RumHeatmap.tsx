@@ -188,7 +188,7 @@ export function RumHeatmap() {
       const hasSelected = selectedRegion !== null;
 
       if (hasSelected && !isSelected) {
-        lines.push(`${S} #${id} { fill: #0b1120; stroke: #0a0f1e; cursor: pointer; }`);
+        lines.push(`${S} #${id} { fill: #0b1120; stroke: rgba(255,255,255,0.18); stroke-width: 0.8; cursor: pointer; }`);
       } else {
         const fill  = latencyFill(ms);
         const hover = latencyHover(ms);
@@ -212,23 +212,34 @@ export function RumHeatmap() {
       {/* 헤더 */}
       <div className={styles.header}>
         <h2 className={styles.title}>지역 · 통신사 레이턴시</h2>
-        <div className={styles.tabs}>
-          {ISPS.map(isp => (
-            <button
-              key={isp}
-              className={`${styles.tab} ${selectedIsp === isp ? styles.tab_active : ''}`}
-              onClick={() => handleIspClick(isp)}
-            >
-              {isp}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* 지도 + 표 */}
       <div className={styles.body}>
 
-        {/* 왼쪽: 지도 */}
+        {/* 왼쪽: ISP 필터 + 지도 */}
+        <div className={styles.map_col}>
+          <div className={styles.map_controls}>
+            <div className={styles.tabs}>
+              {ISPS.map(isp => (
+                <button
+                  key={isp}
+                  className={`${styles.tab} ${selectedIsp === isp ? styles.tab_active : ''}`}
+                  onClick={() => handleIspClick(isp)}
+                >
+                  {isp}
+                </button>
+              ))}
+            </div>
+            {(selectedRegion || selectedIsp) && (
+              <button
+                className={styles.clear_btn}
+                onClick={() => { setSelectedRegion(null); setSelectedIsp(null); }}
+              >
+                초기화 ✕
+              </button>
+            )}
+          </div>
         <div className={styles.map_wrap}>
           {loading || !svgContent ? (
             <Skeleton width="100%" height="260px" radius="10px" />
@@ -243,6 +254,7 @@ export function RumHeatmap() {
               />
             </>
           )}
+        </div>
         </div>
 
         {/* 오른쪽: 표 */}
@@ -262,14 +274,6 @@ export function RumHeatmap() {
         <span className={`${styles.legend_dot} ${styles.good}`}>● 양호 &lt;300ms</span>
         <span className={`${styles.legend_dot} ${styles.warning}`}>● 주의 300–400ms</span>
         <span className={`${styles.legend_dot} ${styles.poor}`}>● 불량 &gt;400ms</span>
-        {(selectedRegion || selectedIsp) && (
-          <button
-            className={styles.clear_btn}
-            onClick={() => { setSelectedRegion(null); setSelectedIsp(null); }}
-          >
-            초기화 ✕
-          </button>
-        )}
       </div>
 
     </section>

@@ -4,9 +4,32 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { AiFixCard } from '@/entities/ai-plan';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
+import { calcCvrLift, calcRevenueImpact } from '@/shared/lib/cvr';
 import { Skeleton } from '@/shared/ui';
-import type { FixPriority } from '@/shared/lib/types';
+import type { FixPriority, BenchmarkEntry } from '@/shared/lib/types';
 import styles from './AiFixPanel.module.css';
+
+function getPlanRevenue(
+  metricKey: string,
+  benchmarks: BenchmarkEntry[],
+  annualRevenue: number,
+): number | null {
+  const d = benchmarks.find(b => b.isTarget);
+  if (!d) return null;
+  const m = d.metrics;
+
+  const cvrLift = calcCvrLift({
+    lcpCurrent: metricKey === 'lcp' ? m.lcp.value : 0,
+    lcpTarget:  metricKey === 'lcp' ? m.lcp.target : 0,
+    inpCurrent: metricKey === 'inp' ? m.inp.value : 0,
+    inpTarget:  metricKey === 'inp' ? m.inp.target : 0,
+    clsCurrent: metricKey === 'cls' ? m.cls.value : 0,
+    clsTarget:  metricKey === 'cls' ? m.cls.target : 0,
+  });
+
+  if (cvrLift <= 0) return null;
+  return calcRevenueImpact(cvrLift, annualRevenue);
+}
 
 const FILTERS = ['전체', 'critical', 'high', 'medium', 'low'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -92,7 +115,15 @@ export function AiFixPanel() {
 
       <div className={styles.grid}>
         {plans.map((plan) => (
-          <AiFixCard key={plan.id} plan={plan} />
+          <AiFixCard
+            key={plan.id}
+            plan={plan}
+            revenueImpact={getPlanRevenue(
+              plan.metricKey,
+              data.benchmarks,
+              data.executiveSummary.baselineAnnualRevenue,
+            )}
+          />
         ))}
         {plans.length === 0 && (
           <p className={styles.empty}>해당 우선순위의 액션 플랜이 없습니다.</p>

@@ -65,6 +65,7 @@ export function UserJourney() {
 
   const { userJourney } = data.rum;
   const maxSessions = userJourney[0]?.sessions ?? 1;
+  const monthlyRevenue = data.executiveSummary.baselineAnnualRevenue / 12;
   const targetBrand = data.benchmarks.find(b => b.isTarget)?.brand ?? '';
   const pageMetrics = data.pageMetrics as {
     brand: string; page: PageType; metrics: { lcp: { value: number; target: number } };
@@ -141,18 +142,26 @@ export function UserJourney() {
               </div>
 
               {/* ── 이탈률 연결부 ── */}
-              {!isLast && nextStep && nextStep.dropoffRate > 0 && (
-                <div className={styles.connector}>
-                  <span className={styles.connector_line} />
-                  <span
-                    className={styles.dropoff_badge}
-                    style={{ color: dropoffColor(nextStep.dropoffRate) }}
-                  >
-                    ↓ {nextStep.dropoffRate.toFixed(1)}% 이탈
-                  </span>
-                  <span className={styles.connector_line} />
-                </div>
-              )}
+              {!isLast && nextStep && nextStep.dropoffRate > 0 && (() => {
+                const dropped = step.sessions * (nextStep.dropoffRate / 100);
+                const lossW = (dropped / maxSessions) * monthlyRevenue;
+                const lossStr = lossW >= 100_000_000
+                  ? `~₩${(lossW / 100_000_000).toFixed(1)}억`
+                  : `~₩${Math.round(lossW / 10_000_000)}천만`;
+                return (
+                  <div className={styles.connector}>
+                    <span className={styles.connector_line} />
+                    <span
+                      className={styles.dropoff_badge}
+                      style={{ color: dropoffColor(nextStep.dropoffRate) }}
+                    >
+                      ↓ {nextStep.dropoffRate.toFixed(1)}% 이탈
+                    </span>
+                    <span className={styles.loss_badge}>{lossStr}/월</span>
+                    <span className={styles.connector_line} />
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

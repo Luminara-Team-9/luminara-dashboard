@@ -305,9 +305,36 @@
       { "brand": "Naver Shopping", "metricKey": "inp", "values": [150, 148, 147, 145, 144, 143, 143, 142, 142] }
     ],
     "releases": [
-      { "date": "2026-03-08", "version": "v2.1.0", "description": "히어로 이미지 WebP 전환" },
-      { "date": "2026-03-29", "version": "v2.2.0", "description": "서드파티 스크립트 defer 처리" },
-      { "date": "2026-04-12", "version": "v2.3.0", "description": "JS 코드 스플리팅 적용" }
+      {
+        "date": "2026-03-08",
+        "version": "v2.1.0",
+        "description": "히어로 이미지 WebP 전환",
+        "changeLog": [
+          "히어로 배너 JPEG → WebP 전환 (파일 크기 62% 절감)",
+          "상품 페이지 썸네일 lazy-load 및 sizes 속성 최적화",
+          "next/image 컴포넌트 priority 설정으로 LCP 대상 이미지 preload"
+        ]
+      },
+      {
+        "date": "2026-03-29",
+        "version": "v2.2.0",
+        "description": "서드파티 스크립트 defer 처리",
+        "changeLog": [
+          "Google Analytics · Hotjar 스크립트 async/defer 적용",
+          "결제 페이지 챗봇 SDK 조건부 지연 로드",
+          "렌더 블로킹 리소스 3개 제거 → TBT 감소 기여"
+        ]
+      },
+      {
+        "date": "2026-04-12",
+        "version": "v2.3.0",
+        "description": "JS 코드 스플리팅 적용",
+        "changeLog": [
+          "Route-level dynamic import 도입 (Next.js 자동 스플리팅)",
+          "상품 필터·리뷰 컴포넌트 지연 로드 처리",
+          "초기 JS 번들 28% 감소 → INP · TBT 개선 효과"
+        ]
+      }
     ]
   },
 

@@ -250,6 +250,71 @@
   color: #10b981;
 }
 
+/* ── 변경 원인 섹션 ── */
+.cause_section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cause_desc {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.changelog {
+  margin: 0;
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.changelog_item {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* ── 스냅샷 섹션 (이전 데이터 없음) ── */
+.snapshot_section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.snapshot_grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.snapshot_item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.snapshot_label {
+  font-size: 9px;
+  color: #475569;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.snapshot_val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
 /* ── 구분선 ── */
 .section_divider {
   height: 1px;
@@ -311,6 +376,7 @@
 
 .delta_before { opacity: 0.5; color: #94a3b8; }
 .delta_arrow  { color: #334155; font-size: 10px; }
+.delta_after  { font-weight: 800; }
 .pass         { color: #10b981; }
 .fail         { color: #f87171; }
 

@@ -178,6 +178,14 @@
   flex-shrink: 0;
 }
 
+.loss_badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ef4444;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ── 각주 ── */
 .footnote {
   flex-shrink: 0;
