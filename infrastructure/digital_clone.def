@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: node:24-slim
+From: node:22-slim
 
 %labels
     Maintainer Luminara-SRE
@@ -9,7 +9,6 @@ From: node:24-slim
 %environment
     export PORT=${PORT:-3000}
     export NODE_ENV=production
-    
     export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -19,10 +18,14 @@ From: node:24-slim
 
     mkdir -p /data
     mkdir -p /workspace
+    mkdir -p /app/digital_twin
+    chmod 777 /app/digital_twin
 
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+        libvips-dev \
         curl \
         ca-certificates \
+        git \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     npm install -g pnpm@latest
@@ -32,19 +35,17 @@ From: node:24-slim
     cd /workspace
     
     echo "------------------------------------------------"
-    echo "🎯 TARGET ACQUIRED: Decathlon Web Clone"
+    echo "🎯 TARGET ACQUIRED: Next.js Skeleton App"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
 
-    # SRE FIX: We do NOT run pnpm install here. 
-    # The container assumes the code mapped to /workspace is already built 
-    # (e.g., you ran 'pnpm build' before starting the container).
+    # SRE FIX: The container installs and builds the code dynamically 
+    # to ensure the Digital Twin is an exact representation of the mounted branch.
+    echo "[..] Installing dependencies..."
+    pnpm install --frozen-lockfile
     
-    # We use the production server command to serve the optimized build.
+    echo "[..] Building the Digital Twin..."
+    pnpm run build
+    
+    echo "[..] Launching Production Server..."
     exec pnpm start --port $PORT --hostname 0.0.0.0
-
-%help
-    Luminara Decathlon Target Clone
-    -------------------------------
-    This is a PRODUCTION-grade target designed for Lighthouse auditing.
-    It expects the code in /workspace to already be built via 'pnpm build'.

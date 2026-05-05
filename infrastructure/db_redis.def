@@ -5,10 +5,17 @@ From: redis:7-bookworm
     Maintainer Luminara-SRE
     Project Luminara-RUM
     Service Redis-Production
+    Role Swetrix-Cache-And-Agent-State
+    Tested
 
 %environment
     export PORT=${PORT:-6379}
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # 🛡️ Fallback Defaults (These will be overridden by your .env file)
+    export REDIS_HOST=${REDIS_HOST:-0.0.0.0}
+    export REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-1024mb}
+    export REDIS_MAXMEMORY_POLICY=${REDIS_MAXMEMORY_POLICY:-volatile-lru}
 
 %post
     # SRE FIX 1: Restore PATH for the build environment
@@ -20,10 +27,10 @@ From: redis:7-bookworm
     mkdir -p /workspace
     mkdir -p /data/redis
     
-    # SRE FIX 2: Bypassing the statvfs error
+    # SRE FIX 2: Bypassing the statvfs error for Singularity
     mkdir -p /tmp/apt-cache
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3 
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
         ca-certificates \
         curl
     apt-get clean
@@ -32,13 +39,43 @@ From: redis:7-bookworm
 %runscript
     echo "------------------------------------------------"
     echo "🔴 Luminara RUM: REDIS Starting"
-    echo "🌐 Port: $PORT | Data: /data/redis"
+    echo "🌐 Port: $PORT | Bind: $REDIS_HOST | Data: /data/redis"
+    echo "🧠 Policy: $REDIS_MAXMEMORY_POLICY (Protects AI State)"
     echo "------------------------------------------------"
     
+    if [ -z "$REDIS_PASSWORD" ]; then
+        echo "⚠️  WARNING: REDIS_PASSWORD is empty! Swetrix and LangGraph may fail to connect if they expect authentication."
+    fi
+
     # SRE FIX 3: Direct data and PID to writable locations, bypassing read-only /var/run
-    exec redis-server --port $PORT --dir /data/redis --dbfilename dump.rdb --appendonly yes --pidfile /tmp/redis.pid
+    # SRE FIX 4: Dynamically map .env variables directly into the Redis start command
+    
+    if [ -n "$REDIS_PASSWORD" ]; then
+        exec redis-server \
+            --port "$PORT" \
+            --bind "$REDIS_HOST" \
+            --dir /data/redis \
+            --dbfilename dump.rdb \
+            --appendonly yes \
+            --pidfile /tmp/redis.pid \
+            --maxmemory "$REDIS_MAXMEMORY" \
+            --maxmemory-policy "$REDIS_MAXMEMORY_POLICY" \
+            --requirepass "$REDIS_PASSWORD"
+    else
+        exec redis-server \
+            --port "$PORT" \
+            --bind "$REDIS_HOST" \
+            --dir /data/redis \
+            --dbfilename dump.rdb \
+            --appendonly yes \
+            --pidfile /tmp/redis.pid \
+            --maxmemory "$REDIS_MAXMEMORY" \
+            --maxmemory-policy "$REDIS_MAXMEMORY_POLICY"
+    fi
 
 %help
-    Luminara Production Redis (Swetrix Stack)
-    -----------------------------------------
-    Usage: singularity run --bind /host/rum_redis_data:/data redis_prod.sif
+    Luminara Production Redis (Dual Role: Swetrix Cache + AI Agent State)
+    ---------------------------------------------------------------------
+    Usage: 
+    export SINGULARITYENV_REDIS_PASSWORD="your_secure_password"
+    singularity run --bind /your/server/path/redis_data:/data redis_prod.sif

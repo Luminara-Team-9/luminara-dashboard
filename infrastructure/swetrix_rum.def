@@ -5,6 +5,7 @@ From: swetrix/swetrix-api:latest
     Maintainer Luminara-SRE
     Project Luminara-RUM
     Service Swetrix-API-Production
+    Tested
 
 %environment
     # Swetrix internal API defaults to 5005

@@ -5,13 +5,20 @@ From: redis:7-bookworm
     Maintainer Luminara-SRE
     Project Luminara-RUM
     Service Redis-Development
+    Role Swetrix-Cache-And-Agent-State
     Team_Size 5
+    Tested
 
 %environment
-    # SRE FIX: Use dynamic fallbacks for absolute flexibility
+    # DEV PARITY: Offset port to prevent colliding with Prod if run on the same server
     export PORT=${PORT:-6380}
     export REDIS_DATA=${REDIS_DATA:-/data/redis_dev}
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # 🛡️ Fallback Defaults (Ensuring parity with Production logic)
+    export REDIS_HOST=${REDIS_HOST:-0.0.0.0}
+    export REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-1024mb}
+    export REDIS_MAXMEMORY_POLICY=${REDIS_MAXMEMORY_POLICY:-volatile-lru}
 
 %post
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -26,8 +33,8 @@ From: redis:7-bookworm
 
     # SRE FIX: Bypassing the statvfs error & adding Dev Tools
     mkdir -p /tmp/apt-cache
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3 
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
         ca-certificates \
         curl \
         htop \
@@ -39,8 +46,46 @@ From: redis:7-bookworm
 %runscript
     echo "------------------------------------------------"
     echo "🔴 Luminara DEVELOPMENT: REDIS Starting"
-    echo "🌐 Port: $PORT | Data: $REDIS_DATA"
+    echo "🌐 Port: $PORT | Bind: $REDIS_HOST | Data: $REDIS_DATA"
+    echo "🧠 Policy: $REDIS_MAXMEMORY_POLICY (Protects AI State)"
+    echo "👥 Team Sandbox Mode Active"
     echo "------------------------------------------------"
     
-    # SRE FIX: Use the dynamic variables in the execution command
-    exec redis-server --port $PORT --dir $REDIS_DATA --dbfilename dump.rdb --appendonly yes --pidfile /tmp/redis_dev.pid
+    if [ -z "$REDIS_PASSWORD" ]; then
+        echo "⚠️  DEV NOTICE: REDIS_PASSWORD is empty. Running in open sandbox mode."
+    fi
+
+    # SRE FIX: Logic parity with Production. 
+    # Dynamically maps variables and protects against empty password strings.
+    if [ -n "$REDIS_PASSWORD" ]; then
+        exec redis-server \
+            --port "$PORT" \
+            --bind "$REDIS_HOST" \
+            --dir "$REDIS_DATA" \
+            --dbfilename dump.rdb \
+            --appendonly yes \
+            --pidfile /tmp/redis_dev.pid \
+            --maxmemory "$REDIS_MAXMEMORY" \
+            --maxmemory-policy "$REDIS_MAXMEMORY_POLICY" \
+            --requirepass "$REDIS_PASSWORD"
+    else
+        exec redis-server \
+            --port "$PORT" \
+            --bind "$REDIS_HOST" \
+            --dir "$REDIS_DATA" \
+            --dbfilename dump.rdb \
+            --appendonly yes \
+            --pidfile /tmp/redis_dev.pid \
+            --maxmemory "$REDIS_MAXMEMORY" \
+            --maxmemory-policy "$REDIS_MAXMEMORY_POLICY"
+    fi
+
+%help
+    Luminara Development Redis (Team Sandbox)
+    -----------------------------------------
+    This container mirrors production logic but operates on Port 6380 
+    and includes troubleshooting tools (htop, nano, procps).
+    
+    Usage: 
+    export SINGULARITYENV_REDIS_PASSWORD="dev_password"
+    singularity run --bind /host/path/redis_dev_data:/data redis_dev.sif
