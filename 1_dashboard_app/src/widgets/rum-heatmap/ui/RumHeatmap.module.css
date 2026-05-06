@@ -1,0 +1,185 @@
+.wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── 헤더 ── */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.tabs {
+  display: flex;
+  gap: 3px;
+  background: #0d1424;
+  border: 1px solid #1e293b;
+  border-radius: 9px;
+  padding: 3px;
+}
+
+.tab {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover  { color: #94a3b8; background: #1a2234; }
+.tab_active { color: #f1f5f9; background: #1e3a5f; }
+
+/* ── 메인 바디: 지도 + 표 나란히 ── */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* ── 지도 컬럼 (ISP 탭 + 지도) ── */
+.map_col {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── ISP 탭 + 초기화 버튼 행 ── */
+.map_controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── 지도 영역 ── */
+.map_wrap {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── 오른쪽 표 ── */
+.side_table {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.side_table::-webkit-scrollbar { width: 3px; }
+.side_table::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+
+.side_title {
+  font-size: 10px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.th {
+  padding: 5px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #1e293b;
+  white-space: nowrap;
+}
+
+.tr { border-bottom: 1px solid #141e2e; }
+.tr:last-child { border-bottom: none; }
+.tr:hover { background: #131d2e; }
+
+.td_label {
+  padding: 5px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.td_val {
+  padding: 5px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.td_badge {
+  padding: 5px 6px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ── 범례 ── */
+.legend {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 10px;
+  flex-wrap: wrap;
+}
+
+.legend_dot { font-weight: 500; }
+.legend_dot.good    { color: #10b981; }
+.legend_dot.warning { color: #f59e0b; }
+.legend_dot.poor    { color: #ef4444; }
+
+.clear_btn {
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  background: none;
+  border: 1px solid #1e293b;
+  border-radius: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.clear_btn:hover { color: #94a3b8; }
+
+/* ── 에러 ── */
+.error {
+  text-align: center;
+  color: #ef4444;
+  padding: 40px;
+  font-size: 14px;
+}

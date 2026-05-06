@@ -1,0 +1,249 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+  background-color: #111827;
+  border-left-width: 3px;
+  transition: box-shadow 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* 우선순위별 왼쪽 border 색상 */
+.critical { border-left-color: #ef4444; }
+.high     { border-left-color: #f97316; }
+.medium   { border-left-color: #f59e0b; }
+.low      { border-left-color: #10b981; }
+
+/* ── 상단 행 ── */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.priority {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+.priority_critical { color: #ef4444; background-color: rgba(239, 68, 68, 0.12); }
+.priority_high     { color: #f97316; background-color: rgba(249, 115, 22, 0.12); }
+.priority_medium   { color: #f59e0b; background-color: rgba(245, 158, 11, 0.12); }
+.priority_low      { color: #10b981; background-color: rgba(16, 185, 129, 0.12); }
+
+.metric {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background-color: #1e293b;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+/* ── 제목 ── */
+.title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ── 설명 ── */
+.desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── 연간 ROI 하이라이트 ── */
+.roi_row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(16, 185, 129, 0.07);
+  border-radius: 7px;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+.roi_label {
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.roi_value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #10b981;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 하단 행 ── */
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #1e293b;
+}
+
+.impact {
+  font-size: 12px;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+.effort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.dot_on  { width: 7px; height: 7px; border-radius: 50%; background-color: #3b82f6; display: inline-block; }
+.dot_off { width: 7px; height: 7px; border-radius: 50%; background-color: #1e293b; display: inline-block; }
+
+/* ── 하단 오른쪽 그룹 ── */
+.bottom_right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── 브랜치 반영 버튼 ── */
+.btn_apply {
+  font-size: 11px;
+  font-weight: 700;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn_apply:hover { background: rgba(59, 130, 246, 0.2); }
+
+.btn_applied {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+/* ── 오버레이 ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* ── 확인 모달 ── */
+.modal {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+  padding: 28px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.modal_label {
+  font-size: 10px;
+  font-weight: 800;
+  color: #3b82f6;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+
+.modal_title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.modal_body {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.7;
+  margin: 0 0 16px;
+}
+
+.modal_meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #1e293b;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 20px;
+}
+
+.modal_actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn_cancel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  background: #1e293b;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn_cancel:hover { background: #243044; }
+
+.btn_confirm {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: #3b82f6;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn_confirm:hover { background: #2563eb; }
