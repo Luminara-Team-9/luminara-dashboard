@@ -48,6 +48,7 @@ From: postgres:15.6-bookworm
     # ------------------------------------------------------------------
     # PRODUCTION BOOTSTRAP PROTOCOL
     # ------------------------------------------------------------------
+    DB_USER=${POSTGRES_USER:-coss41}
     
     # 1. Automatic Initialization (Runs only if /data is empty)
     if [ ! -f "$PGDATA/PG_VERSION" ]; then
@@ -58,7 +59,8 @@ From: postgres:15.6-bookworm
         echo "🐘 First-time boot: Initializing Production Database Cluster..."
         # SRE FIX: POSIX-compliant password injection (No Bashisms)
         echo "$POSTGRES_PASSWORD" > /tmp/pg_pw.txt
-        initdb -D "$PGDATA" --auth=md5 --pwfile=/tmp/pg_pw.txt
+        # Add the -U flag here!
+        initdb -D "$PGDATA" -U "$DB_USER" --auth=md5 --pwfile=/tmp/pg_pw.txt
         rm /tmp/pg_pw.tx
     fi
 
