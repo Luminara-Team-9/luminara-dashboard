@@ -26,7 +26,7 @@ From: clickhouse/clickhouse-server:24.3
     mkdir -p /tmp/clickhouse_tmps
     mkdir -p /tmp/clickhouse_user_files
 
-%runscript
+%startscript
     echo "------------------------------------------------"
     echo "📊 Luminara RUM: CLICKHOUSE Starting"
     echo "🌐 HTTP: $CLICKHOUSE_HTTP_PORT | Native: $CLICKHOUSE_TCP_PORT"

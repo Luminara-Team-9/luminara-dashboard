@@ -31,7 +31,7 @@ From: node:22-slim
     npm install -g pnpm@latest
     npm cache clean --force
 
-%runscript
+%startscript
     cd /workspace
     
     echo "------------------------------------------------"

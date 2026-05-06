@@ -82,7 +82,7 @@ EOF
     
     echo "Luminara-SRE: PRODUCTION AI Agent Container Hardening Complete ✅"
 
-%runscript
+%startscript
     cd /workspace
     echo "------------------------------------------------"
     echo "🚀 Luminara PURE AI AGENT Starting"
