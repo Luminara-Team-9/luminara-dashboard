@@ -1,73 +1,121 @@
-const footerSections = {
-  "데카트론 소개": [
-    { text: "About Decathlon", href: "/s/about-decathlon-korea" },
-    { text: "채용 정보", href: "https://decathlon.ninehire.site" },
-    { text: "매장 안내", href: "/s/our-stores" },
-  ],
-  "멤버십": [
-    { text: "멤버 혜택", href: "/s/korea_membership" },
-    { text: "포인트 사용 안내", href: "/s/how-to-use-points" },
-    { text: "멤버십 서비스 이용약관", href: "/s/terms-of-use-membership" },
-  ],
-  "고객 서비스": [
-    { text: "FAQ", href: "/s/faq-Kor" },
-    { text: "배송 및 반품 정책", href: "/s/return-and-exchange" },
-    { text: "수리 및 보증 정책", href: "/s/repair-warranty" },
-    { text: "공지사항", href: "/s/dashboard" },
-  ],
-  "구매 안내": [
-    { text: "대량 구매 안내", href: "/s/bulk-order" },
-    { text: "구매 이용 약관", href: "/s/terms-of-sale" },
-    { text: "개인정보 처리방침", href: "/s/privacy-policy-1" },
-  ],
-};
+const footerSections = [
+  {
+    title: "회사 소개",
+    links: [
+      { text: "About Decathlon", href: "/s/about-decathlon-korea" },
+      { text: "채용 정보", href: "https://decathlon.ninehire.site" },
+      { text: "매장 안내", href: "/s/our-stores" },
+    ],
+  },
+  {
+    title: "멤버십",
+    links: [
+      { text: "멤버 혜택", href: "/s/korea_membership" },
+      { text: "포인트 사용 안내", href: "/s/how-to-use-points" },
+      { text: "멤버십 서비스 이용약관", href: "/s/terms-of-use-membership" },
+    ],
+  },
+  {
+    title: "구매 정보",
+    links: [
+      { text: "대량 구매 안내", href: "/s/bulk-order" },
+      { text: "구매 이용 약관", href: "/s/terms-of-sale" },
+      { text: "개인정보 처리방침", href: "/s/privacy-policy-1" },
+    ],
+  },
+  {
+    title: "고객 서비스",
+    links: [
+      { text: "FAQ", href: "/s/faq-Kor" },
+      { text: "배송 및 반품 정책", href: "/s/return-and-exchange" },
+      { text: "수리 및 보증 정책", href: "/s/repair-warranty" },
+      { text: "공지사항", href: "/s/dashboard" },
+    ],
+  },
+];
 
 export function Footer() {
   return (
-    <footer style={{ backgroundColor: "#111827", color: "#9ca3af", marginTop: "64px" }}>
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "48px 16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "32px" }}>
-          <div>
+    <footer style={{ backgroundColor: "white", borderTop: "8px solid #f3f4f6", marginTop: "24px" }}>
+      {/* Accordion sections */}
+      <div style={{ borderBottom: "1px solid #e5e7eb" }}>
+        {footerSections.map((section) => (
+          <div key={section.title} style={{ borderTop: "1px solid #e5e7eb" }}>
             <div style={{
-              backgroundColor: "#0082C3",
-              color: "white",
-              fontWeight: 900,
-              fontSize: "16px",
-              padding: "6px 12px",
-              borderRadius: "4px",
-              display: "inline-block",
-              marginBottom: "16px",
+              display: "flex", alignItems: "center",
+              justifyContent: "space-between",
+              padding: "16px", cursor: "pointer",
             }}>
-              DECATHLON
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>
+                {section.title}
+              </span>
+              <span style={{ color: "#9ca3af" }}>{">"}</span>
             </div>
-            <p style={{ fontSize: "12px", lineHeight: "1.6" }}>
-              세상의 모든 스포츠.<br />프랑스에서 온 글로벌 스포츠 브랜드.
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom section */}
+      <div style={{ backgroundColor: "#111827", color: "white", padding: "32px 16px" }}>
+        <div style={{
+          maxWidth: "1200px", margin: "0 auto",
+          display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+          gap: "32px",
+        }}>
+          {/* Follow Us */}
+          <div>
+            <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Follow Us</h4>
+            <div style={{ display: "flex", gap: "12px" }}>
+              {["📘", "📸", "▶️", "💬"].map((icon, i) => (
+                <a key={i} href="#" style={{
+                  width: "36px", height: "36px", borderRadius: "50%",
+                  backgroundColor: "#374151",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  textDecoration: "none", fontSize: "16px",
+                }}>
+                  {icon}
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {/* App Download */}
+          <div>
+            <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>데카트론 App 다운로드</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <img
+                src="https://contents.mediadecathlon.com/s1012444/k$f9cd9f79c6b583f1c842884359c0843e/app%20store%20button%20tr.svg?format=auto"
+                alt="App Store"
+                width={120}
+                height={36}
+                style={{ height: "36px", width: "auto" }}
+              />
+              <img
+                src="https://contents.mediadecathlon.com/s815544/k$f30b23aeb9d31e68b3c76fa12cf5ab82/google%20play%20badge.png?format=auto"
+                alt="Google Play"
+                width={120}
+                height={36}
+                style={{ height: "36px", width: "auto" }}
+              />
+            </div>
+          </div>
+
+          {/* 사업자 정보 */}
+          <div>
+            <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px" }}>사업자 정보</h4>
+            <p style={{ fontSize: "11px", color: "#9ca3af", lineHeight: "1.8" }}>
+              주식회사 데카트론코리아(DECATHLON KOREA CO.,LTD.)<br />
+              대표: 구자민 | 서울특별시 서초구 서초대로 396<br />
+              사업자등록번호 220-81-11264 | 통신판매업신고번호 2024-서울강남-01993<br />
+              오성 제공사: Google Cloud | 대표번호: 1800-2025
             </p>
           </div>
-          {Object.entries(footerSections).map(([title, links]) => (
-            <div key={title}>
-              <h4 style={{ color: "white", fontWeight: 700, fontSize: "13px", marginBottom: "12px" }}>
-                {title}
-              </h4>
-              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                {links.map((link) => (
-                  <li key={link.href} style={{ marginBottom: "8px" }}>
-                    <a href={link.href} style={{ color: "#9ca3af", textDecoration: "none", fontSize: "12px" }}>
-                      {link.text}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
         </div>
+
         <div style={{
-          borderTop: "1px solid #374151",
-          marginTop: "40px",
-          paddingTop: "24px",
-          fontSize: "11px",
-          textAlign: "center",
-          color: "#6b7280",
+          maxWidth: "1200px", margin: "24px auto 0",
+          paddingTop: "24px", borderTop: "1px solid #374151",
+          fontSize: "11px", color: "#6b7280", textAlign: "center",
         }}>
           2026 Decathlon Korea Co., Ltd. | 사업자등록번호: 220-81-11264
         </div>

@@ -1,4 +1,4 @@
-import { HomePage } from '@/pages/main-landing';
+import { HomePage } from "@/page-components/main-landing";
 
 export default function Page() {
   return <HomePage />;

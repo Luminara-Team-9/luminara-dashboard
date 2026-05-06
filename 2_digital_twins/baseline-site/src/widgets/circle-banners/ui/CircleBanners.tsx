@@ -1,55 +1,77 @@
-const circles = [
-  { label: '첫 구매라면?', href: '/c/first-choice.html', color: '#0082C3' },
-  { label: '신제품', href: '/c/ss-new.html', color: '#10b981' },
-  { label: '러닝 베스트셀러', href: '/c/running-bestseller.html', color: '#f97316' },
-  { label: '하이킹 베스트셀러', href: '/c/hiking-bestseller.html', color: '#84cc16' },
-  { label: '러닝화', href: '/c/running-shoes.html', color: '#3b82f6' },
-  { label: '바람막이', href: '/c/windbreaker.html', color: '#8b5cf6' },
-  { label: '러닝 쇼츠', href: '/c/running-shorts.html', color: '#ec4899' },
-  { label: '하이킹 백팩', href: '/c/hiking-backpack.html', color: '#14b8a6' },
-  { label: '선글라스', href: '/c/sunglasses.html', color: '#f59e0b' },
-  { label: '러닝 모자', href: '/c/running-cap.html', color: '#6366f1' },
-];
-
 export function CircleBanners() {
+  const circles = [
+    { label: "첫 구매라면?", href: "/c/first-choice.html", imageUrl: "https://contents.mediadecathlon.com/s1383834/k$71660e59bdb5fb9544df6d90996373cb/defaut.jpg?format=auto" },
+    { label: "신제품", href: "/c/ss-new.html", imageUrl: "https://contents.mediadecathlon.com/s1370171/k$5abd20d860341cef8cea88f9a412b1c1/defaut.jpg?format=auto" },
+    { label: "러닝 베스트셀러", href: "/c/running-bestseller.html", imageUrl: "https://contents.mediadecathlon.com/s1389586/k$7a7635e863bf3da0d384afdb99750f35/defaut.jpg?format=auto" },
+    { label: "하이킹 베스트셀러", href: "/c/hiking-bestseller.html", imageUrl: "https://contents.mediadecathlon.com/s1389588/k$9a772b563186151a1f5448d92e20ebed/defaut.jpg?format=auto" },
+    { label: "러닝화", href: "/c/running-shoes.html", imageUrl: "https://contents.mediadecathlon.com/s1376611/k$d779e91d765aaf6751acc209642ca5c0/defaut.jpg?format=auto" },
+    { label: "바람막이", href: "/c/windbreaker.html", imageUrl: "https://contents.mediadecathlon.com/s1378141/k$1edbc6121c2a8df0ad1e45df165efe68/defaut.jpg?format=auto" },
+    { label: "러닝 싱글렛", href: "/c/running-singlet.html", imageUrl: "https://contents.mediadecathlon.com/s1391974/k$888c6e9e0a0288e67cc368a611c36d21/defaut.jpg?format=auto" },
+    { label: "러닝 쇼츠", href: "/c/running-shorts.html", imageUrl: "https://contents.mediadecathlon.com/s1378142/k$45ed7e876b4607707e1c762dd827987d/defaut.jpg?format=auto" },
+    { label: "선글라스", href: "/c/sunglasses.html", imageUrl: "https://contents.mediadecathlon.com/s1378145/k$6ff63e898ba5da7975afb0ad10832719/defaut.jpg?format=auto" },
+    { label: "하이킹 백팩", href: "/c/hiking-backpack.html", imageUrl: "https://contents.mediadecathlon.com/s1376613/k$d9490e3848c32548eb58f456caa9f2a3/defaut.jpg?format=auto" },
+    { label: "러닝 모자", href: "/c/running-cap.html", imageUrl: "https://contents.mediadecathlon.com/s1378140/k$d912e92979268f66a4aa9a2d21fb9827/defaut.jpg?format=auto" },
+    { label: "트레일 러닝", href: "/c/trail-running.html", imageUrl: "https://contents.mediadecathlon.com/s1389587/k$fbca100ef078de7b6c5695985ab0a00d/defaut.jpg?format=auto" },
+    { label: "러닝 반팔", href: "/c/running-tshirt.html", imageUrl: "https://contents.mediadecathlon.com/s1378147/k$cfa96010819e762782ab77f6515ecb66/defaut.jpg?format=auto" },
+    { label: "러닝 양말", href: "/c/running-socks.html", imageUrl: "https://contents.mediadecathlon.com/s1376612/k$7c32e3c1a459cb66a55b5dcf38aa9067/defaut.jpg?format=auto" },
+    { label: "하이킹 자켓", href: "/c/hiking-jacket.html", imageUrl: "https://contents.mediadecathlon.com/s1378139/k$3512ff9cfc4dd92fda473c2e69520537/defaut.jpg?format=auto" },
+    { label: "하이킹 팬츠", href: "/c/hiking-pants.html", imageUrl: "https://contents.mediadecathlon.com/s1378146/k$7427faea76ecfc35192270b7a46f526d/defaut.jpg?format=auto" },
+    { label: "하이킹 액세서리", href: "/c/hiking-accessory.html", imageUrl: "https://contents.mediadecathlon.com/s1313815/k$d43aaea41c07c63d9fa06e540e6c270a/defaut.jpg?format=auto" },
+  ];
+
   return (
-    <section style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 16px' }}>
-      <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
-        {circles.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '8px',
-              textDecoration: 'none',
-              flexShrink: 0,
-              width: '80px',
-            }}
-          >
-            <div
+    <section style={{ backgroundColor: "white", padding: "16px 0", borderBottom: "1px solid #f3f4f6" }}>
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 16px" }}>
+        <div style={{
+          display: "flex",
+          gap: "4px",
+          overflowX: "auto",
+          paddingBottom: "4px",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}>
+          {circles.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
               style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '50%',
-                backgroundColor: item.color,
-                border: '2px solid ' + item.color,
-              }}
-            />
-            <span
-              style={{
-                fontSize: '11px',
-                color: '#374151',
-                textAlign: 'center',
-                lineHeight: '1.3',
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "6px",
+                textDecoration: "none",
+                flexShrink: 0,
+                width: "80px",
+                padding: "4px",
               }}
             >
-              {item.label}
-            </span>
-          </a>
-        ))}
+              <div style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                overflow: "hidden",
+                backgroundColor: "#1e3a5f",
+              }}>
+                <img
+                  src={item.imageUrl}
+                  alt={item.label}
+                  width={56}
+                  height={56}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </div>
+              <span style={{
+                fontSize: "10px",
+                color: "#374151",
+                textAlign: "center",
+                lineHeight: "1.3",
+                wordBreak: "keep-all",
+              }}>
+                {item.label}
+              </span>
+            </a>
+          ))}
+        </div>
       </div>
     </section>
   );

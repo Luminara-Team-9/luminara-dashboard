@@ -1,98 +1,114 @@
 const announcementItems = [
-  { text: "멤버십 프로그램 자세히 보기", href: "/s/korea_membership" },
-  { text: "매장 안내 위치 보기", href: "/s/our-stores" },
-  { text: "5만원 이상 무료배송 자세히 보기", href: "/s/return-and-exchange-1" },
-  { text: "데카트론 브랜드 이야기 자세히 보기", href: "/s/about-decathlon-korea" },
+  { icon: "🔄", text: "멤버십 프로그램", subText: "자세히 보기", href: "/s/korea_membership" },
+  { icon: "📍", text: "매장 안내", subText: "위치 보기", href: "/s/our-stores" },
+  { icon: "🚚", text: "5만원 이상 무료배송", subText: "자세히 보기", href: "/s/return-and-exchange-1" },
+  { icon: "ℹ️", text: "데카트론 브랜드 이야기", subText: "자세히 보기", href: "/s/about-decathlon-korea" },
 ];
 
 const navCategories = [
+  { label: "모든 스포츠", href: "/c/all-sports" },
   { label: "러닝", href: "/c/running" },
   { label: "등산", href: "/c/hiking" },
-  { label: "필라테스/피트니스", href: "/c/fitness" },
-  { label: "캠핑", href: "/c/camping" },
-  { label: "킥보드/인라인", href: "/c/scooter" },
-  { label: "수영/스노클링", href: "/c/swimming" },
+  { label: "남성", href: "/c/men" },
+  { label: "여성", href: "/c/women" },
+  { label: "신제품", href: "/c/ss-new.html", color: "#0082C3" },
+  { label: "클리어런스", href: "/c/clearance", color: "#ef4444" },
 ];
 
 export function Header() {
   return (
-    <header>
-      <div style={{ backgroundColor: "#0082C3", color: "white" }}>
-        <div style={{
-          maxWidth: "1200px", margin: "0 auto", padding: "8px 16px",
-          display: "flex", justifyContent: "center", gap: "32px",
-          fontSize: "12px", overflowX: "auto",
-        }}>
-          {announcementItems.map((item) => (
-            <a key={item.href} href={item.href}
-              style={{ color: "white", textDecoration: "none", whiteSpace: "nowrap" }}>
-              {item.text}
-            </a>
-          ))}
-        </div>
-      </div>
-      <div style={{
-        borderBottom: "1px solid #e5e7eb", backgroundColor: "white",
-        position: "sticky", top: 0, zIndex: 50,
-      }}>
+    <header style={{ position: "sticky", top: 0, zIndex: 50, backgroundColor: "white" }}>
+      {/* Main Header */}
+      <div style={{ borderBottom: "1px solid #e5e7eb" }}>
         <div style={{
           maxWidth: "1200px", margin: "0 auto", padding: "0 16px",
           height: "64px", display: "flex", alignItems: "center",
           justifyContent: "space-between", gap: "16px",
         }}>
+          {/* Logo */}
           <a href="/" style={{ textDecoration: "none", flexShrink: 0 }}>
             <div style={{
-              backgroundColor: "#0082C3", color: "white", fontWeight: 900,
-              fontSize: "18px", padding: "6px 12px", borderRadius: "4px",
+              backgroundColor: "#0082C3", color: "white",
+              fontWeight: 900, fontSize: "18px",
+              padding: "6px 12px", borderRadius: "4px",
+              letterSpacing: "-0.5px",
             }}>
               DECATHLON
             </div>
           </a>
-          <div style={{ flex: 1, maxWidth: "560px" }}>
+
+          {/* Search - centered and wide */}
+          <div style={{ flex: 1, maxWidth: "640px" }}>
             <div style={{
-              display: "flex", border: "2px solid #e5e7eb",
-              borderRadius: "999px", overflow: "hidden",
+              display: "flex", alignItems: "center",
+              border: "2px solid #e5e7eb", borderRadius: "999px",
+              overflow: "hidden", backgroundColor: "white",
             }}>
-              <input type="text" placeholder="스포츠, 브랜드, 제품 검색"
-                style={{ flex: 1, padding: "10px 16px", fontSize: "14px",
-                  outline: "none", border: "none" }} />
-              <button style={{
-                backgroundColor: "#0082C3", color: "white", padding: "10px 20px",
-                fontSize: "14px", fontWeight: 600, border: "none", cursor: "pointer",
-              }}>
-                검색
-              </button>
+              <span style={{ padding: "0 12px", color: "#9ca3af", fontSize: "18px" }}>🔍</span>
+              <input
+                type="text"
+                placeholder="공식 리뷰 작성 시 500 포인트 증정!"
+                style={{
+                  flex: 1, padding: "10px 0", fontSize: "14px",
+                  outline: "none", border: "none", backgroundColor: "transparent",
+                }}
+              />
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-            <a href="/login" style={{ fontSize: "13px", color: "#374151", textDecoration: "none" }}>
-              로그인
+
+          {/* Actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
+            <a href="/login" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", textDecoration: "none", color: "#374151" }}>
+              <span style={{ fontSize: "20px" }}>👤</span>
+              <span style={{ fontSize: "10px" }}>로그인</span>
             </a>
-            <a href="/cart" style={{
-              fontSize: "13px", color: "#374151", textDecoration: "none",
-              border: "1px solid #374151", padding: "6px 12px", borderRadius: "4px",
-            }}>
-              장바구니
+            <a href="/s/our-stores" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", textDecoration: "none", color: "#374151" }}>
+              <span style={{ fontSize: "20px" }}>🏪</span>
+              <span style={{ fontSize: "10px" }}>매장 안내</span>
+            </a>
+            <a href="/delivery" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", textDecoration: "none", color: "#374151" }}>
+              <span style={{ fontSize: "20px" }}>📦</span>
+              <span style={{ fontSize: "10px" }}>배송 확인</span>
+            </a>
+            <a href="/cart" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", textDecoration: "none", color: "#374151", position: "relative" }}>
+              <span style={{ fontSize: "20px" }}>🛒</span>
+              <span style={{ fontSize: "10px" }}>내 장바구니</span>
+              <span style={{
+                position: "absolute", top: "-4px", right: "-4px",
+                backgroundColor: "#0082C3", color: "white",
+                borderRadius: "50%", width: "16px", height: "16px",
+                fontSize: "10px", display: "flex",
+                alignItems: "center", justifyContent: "center",
+                fontWeight: 700,
+              }}>0</span>
             </a>
           </div>
         </div>
-        <nav style={{ borderTop: "1px solid #f3f4f6" }}>
-          <div style={{
-            maxWidth: "1200px", margin: "0 auto", padding: "0 16px",
-            display: "flex", overflowX: "auto",
-          }}>
-            {navCategories.map((cat) => (
-              <a key={cat.href} href={cat.href} style={{
-                fontSize: "14px", fontWeight: 500, color: "#374151",
-                textDecoration: "none", padding: "12px 16px",
-                whiteSpace: "nowrap", display: "block",
-              }}>
-                {cat.label}
-              </a>
-            ))}
-          </div>
-        </nav>
       </div>
+
+      {/* Category Nav */}
+      <nav style={{ borderBottom: "1px solid #e5e7eb", backgroundColor: "white" }}>
+        <div style={{
+          maxWidth: "1200px", margin: "0 auto", padding: "0 16px",
+          display: "flex", overflowX: "auto",
+        }}>
+          {navCategories.map((cat) => (
+            <a
+              key={cat.href}
+              href={cat.href}
+              style={{
+                fontSize: "14px", fontWeight: 500,
+                color: (cat as any).color || "#374151",
+                textDecoration: "none", padding: "14px 20px",
+                whiteSpace: "nowrap", display: "block",
+                borderBottom: "2px solid transparent",
+              }}
+            >
+              {cat.label}
+            </a>
+          ))}
+        </div>
+      </nav>
     </header>
   );
 }
