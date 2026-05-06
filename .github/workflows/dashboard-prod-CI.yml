@@ -32,7 +32,7 @@ jobs:
       - name: Build & Verify Dashboard Container
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/web_prod.def" # SRE FIX: Point to the Pure Container definition
+          def_file_path: "infrastructure/web.def" # SRE FIX: Point to the Pure Container definition
           cache_key_suffix: "prod_dashboard" # Aligned suffix with the CD pipeline
           output_path: "${{ env.STAGING_PATH }}/pr_${{ github.event.pull_request.number }}.sif"
 
