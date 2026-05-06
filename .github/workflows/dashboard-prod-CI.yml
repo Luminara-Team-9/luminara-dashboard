@@ -1,4 +1,4 @@
-name: "3. [PR-Prod] Dashboard Gatekeeper & Builder"
+name: "3. [PR-Prod] Dashboard Gatekeeper & Builder (Pure Container)"
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     paths:
       - '1_dashboard_app/**'
       - '0_shared_packages/**'
-      - 'infrastructure/web.def'
+      - 'infrastructure/web.def' # SRE FIX: Updated to new def file
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
@@ -23,44 +23,28 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ---------------------------------------------------------
-      # PHASE 1: VERIFY NEXT.JS COMPILES (Dry-Run)
-      # ---------------------------------------------------------
-      - name: Setup Node.js & PNPM
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          
-      - name: Install PNPM
-        run: npm install -g pnpm@latest
-
-      - name: Dry-Run Next.js Build
-        run: |
-          echo "🔍 Testing Next.js Compilation..."
-          pnpm install --frozen-lockfile
-          pnpm --filter ./1_dashboard_app build
-          echo "✅ Next.js compiles successfully."
+      # SRE FIX: Completely removed the Host Node/PNPM Dry-Run.
+      # The container compilation IS the dry-run now.
 
       # ---------------------------------------------------------
-      # PHASE 2: HARDENED SIF BUILDER (Includes Verification)
+      # PHASE 1: BUILD PURE CONTAINER ARTIFACT
       # ---------------------------------------------------------
       - name: Build & Verify Dashboard Container
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/web.def"
-          cache_key_suffix: "dashboard"
+          def_file_path: "infrastructure/web_prod.def" # SRE FIX: Point to the Pure Container definition
+          cache_key_suffix: "prod_dashboard" # Aligned suffix with the CD pipeline
           output_path: "${{ env.STAGING_PATH }}/pr_${{ github.event.pull_request.number }}.sif"
 
       # ---------------------------------------------------------
-      # PHASE 3: GLOBAL FAIL-SAFE CLEANUP
+      # PHASE 2: GLOBAL FAIL-SAFE CLEANUP
       # ---------------------------------------------------------
       - name: Garbage Collection
         if: always()
         run: |
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
-          # Updated to match the Universal Action's naming convention
-          chmod -R u+rwX /dev/shm/sing_build_*_dashboard 2>/dev/null || true
-          rm -rf /dev/shm/sing_build_*_dashboard || true
+          chmod -R u+rwX /dev/shm/sing_build_*_prod_dashboard 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_prod_dashboard || true
           
           echo "🗑️ Running NFS Cache Garbage Collection..."
           find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true

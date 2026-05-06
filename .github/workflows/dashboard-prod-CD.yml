@@ -13,9 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PROD_CODE_PATH: "/abr/coss41/Luminara_App/codebase"
+  # Notice PROD_CODE_PATH is completely gone! 
   PROD_SIF_PATH: "/abr/coss41/Luminara_App/images-prod"
   STAGING_PATH: "/abr/coss41/Luminara_App/images-staging"
+  KEY_DIR: "/abr/coss41/Luminara_App/secure_keys"
 
 jobs:
   deploy-to-prod:
@@ -26,44 +27,9 @@ jobs:
         uses: actions/checkout@v4
 
       # ---------------------------------------------------------
-      # PHASE 1: SETUP, CACHE, FAST-SYNC PRODUCTION CODEBASE
+      # PHASE 1: LOCATE STAGED ARTIFACTS
       # ---------------------------------------------------------
-      - name: Install PNPM
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest # Or lock this to your specific version, e.g., '9'
-          
-      - name: Setup Node.js with Caching
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'pnpm' # ⬅️ THIS is the magic word
-      
-      - name: Sync Source Code & Dependencies
-        run: |
-          echo "📦 Fast-syncing code to production directory..."
-          npm install -g pnpm@latest
-          pnpm install --frozen-lockfile
-          pnpm --filter ./1_dashboard_app build
-          
-          mkdir -p ${{ env.PROD_CODE_PATH }}/1_dashboard_app
-          mkdir -p ${{ env.PROD_CODE_PATH }}/0_shared_packages
-          
-          rsync -av ./pnpm-workspace.yaml ${{ env.PROD_CODE_PATH }}/
-          rsync -av ./package.json ${{ env.PROD_CODE_PATH }}/
-          rsync -av --exclude 'node_modules' --exclude 'tests' ./0_shared_packages/ ${{ env.PROD_CODE_PATH }}/0_shared_packages/
-          
-          rsync -av --delete ./1_dashboard_app/.next/ ${{ env.PROD_CODE_PATH }}/1_dashboard_app/.next/
-          rsync -av --delete ./1_dashboard_app/public/ ${{ env.PROD_CODE_PATH }}/1_dashboard_app/public/
-          rsync -av ./1_dashboard_app/package.json ${{ env.PROD_CODE_PATH }}/1_dashboard_app/package.json
-          
-          cd ${{ env.PROD_CODE_PATH }}
-          pnpm install --prod --frozen-lockfile
-
-      # ---------------------------------------------------------
-      # PHASE 2: LOCATE STAGED ARTIFACTS
-      # ---------------------------------------------------------
-      - name: Locate Staged Artifacts
+      - name: Locate Staged PR Artifacts
         id: staging_check
         run: |
           COMMIT_MSG="${{ github.event.head_commit.message }}"
@@ -78,56 +44,56 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      # PHASE 3: BACKUP, PROMOTE, OR FLAG FOR EMERGENCY
+      # PHASE 2: BACKUP & PROMOTE (OR FLAG FOR BUILD)
       # ---------------------------------------------------------
       - name: Create Rollback Backup
         run: |
           echo "💾 Backing up current production container..."
           mkdir -p ${{ env.PROD_SIF_PATH }}
-          cp ${{ env.PROD_SIF_PATH }}/web_prod.sif ${{ env.PROD_SIF_PATH }}/web_prod.bak.sif || echo "ℹ️ No previous SIF found to backup."
+          cp ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif ${{ env.PROD_SIF_PATH }}/infrastructure_web.bak.sif || echo "ℹ️ No previous SIF found to backup."
 
-      - name: Artifact Promotion or Emergency Flag
+      - name: Artifact Promotion or Force Build
         run: |
+          # SRE FIX: If no staged artifact exists, we MUST build a new one 
+          # because the code changes need to be baked into the image.
           if [ "${{ steps.staging_check.outputs.found }}" == "true" ]; then
-            echo "✅ Promoting staged container for PR..."
-            cp ${{ steps.staging_check.outputs.pr_file }} ${{ env.PROD_SIF_PATH }}/web_prod.sif
-            echo "EMERGENCY_BUILD=false" >> $GITHUB_ENV
+            echo "✅ Promoting staged container for PR #${PR_NUMBER}..."
+            cp ${{ steps.staging_check.outputs.pr_file }} ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif
+            echo "REQUIRES_BUILD=false" >> $GITHUB_ENV
           else
-            if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q "infrastructure/web.def"; then
-              echo "🚨 Direct push to web.def detected! Flagging for fully hardened Emergency Build..."
-              echo "EMERGENCY_BUILD=true" >> $GITHUB_ENV
-            else
-              echo "ℹ️ No changes to web.def. Using existing SIF."
-              echo "EMERGENCY_BUILD=false" >> $GITHUB_ENV
-            fi
+            echo "🚨 No staged artifact found (Direct push to main?). Flagging for Build..."
+            echo "REQUIRES_BUILD=true" >> $GITHUB_ENV
           fi
 
       # ---------------------------------------------------------
-      # PHASE 4: EMERGENCY FALLBACK BUILD (CONDITIONAL)
+      # PHASE 3: ON-DEMAND CONTAINER BUILD (CONDITIONAL)
       # ---------------------------------------------------------
-      - name: Run Emergency Fallback Build
-        if: env.EMERGENCY_BUILD == 'true'
+      - name: Run Production Container Build
+        if: env.REQUIRES_BUILD == 'true'
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/web.def"
-          cache_key_suffix: "emergency_dashboard"
-          output_path: "${{ env.PROD_SIF_PATH }}/web_prod.sif"
+          # Ensure this points to your new Pure Container definition
+          def_file_path: "infrastructure/web.def" 
+          cache_key_suffix: "prod_dashboard"
+          output_path: "${{ env.PROD_SIF_PATH }}/infrastructure_web_prod.sif"
 
       # ---------------------------------------------------------
-      # PHASE 5: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
+      # PHASE 4: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
       - name: Hot-Swap & Verify Production Container
         run: |
           echo "🔄 Restarting Singularity Instance..."
           singularity instance stop luminara_web_live || true
           
+          # SRE FIX: Removed the --bind workspace flag. 
+          # Added the --env-file flag to inject production secrets.
           singularity instance start \
-            --bind ${{ env.PROD_CODE_PATH }}:/workspace \
-            ${{ env.PROD_SIF_PATH }}/web_prod.sif \
+            --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
+            ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif \
             luminara_web_live
             
-          echo "⏱️ Waiting 5 seconds for application to boot..."
-          sleep 5
+          echo "⏱️ Waiting 10 seconds for application to boot..."
+          sleep 10
           
           echo "🩺 Performing Health Check..."
           if singularity instance list | grep -q "luminara_web_live"; then
@@ -137,11 +103,11 @@ jobs:
             echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
             
             singularity instance stop luminara_web_live || true
-            mv ${{ env.PROD_SIF_PATH }}/web_prod.bak.sif ${{ env.PROD_SIF_PATH }}/web_prod.sif
+            mv ${{ env.PROD_SIF_PATH }}/infrastructure_web.bak.sif ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif
             
             singularity instance start \
-              --bind ${{ env.PROD_CODE_PATH }}:/workspace \
-              ${{ env.PROD_SIF_PATH }}/web_prod.sif \
+              --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
+              ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif \
               luminara_web_live
               
             echo "🚨 Rollback complete. Production is back online, but this deployment failed."
@@ -149,7 +115,7 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      # PHASE 6: FAIL-SAFE CLEANUP
+      # PHASE 5: FAIL-SAFE CLEANUP
       # ---------------------------------------------------------
       - name: Garbage Collection
         if: always()
@@ -158,5 +124,5 @@ jobs:
           find ${{ env.STAGING_PATH }} -type f -name "*.sif" -mtime +3 -exec rm {} \; || true
           
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
-          chmod -R u+rwX /dev/shm/sing_build_*_emergency_dashboard 2>/dev/null || true
-          rm -rf /dev/shm/sing_build_*_emergency_dashboard || true
+          chmod -R u+rwX /dev/shm/sing_build_*_prod_dashboard 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_prod_dashboard || true
