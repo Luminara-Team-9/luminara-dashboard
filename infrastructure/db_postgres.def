@@ -48,6 +48,7 @@ From: postgres:15.6-bookworm
     # ------------------------------------------------------------------
     # PRODUCTION BOOTSTRAP PROTOCOL
     # ------------------------------------------------------------------
+    DB_USER=${POSTGRES_USER:-coss41}
     
     # 1. Automatic Initialization (Runs only if /data is empty)
     if [ ! -f "$PGDATA/PG_VERSION" ]; then
