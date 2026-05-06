@@ -34,7 +34,7 @@ From: node:24.15.0-slim
     # SRE FIX: Nuke the massive NPM cache before compression
     npm cache clean --force
     
-%runscript
+%startscript
     cd /workspace
     
     echo "------------------------------------------------"
