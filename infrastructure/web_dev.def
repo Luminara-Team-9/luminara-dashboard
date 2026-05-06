@@ -42,7 +42,7 @@ From: node:24-slim
     # SRE FIX: Nuke the massive NPM cache before compression
     npm cache clean --force
     
-%runscript
+%startscript
     # SRE FIX: Start at the ROOT of the bound monorepo workspace
     cd /workspace
     

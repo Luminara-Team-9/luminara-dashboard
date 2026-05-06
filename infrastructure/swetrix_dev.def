@@ -29,7 +29,7 @@ From: swetrix/swetrix-api:latest
     # NPM Cache Bomb defusal
     npm cache clean --force || true
 
-%runscript
+%startscript
     echo "------------------------------------------------"
     echo "📈 Luminara DEVELOPMENT: SWETRIX API Starting"
     echo "🌐 Port: $PORT"

@@ -60,7 +60,7 @@ From: node:24-slim
 # 🚀 RUN PHASE
 # This happens every time you start the container.
 # ---------------------------------------------------------
-%runscript
+%startscript
     cd /workspace/1_dashboard_app
     
     echo "------------------------------------------------"
