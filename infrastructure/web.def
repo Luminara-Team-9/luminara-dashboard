@@ -17,6 +17,9 @@ From: node:24-slim
     ./pnpm-workspace.yaml /workspace/pnpm-workspace.yaml
     ./package.json /workspace/package.json
 
+    # SRE FIX: Inject the lockfile so frozen-lockfile has a blueprint to read
+    ./pnpm-lock.yaml /workspace/pnpm-lock.yaml
+
 %environment
     export PORT=${PORT:-3000}
     export NODE_ENV=production
