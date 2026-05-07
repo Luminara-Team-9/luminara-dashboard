@@ -15,9 +15,7 @@ From: postgres:15.6-bookworm
     # SRE FIX: Bypasses read-only /var/run for socket locks
     export PGSOCKETS=/tmp
     export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    # SRE FIX: Bypasses global tmp folders due to space constraint
-    export SINGULARITY_TMPDIR=/abr/coss41/singularity_tmp
-    export SINGULARITY_CACHEDIR=/abr/coss41/singular_cache
+
 
 %post
     # SRE FIX 1: Restore the PATH immediately

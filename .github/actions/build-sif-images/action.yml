@@ -47,6 +47,11 @@ runs:
         export SINGULARITY_TMPDIR="/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
         export TMPDIR=$SINGULARITY_TMPDIR
         
+        # 3. 🚨 THE BIND SHIELD (The Final Fix)
+        # This prevents the 100% full host /tmp from bleeding into the container during %post.
+        # It forces the container to use our 126GB RAM disk for its internal /tmp operations!
+        export SINGULARITY_BIND="$SINGULARITY_TMPDIR:/tmp"
+
         # Clean up any previous runs
         rm -rf $SINGULARITY_TMPDIR || true
         mkdir -p $SINGULARITY_TMPDIR
