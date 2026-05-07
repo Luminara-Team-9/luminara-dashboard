@@ -32,6 +32,7 @@ From: postgres:15.6-bookworm
     
     # SRE FIX 3: Disable disk space check and install tools
     apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
+        postgresql-15-pgvector \
         ca-certificates \
         curl
         
