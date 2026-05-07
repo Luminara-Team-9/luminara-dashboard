@@ -1,8 +1,10 @@
+import Link from 'next/link';
+
 export function CircleBanners() {
   const circles = [
     {
       label: '첫 구매라면?',
-      href: '/c/first-choice.html',
+      href: '/category/first-choice',
       imageUrl:
         'https://contents.mediadecathlon.com/s1383834/k$71660e59bdb5fb9544df6d90996373cb/defaut.jpg?format=auto',
     },
@@ -117,7 +119,7 @@ export function CircleBanners() {
           }}
         >
           {circles.map((item) => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               className="flex-none snap-start"
@@ -159,7 +161,7 @@ export function CircleBanners() {
               >
                 {item.label}
               </span>
-            </a>
+            </Link>
           ))}
         </div>
       </div>

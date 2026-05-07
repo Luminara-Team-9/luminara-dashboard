@@ -1,69 +1,165 @@
-import { Header } from "@/widgets/header";
-import { Footer } from "@/widgets/footer";
-import { ProductCard } from "@/entities/product/ui/ProductCard";
+import { Header } from '@/widgets/header';
+import { Footer } from '@/widgets/footer';
+import { ProductCard } from '@/entities/product/ui/ProductCard';
 
-import type { Product } from "@/entities/product/model/types";
+import type { Product } from '@/entities/product/model/types';
 
-const categoryProducts: Product[] = [
-  { id: "8488034", name: "남성 러닝 반팔 티 런 드라이 100 DECATHLON", price: 5900, originalPrice: 9900, imageUrl: "https://contents.mediadecathlon.com/p2924641/sq/k$67d6b1e1b55aa3217970880ea31408c6/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=480x480&format=auto", category: "러닝", rating: 4.7, badge: "sale" },
-  { id: "8487923", name: "남성 하프집 러닝 긴팔 티 런 웜 100 KALENJI", price: 19900, imageUrl: "https://contents.mediadecathlon.com/p2607111/sq/k$ffa7f4654c9c174bcdf14cce22b20aa4/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8 },
-  { id: "8882067", name: "남성 러닝 바지 런 드라이 100 KIPRUN", price: 29900, imageUrl: "https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto", category: "러닝", rating: 4.7 },
-  { id: "8817239", name: "여성 러닝 윈드 자켓 런 100 KIPRUN", price: 19900, originalPrice: 23900, imageUrl: "https://contents.mediadecathlon.com/p2516892/sq/k$d1ee673b7d4ee48bd483f4cc963e553f/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8, badge: "sale" },
-  { id: "8817443", name: "남성 7인치 러닝 쇼츠 런 드라이 100 KIPRUN", price: 9900, imageUrl: "https://contents.mediadecathlon.com/p2924600/sq/k$cf423b616aba772e3e0c4ae7954420df/%EB%82%A8%EC%84%B1-7%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8817443.jpg?f=480x480&format=auto", category: "러닝", rating: 4.7 },
-  { id: "8926414", name: "남성 러닝 윈드 자켓 런 100 KIPRUN", price: 25900, originalPrice: 29900, imageUrl: "https://contents.mediadecathlon.com/p2966107/sq/k$71853bbcb9cdaf90ad31148656afe201/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%BC%93-%EB%9F%B0-100-kiprun-8926414.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8, badge: "sale" },
-  { id: "8882166", name: "러닝 쿨링 헤드밴드 KIPRUN", price: 7900, imageUrl: "https://contents.mediadecathlon.com/p2644659/sq/k$46370da423f768ee056d2e9400467100/%EB%9F%AC%EB%8B%9D-%EC%BF%A8%EB%A7%81-%ED%97%A4%EB%93%9C%EB%B0%B4%EB%93%9C-kiprun-8882166.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8 },
-  { id: "8871357", name: "러닝 캡 모자 V2 KIPRUN", price: 16900, imageUrl: "https://contents.mediadecathlon.com/p2924635/sq/k$0cefdf07a9d659fad91eeb65773816bd/%EB%9F%AC%EB%8B%9D-%EC%BA%A1-%EB%AA%A8%EC%9E%90-v2-kiprun-8871357.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8 },
-  { id: "8296177", name: "러닝 단목 양말 3켤레 런 100 KIPRUN", price: 5900, imageUrl: "https://contents.mediadecathlon.com/p2707879/sq/k$85497a929ec16f29c48b093e4d5c3ad9/%EB%9F%AC%EB%8B%9D-%EB%8B%A8%EB%AA%A9-%EC%96%91%EB%A7%90-3%EC%BC%A4%EB%A0%88-%EB%9F%B0-100-kiprun-8296177.jpg?f=480x480&format=auto", category: "러닝", rating: 4.7 },
-  { id: "8505856", name: "스포츠 선글라스 ST100 ROCKRIDER", price: 7900, imageUrl: "https://contents.mediadecathlon.com/p1251800/sq/k$a98ac92a95d537237918f5de7b13c23c/%EC%8A%A4%ED%8F%AC%EC%B8%A0-%EC%84%A0%EA%B8%80%EB%9D%BC%EC%8A%A4-st100-rockrider-8505856.jpg?f=480x480&format=auto", category: "러닝", rating: 4.9 },
-  { id: "8960456", name: "남성 5인치 러닝 투인원 쇼츠 런 500 KIPRUN", price: 39900, imageUrl: "https://contents.mediadecathlon.com/p3013863/sq/k$7b92cd3ac459dfab9763e4bc81d3981b/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8 },
-  { id: "8553338", name: "여성 4인치 러닝 쇼츠 런 드라이 100 KALENJI", price: 9900, imageUrl: "https://contents.mediadecathlon.com/p2924625/sq/k$075f676a46105380a29b78ea3e357788/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=480x480&format=auto", category: "러닝", rating: 4.8 },
-];
+import { runningProducts } from '@/page-components/main-landing/ui/mockData';
 
 const categoryNames: Record<string, string> = {
-  "first-choice": "첫 구매라면?",
-  "running": "러닝",
-  "hiking": "등산",
-  "fitness": "필라테스/피트니스",
-  "camping": "캠핑",
-  "swimming": "수영/스노클링",
-  "cycling": "자전거",
-  "football": "축구",
+  'first-choice': 'FIRST CHOICE',
+  running: '러닝',
+  hiking: '등산',
+  fitness: '필라테스/피트니스',
+  camping: '캠핑',
+  swimming: '수영/스노클링',
+  cycling: '자전거',
+  football: '축구',
 };
 
 export function CategoryPage({ categorySlug }: { categorySlug: string }) {
   const categoryName = categoryNames[categorySlug] || categorySlug;
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#f9fafb" }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb' }}>
       <Header />
       <main>
-        <div style={{ backgroundColor: "white", borderBottom: "1px solid #e5e7eb" }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "12px 16px", display: "flex", gap: "8px", fontSize: "13px", color: "#6b7280" }}>
-            <a href="/" style={{ color: "#6b7280", textDecoration: "none" }}>홈</a>
-            <span>{">"}</span>
-            <span style={{ color: "#111827", fontWeight: 500 }}>{categoryName}</span>
+        <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb' }}>
+          <div
+            style={{
+              maxWidth: '1200px',
+              margin: '0 auto',
+              padding: '12px 16px',
+              display: 'flex',
+              gap: '8px',
+              fontSize: '13px',
+              color: '#6b7280',
+            }}
+          >
+            <a href="/" style={{ color: '#6b7280', textDecoration: 'none' }}>
+              홈
+            </a>
+            <span>{'>'}</span>
+            <span style={{ color: '#111827', fontWeight: 500 }}>{categoryName}</span>
           </div>
         </div>
-        <div style={{ backgroundColor: "white", borderBottom: "1px solid #e5e7eb", marginBottom: "24px" }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "24px 16px" }}>
-            <h1 style={{ fontSize: "24px", fontWeight: 900, color: "#111827", marginBottom: "4px" }}>{categoryName}</h1>
-            <p style={{ fontSize: "14px", color: "#6b7280" }}>{categoryProducts.length}개 상품</p>
+
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-[1200px] mx-auto px-4 py-6 flex items-start gap-4">
+            {categorySlug === 'first-choice' && (
+              <div className="w-16 h-16 bg-gray-100 flex-shrink-0">
+                <img
+                  src="https://contents.mediadecathlon.com/p3115871/sq/k$53ff826588e9362fc5dbc161f2cf08cc/%EC%97%AC%EC%84%B1-%EC%B9%B4%EB%B3%B8-%EB%A0%88%EC%9D%B4%EC%8B%B1%ED%99%94-%ED%82%B5%EC%8A%A4%ED%86%B0-%EC%B1%8C%EB%A6%B0%EC%A0%80-kiprun-8967622.jpg?f=200x200&format=auto"
+                  alt="Category icon"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <div className="flex flex-col justify-center">
+              <h1 className="text-2xl font-black italic uppercase text-gray-900 mb-1">
+                {categorySlug === 'first-choice' ? 'FIRST CHOICE' : categoryName}
+              </h1>
+              <p className="text-xs text-gray-500">
+                {categorySlug === 'first-choice'
+                  ? '첫 구매라면? 이 제품부터 시작하세요.'
+                  : '데카트론 추천 상품을 만나보세요.'}
+              </p>
+            </div>
           </div>
         </div>
-        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 16px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", backgroundColor: "white", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "16px" }}>
-            <span style={{ fontSize: "13px", color: "#6b7280" }}>총 {categoryProducts.length}개 상품</span>
-            <select style={{ fontSize: "13px", border: "1px solid #e5e7eb", borderRadius: "4px", padding: "6px 12px", backgroundColor: "white" }}>
-              <option>인기순</option>
-              <option>낮은 가격순</option>
-              <option>높은 가격순</option>
-            </select>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
-            {categoryProducts.map((product) => (
-              <a key={product.id} href={`/product/${product.id}`} style={{ textDecoration: "none" }}>
-                <ProductCard product={product} />
-              </a>
+        {/* Main Content Layout (Sidebar + Grid) */}
+        <div className="max-w-[1200px] mx-auto px-4 py-6 flex gap-8 items-start">
+          {/* LEFT SIDEBAR: Filters (Hidden on mobile, visible on desktop) */}
+          <aside className="hidden lg:block w-1/4 flex-shrink-0 sticky top-4">
+            <div className="text-sm font-bold text-gray-900 mb-4 pb-2 border-b border-black">
+              필터
+            </div>
+
+            {/* Filter Sections */}
+            {[
+              '필터 기준 브랜드',
+              '필터 기준 색상',
+              '필터 기준 성별',
+              '필터 기준 가격',
+              '필터 기준 제품 특성',
+              '필터 기준 사이즈',
+            ].map((filterTitle, index) => (
+              <div
+                key={index}
+                className="border-b border-gray-200 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+              >
+                <button className="w-full flex justify-between items-center text-sm font-bold text-gray-800">
+                  {filterTitle}
+                  <span className="text-lg font-light">+</span>
+                </button>
+              </div>
             ))}
+          </aside>
+
+          {/* RIGHT SIDE: Top Bar + Product Grid */}
+          <div className="w-full lg:w-3/4">
+            {/* Top Bar: Item Count & Sort */}
+            <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-200">
+              <span className="text-sm font-bold text-blue-600">
+                총 {runningProducts.length}개 상품
+              </span>
+
+              <div className="flex items-center gap-4">
+                {/* Mobile Filter Button (Only shows on phones) */}
+                <button className="lg:hidden flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-4 h-4"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"
+                    />
+                  </svg>
+                  필터
+                </button>
+
+                {/* Sort Dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500 hidden md:inline">정렬기준</span>
+                  <select className="text-sm font-bold text-gray-800 outline-none cursor-pointer bg-transparent border-none">
+                    <option>추천순</option>
+                    <option>낮은 가격순</option>
+                    <option>높은 가격순</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Product Grid (Responsive: 2 on mobile, 3 on tablet, 4 on desktop) */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              {runningProducts.map((product) => (
+                <a
+                  key={product.id}
+                  href={`/product/${product.id}`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <ProductCard product={product} />
+                </a>
+              ))}
+            </div>
+
+            {/* Load More Section */}
+            <div className="flex flex-col items-center justify-center mt-16 mb-8">
+              <p className="text-xs text-gray-500 mb-3 font-semibold">
+                {runningProducts.length}개의 제품 중 {runningProducts.length}개를 보여줍니다.
+              </p>
+              <div className="w-48 h-1 bg-gray-200 mb-6 overflow-hidden">
+                <div className="w-full h-full bg-blue-600"></div>
+              </div>
+              <button className="border border-gray-300 rounded-full px-8 py-2.5 text-sm font-bold text-gray-800 hover:bg-gray-50 transition flex items-center gap-2">
+                더보기
+              </button>
+            </div>
           </div>
         </div>
       </main>
