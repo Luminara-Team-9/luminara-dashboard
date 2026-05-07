@@ -1,0 +1,90 @@
+name: "5. [PR-Digital Clone] Autonomous Audit Pipeline"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  performance_audit:
+    name: Digital Twin Audit
+    runs-on: [self-hosted, Linux] # Targets your ABRM02 server Runner
+
+    # SRE FIX: Dynamically generate unique names for THIS specific workflow run
+    env:
+      TWIN_NAME: clone_${{ github.run_id }}
+      AUDIT_NAME: audit_${{ github.run_id }}
+      IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
+
+      # The robot exclusively audits the battlefield
+      TARGET_SITE: 2_digital_twins/active-staging
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🧹 Stage 1 - Idempotent Pre-Cleanup
+        # This only cleans up ghost containers from THIS specific run ID 
+        # (e.g., if you cancelled a run halfway through and restarted it)
+        run: |
+          echo "Ensuring clean slate for Run ID: ${{ github.run_id }}"
+          singularity instance stop $TWIN_NAME 2>/dev/null || true
+          singularity instance stop $AUDIT_NAME 2>/dev/null || true
+
+      - name: 🎲 Allocate Dynamic Port
+        id: allocate_port
+        # SRE FIX: Finds a completely random, unused port on the host server
+        FREE_PORT=$(comm -23 <(seq 3060 3200 | sort) <(ss -Htan | awk '{print $4}' | cut -d':' -f2 | sort -u) | shuf | head -n 1)
+
+          echo "TWIN_PORT=$FREE_PORT" >> $GITHUB_ENV
+          echo "Assigned Port: $FREE_PORT"
+
+      - name: 🚀 Stage 2 - Boot Digital Twin
+        run: |
+          echo "Booting Digital Twin instance: $TWIN_NAME on port ${{ env.TWIN_PORT }}"
+          # Removed the host npm commands! The container builds itself.
+          # 🚨 SRE FIX: Targeted Bind Mount
+          # Instead of '.', we drill down directly into the specific Next.js site
+          singularity instance start \
+            --bind ./2_digital_twins/active-staging:/workspace \
+            --env PORT=${{ env.TWIN_PORT }} \
+            $IMAGE_DIR/infrastructure_web.sif $TWIN_NAME
+            
+          echo "⏳ Waiting for Next.js to finish building and start routing..."
+          # SRE FIX: Health check loop. Pings the Twin every 3 seconds until it responds.
+          # Times out after 180 seconds to prevent infinite hangs.
+          TIMEOUT=180
+          ELAPSED=0
+          until curl -s http://localhost:${{ env.TWIN_PORT }} > /dev/null; do
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "❌ ERROR: Digital Twin failed to boot within $TIMEOUT seconds."
+              exit 1
+            fi
+            printf "."
+            sleep 3
+            ELAPSED=$((ELAPSED+3))
+          done
+          echo -e "\n✅ Digital Twin is online and ready for audit!"
+
+      - name: ⚡ Stage 3 - Execute Ephemeral Audit
+        env:
+          LHCI_BUILD_TOKEN: ${{ secrets.LHCI_BUILD_TOKEN }}
+          LHCI_COLLECT_URL: http://localhost:${{ env.TWIN_PORT }}/
+        run: |
+          echo "Firing LHCI metrics against the Digital Twin..."
+          # 🚨 SRE FIX: Multi-Bind Architecture
+          # 1. Bind the Next.js code folder
+          # 2. Surgically bind the central config file into the same workspace
+          singularity exec \
+            --bind ./${{ env.TARGET_SITE }}:/workspace \
+            --bind ./4_automation_tests/lighthouse-runner/lighthouserc.js:/workspace/lighthouserc.js \
+            $IMAGE_DIR/infrastructure_audit_ephermeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
+
+      - name: 🛑 Stage 4 - Mandatory Teardown (Failsafe)
+        # SRE FIX: if: always() guarantees this step runs even if Stage 3 fails (e.g., terrible Lighthouse score)
+        if: always()
+        run: |
+          echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
+          # Destroys ONLY the twin and audit containers tied to this specific PR execution
+          singularity instance stop $TWIN_NAME 2>/dev/null || echo "Twin already cleanly stopped."
+          singularity instance stop $AUDIT_NAME 2>/dev/null || echo "Audit already cleanly stopped."
