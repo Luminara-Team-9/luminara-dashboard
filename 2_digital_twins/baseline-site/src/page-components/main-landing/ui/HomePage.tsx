@@ -16,7 +16,7 @@ import { runningProducts } from './mockData';
 export function HomePage() {
   return (
     <div
-      style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', width: '100%', overflowX: 'hidden' }}
+      style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', width: '100%', overflowX: 'clip' }}
     >
       <Header />
       <main style={{ width: '100%' }}>
