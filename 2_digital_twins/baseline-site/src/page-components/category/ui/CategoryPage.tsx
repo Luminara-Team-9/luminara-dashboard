@@ -1,9 +1,9 @@
+"use client";
+
+import { useState, useMemo } from 'react';
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
 import { ProductCard } from '@/entities/product/ui/ProductCard';
-
-import type { Product } from '@/entities/product/model/types';
-
 import { runningProducts } from '@/page-components/main-landing/ui/mockData';
 
 const categoryNames: Record<string, string> = {
@@ -17,8 +17,57 @@ const categoryNames: Record<string, string> = {
   football: '축구',
 };
 
+const AVAILABLE_BRANDS = ['KIPRUN', 'KALENJI', 'DECATHLON', 'QUECHUA', 'SIMOND'];
+const AVAILABLE_CATEGORIES = ['러닝', '등산'];
+
 export function CategoryPage({ categorySlug }: { categorySlug: string }) {
   const categoryName = categoryNames[categorySlug] || categorySlug;
+
+  // 1. Dynamic State for Filters
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+
+  const [sortOrder, setSortOrder] = useState<string>('추천순');
+
+  // 2. Toggle Handlers
+  const toggleBrand = (brand: string) => {
+    setSelectedBrands(prev => 
+      prev.includes(brand) ? prev.filter(b => b !== brand) : [...prev, brand]
+    );
+  };
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories(prev => 
+      prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+    );
+  };
+
+  // 3. Real-time Filtering Engine
+  const filteredProducts = useMemo(() => {
+    let result = runningProducts.filter(product => {
+
+      // Check if product matches selected brands (brand is often in the product name)
+      const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => product.name.includes(brand));
+      
+      // Check if product matches selected categories
+      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(product.category);
+
+      return matchesBrand && matchesCategory;
+    });
+
+    // Step B: Sort
+    if (sortOrder === '낮은 가격순') {
+      result.sort((a, b) => a.price - b.price);
+    } else if (sortOrder === '높은 가격순') {
+      result.sort((a, b) => b.price - a.price);
+    } else if (sortOrder === '추천순') {
+      // Sort by rating (highest first), fallback to 0 if no rating exists
+      result.sort((a, b) => (b.rating || 0) - (a.rating || 0)); 
+    }
+
+    return result;
+  }, [selectedBrands, selectedCategories, sortOrder]);
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb' }}>
       <Header />
@@ -68,98 +117,108 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
         </div>
         {/* Main Content Layout (Sidebar + Grid) */}
         <div className="max-w-[1200px] mx-auto px-4 py-6 flex gap-8 items-start">
-          {/* LEFT SIDEBAR: Filters (Hidden on mobile, visible on desktop) */}
-          <aside className="hidden lg:block w-1/4 flex-shrink-0 sticky top-4">
-            <div className="text-sm font-bold text-gray-900 mb-4 pb-2 border-b border-black">
-              필터
+          {/* LEFT SIDEBAR: Interactive Filters */}
+          <aside className="hidden lg:block w-1/4 flex-shrink-0 sticky top-[120px]">
+            <div className="text-sm font-bold text-gray-900 mb-4 pb-2 border-b border-black flex justify-between">
+              <span>필터</span>
+              {(selectedBrands.length > 0 || selectedCategories.length > 0) && (
+                <button 
+                  onClick={() => { setSelectedBrands([]); setSelectedCategories([]); }}
+                  className="text-xs text-blue-600 font-normal hover:underline"
+                >
+                  초기화
+                </button>
+              )}
             </div>
 
-            {/* Filter Sections */}
-            {[
-              '필터 기준 브랜드',
-              '필터 기준 색상',
-              '필터 기준 성별',
-              '필터 기준 가격',
-              '필터 기준 제품 특성',
-              '필터 기준 사이즈',
-            ].map((filterTitle, index) => (
-              <div
-                key={index}
-                className="border-b border-gray-200 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
-              >
-                <button className="w-full flex justify-between items-center text-sm font-bold text-gray-800">
-                  {filterTitle}
-                  <span className="text-lg font-light">+</span>
-                </button>
+            {/* Brand Filter */}
+            <div className="border-b border-gray-200 py-4">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">브랜드</h3>
+              <div className="flex flex-col gap-2">
+                {AVAILABLE_BRANDS.map(brand => (
+                  <label key={brand} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                      checked={selectedBrands.includes(brand)}
+                      onChange={() => toggleBrand(brand)}
+                    />
+                    <span className="text-sm text-gray-700">{brand}</span>
+                  </label>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Category Filter */}
+            <div className="border-b border-gray-200 py-4">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">스포츠 카테고리</h3>
+              <div className="flex flex-col gap-2">
+                {AVAILABLE_CATEGORIES.map(category => (
+                  <label key={category} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                      checked={selectedCategories.includes(category)}
+                      onChange={() => toggleCategory(category)}
+                    />
+                    <span className="text-sm text-gray-700">{category}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </aside>
 
-          {/* RIGHT SIDE: Top Bar + Product Grid */}
+          {/* RIGHT SIDE: Product Grid */}
           <div className="w-full lg:w-3/4">
             {/* Top Bar: Item Count & Sort */}
             <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-200">
               <span className="text-sm font-bold text-blue-600">
-                총 {runningProducts.length}개 상품
+                총 {filteredProducts.length}개 상품
               </span>
-
-              <div className="flex items-center gap-4">
-                {/* Mobile Filter Button (Only shows on phones) */}
-                <button className="lg:hidden flex items-center gap-1.5 text-sm font-bold text-gray-800">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    className="w-4 h-4"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"
-                    />
-                  </svg>
-                  필터
-                </button>
-
-                {/* Sort Dropdown */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500 hidden md:inline">정렬기준</span>
-                  <select className="text-sm font-bold text-gray-800 outline-none cursor-pointer bg-transparent border-none">
-                    <option>추천순</option>
-                    <option>낮은 가격순</option>
-                    <option>높은 가격순</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Product Grid (Responsive: 2 on mobile, 3 on tablet, 4 on desktop) */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-              {runningProducts.map((product) => (
-                <a
-                  key={product.id}
-                  href={`/product/${product.id}`}
-                  style={{ textDecoration: 'none' }}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500 hidden md:inline">정렬기준</span>
+                <select 
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="text-sm font-bold text-gray-800 outline-none cursor-pointer bg-transparent border-none"
                 >
-                  <ProductCard product={product} />
-                </a>
-              ))}
+                  <option value="추천순">추천순</option>
+                  <option value="낮은 가격순">낮은 가격순</option>
+                  <option value="높은 가격순">높은 가격순</option>
+                </select>
+              </div>
             </div>
 
-            {/* Load More Section */}
-            <div className="flex flex-col items-center justify-center mt-16 mb-8">
-              <p className="text-xs text-gray-500 mb-3 font-semibold">
-                {runningProducts.length}개의 제품 중 {runningProducts.length}개를 보여줍니다.
-              </p>
-              <div className="w-48 h-1 bg-gray-200 mb-6 overflow-hidden">
-                <div className="w-full h-full bg-blue-600"></div>
+            {/* Empty State */}
+            {filteredProducts.length === 0 ? (
+              <div className="py-20 text-center text-gray-500">
+                선택한 필터 조건에 맞는 상품이 없습니다.
               </div>
-              <button className="border border-gray-300 rounded-full px-8 py-2.5 text-sm font-bold text-gray-800 hover:bg-gray-50 transition flex items-center gap-2">
-                더보기
-              </button>
-            </div>
+            ) : (
+              /* Filtered Grid */
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredProducts.map((product) => (
+                  <a key={product.id} href={`/product/${product.id}`} style={{ textDecoration: 'none' }}>
+                    <ProductCard product={product} />
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {/* Load More Section (Updated to use dynamic counts) */}
+            {filteredProducts.length > 0 && (
+              <div className="flex flex-col items-center justify-center mt-16 mb-8">
+                <p className="text-xs text-gray-500 mb-3 font-semibold">
+                  {filteredProducts.length}개의 제품 중 {filteredProducts.length}개를 보여줍니다.
+                </p>
+                <div className="w-48 h-1 bg-gray-200 mb-6 overflow-hidden">
+                  <div className="w-full h-full bg-blue-600"></div>
+                </div>
+                <button className="border border-gray-300 rounded-full px-8 py-2.5 text-sm font-bold text-gray-800 hover:bg-gray-50 transition flex items-center gap-2">
+                  더보기
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
