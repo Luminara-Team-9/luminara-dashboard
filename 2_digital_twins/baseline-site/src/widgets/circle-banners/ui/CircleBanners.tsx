@@ -10,97 +10,97 @@ export function CircleBanners() {
     },
     {
       label: '신제품',
-      href: '/c/ss-new.html',
+      href: '/category/ss-new.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1370171/k$5abd20d860341cef8cea88f9a412b1c1/defaut.jpg?format=auto',
     },
     {
       label: '러닝 베스트셀러',
-      href: '/c/running-bestseller.html',
+      href: '/category/running-bestseller.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1389586/k$7a7635e863bf3da0d384afdb99750f35/defaut.jpg?format=auto',
     },
     {
       label: '하이킹 베스트셀러',
-      href: '/c/hiking-bestseller.html',
+      href: '/category/hiking-bestseller.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1389588/k$9a772b563186151a1f5448d92e20ebed/defaut.jpg?format=auto',
     },
     {
       label: '러닝화',
-      href: '/c/running-shoes.html',
+      href: '/category/running-shoes.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1376611/k$d779e91d765aaf6751acc209642ca5c0/defaut.jpg?format=auto',
     },
     {
       label: '바람막이',
-      href: '/c/windbreaker.html',
+      href: '/category/windbreaker.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378141/k$1edbc6121c2a8df0ad1e45df165efe68/defaut.jpg?format=auto',
     },
     {
       label: '러닝 싱글렛',
-      href: '/c/running-singlet.html',
+      href: '/category/running-singlet.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1391974/k$888c6e9e0a0288e67cc368a611c36d21/defaut.jpg?format=auto',
     },
     {
       label: '러닝 쇼츠',
-      href: '/c/running-shorts.html',
+      href: '/category/running-shorts.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378142/k$45ed7e876b4607707e1c762dd827987d/defaut.jpg?format=auto',
     },
     {
       label: '선글라스',
-      href: '/c/sunglasses.html',
+      href: '/category/sunglasses.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378145/k$6ff63e898ba5da7975afb0ad10832719/defaut.jpg?format=auto',
     },
     {
       label: '하이킹 백팩',
-      href: '/c/hiking-backpack.html',
+      href: '/category/hiking-backpack.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1376613/k$d9490e3848c32548eb58f456caa9f2a3/defaut.jpg?format=auto',
     },
     {
       label: '러닝 모자',
-      href: '/c/running-cap.html',
+      href: '/category/running-cap.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378140/k$d912e92979268f66a4aa9a2d21fb9827/defaut.jpg?format=auto',
     },
     {
       label: '트레일 러닝',
-      href: '/c/trail-running.html',
+      href: '/category/trail-running.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1389587/k$fbca100ef078de7b6c5695985ab0a00d/defaut.jpg?format=auto',
     },
     {
       label: '러닝 반팔',
-      href: '/c/running-tshirt.html',
+      href: '/category/running-tshirt.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378147/k$cfa96010819e762782ab77f6515ecb66/defaut.jpg?format=auto',
     },
     {
       label: '러닝 양말',
-      href: '/c/running-socks.html',
+      href: '/category/running-socks.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1376612/k$7c32e3c1a459cb66a55b5dcf38aa9067/defaut.jpg?format=auto',
     },
     {
       label: '하이킹 자켓',
-      href: '/c/hiking-jacket.html',
+      href: '/category/hiking-jacket.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378139/k$3512ff9cfc4dd92fda473c2e69520537/defaut.jpg?format=auto',
     },
     {
       label: '하이킹 팬츠',
-      href: '/c/hiking-pants.html',
+      href: '/category/hiking-pants.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1378146/k$7427faea76ecfc35192270b7a46f526d/defaut.jpg?format=auto',
     },
     {
       label: '하이킹 액세서리',
-      href: '/c/hiking-accessory.html',
+      href: '/category/hiking-accessory.html',
       imageUrl:
         'https://contents.mediadecathlon.com/s1313815/k$d43aaea41c07c63d9fa06e540e6c270a/defaut.jpg?format=auto',
     },

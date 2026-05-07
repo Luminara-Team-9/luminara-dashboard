@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect} from 'react';
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
 import { ProductCard } from '@/entities/product/ui/ProductCard';
@@ -18,17 +18,24 @@ const categoryNames: Record<string, string> = {
 };
 
 const AVAILABLE_BRANDS = ['KIPRUN', 'KALENJI', 'DECATHLON', 'QUECHUA', 'SIMOND'];
-const AVAILABLE_CATEGORIES = ['러닝', '등산'];
+const AVAILABLE_CATEGORIES = ['러닝', '등산', '필라테스/피트니스', '캠핑', '수영/스노클링', '자전거', '축구'];
 
 export function CategoryPage({ categorySlug }: { categorySlug: string }) {
   const categoryName = categoryNames[categorySlug] || categorySlug;
 
   // 1. Dynamic State for Filters
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    categoryName !== 'FIRST CHOICE' ? [categoryName] : []
+  );
+  
   const [sortOrder, setSortOrder] = useState<string>('추천순');
 
+  useEffect(() => {
+    setSelectedCategories(categoryName !== 'FIRST CHOICE' ? [categoryName] : []);
+    setSelectedBrands([]); // Optional: clear brands when swapping categories
+  }, [categoryName]);
+  
   // 2. Toggle Handlers
   const toggleBrand = (brand: string) => {
     setSelectedBrands(prev => 

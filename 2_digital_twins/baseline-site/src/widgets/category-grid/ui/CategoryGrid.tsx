@@ -1,11 +1,11 @@
 export function CategoryGrid() {
   const categories = [
-    { label: "러닝", emoji: "🏃", href: "/c/running", color: "#fff7ed" },
-    { label: "등산", emoji: "🧗", href: "/c/hiking", color: "#f0fdf4" },
-    { label: "필라테스/피트니스", emoji: "🏋️", href: "/c/fitness", color: "#faf5ff" },
-    { label: "캠핑", emoji: "⛺", href: "/c/camping", color: "#fefce8" },
-    { label: "킥보드/인라인", emoji: "🛴", href: "/c/scooter", color: "#eff6ff" },
-    { label: "수영/스노클링", emoji: "🏊", href: "/c/swimming", color: "#ecfeff" },
+    { label: "러닝", emoji: "🏃", href: "/category/running", color: "#fff7ed" },
+    { label: "등산", emoji: "🧗", href: "/category/hiking", color: "#f0fdf4" },
+    { label: "필라테스/피트니스", emoji: "🏋️", href: "/category/fitness", color: "#faf5ff" },
+    { label: "캠핑", emoji: "⛺", href: "/category/camping", color: "#fefce8" },
+    { label: "킥보드/인라인", emoji: "🛴", href: "/category/scooter", color: "#eff6ff" },
+    { label: "수영/스노클링", emoji: "🏊", href: "/category/swimming", color: "#ecfeff" },
   ];
 
   return (
