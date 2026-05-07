@@ -61,7 +61,7 @@ From: postgres:15.6-bookworm
         echo "$POSTGRES_PASSWORD" > /tmp/pg_pw.txt
         # Add the -U flag here!
         initdb -D "$PGDATA" -U "$DB_USER" --auth=md5 --pwfile=/tmp/pg_pw.txt
-        rm /tmp/pg_pw.tx
+        rm /tmp/pg_pw.txt
     fi
 
     echo "------------------------------------------------"
