@@ -17,17 +17,22 @@ const categoryNames: Record<string, string> = {
   football: '축구',
 };
 
-const AVAILABLE_BRANDS = ['KIPRUN', 'KALENJI', 'DECATHLON', 'QUECHUA', 'SIMOND'];
-const AVAILABLE_CATEGORIES = ['러닝', '등산', '필라테스/피트니스', '캠핑', '수영/스노클링', '자전거', '축구'];
+// Filter Data Maps
+const FILTER_GENDERS = ['남성용', '여성용', '공용', '남아용', '여아용'];
+const FILTER_COLORS = ['블랙', '화이트', '블루', '레드', '그레이', '핑크'];
+const FILTER_TYPES = ['반바지', '반소매 티셔츠', '긴소매 티셔츠', '자켓', '양말', '배낭 / 백팩'];
+const FILTER_SIZES = ['S', 'M', 'L', 'XL', '2XL', 'Free'];
 
 export function CategoryPage({ categorySlug }: { categorySlug: string }) {
   const categoryName = categoryNames[categorySlug] || categorySlug;
 
-  // 1. Dynamic State for Filters
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(
-    categoryName !== 'FIRST CHOICE' ? [categoryName] : []
-  );
+  // State Management for ALL complex filters
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedGenders, setSelectedGenders] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+
   
   const [sortOrder, setSortOrder] = useState<string>('추천순');
 
@@ -35,31 +40,28 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
     setSelectedCategories(categoryName !== 'FIRST CHOICE' ? [categoryName] : []);
     setSelectedBrands([]); // Optional: clear brands when swapping categories
   }, [categoryName]);
-  
-  // 2. Toggle Handlers
-  const toggleBrand = (brand: string) => {
-    setSelectedBrands(prev => 
-      prev.includes(brand) ? prev.filter(b => b !== brand) : [...prev, brand]
-    );
+
+  // Generic Toggle Handler
+  const toggleFilter = (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
+    setter(prev => prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]);
+
   };
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-    );
+  const clearAllFilters = () => {
+    setSelectedCategories([]); setSelectedGenders([]); setSelectedColors([]);
+    setSelectedTypes([]); setSelectedSizes([]);
   };
 
-  // 3. Real-time Filtering Engine
   const filteredProducts = useMemo(() => {
     let result = runningProducts.filter(product => {
-
-      // Check if product matches selected brands (brand is often in the product name)
-      const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => product.name.includes(brand));
+      const matchesCat = selectedCategories.length === 0 || selectedCategories.includes(product.category);
+      const matchesGender = selectedGenders.length === 0 || (product.gender && selectedGenders.includes(product.gender));
+      const matchesColor = selectedColors.length === 0 || (product.colors && product.colors.some(c => selectedColors.includes(c)));
+      const matchesType = selectedTypes.length === 0 || (product.productType && selectedTypes.includes(product.productType));
+      const matchesSize = selectedSizes.length === 0 || (product.sizes && product.sizes.some(s => selectedSizes.includes(s)));
       
-      // Check if product matches selected categories
-      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(product.category);
+      return matchesCat && matchesGender && matchesColor && matchesType && matchesSize;
 
-      return matchesBrand && matchesCategory;
     });
 
     // Step B: Sort
@@ -73,104 +75,115 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
     }
 
     return result;
-  }, [selectedBrands, selectedCategories, sortOrder]);
+  }, [selectedCategories, selectedGenders, selectedColors, selectedTypes, selectedSizes, sortOrder]);
+
+  // Helper function to calculate real-time counts for the sidebar!
+  const getFilterCount = (field: 'gender' | 'colors' | 'productType' | 'sizes', value: string) => {
+    return runningProducts.filter(p => {
+      if (!p[field]) return false;
+      if (Array.isArray(p[field])) return (p[field] as string[]).includes(value);
+      return p[field] === value;
+    }).length;
+  };
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb' }}>
       <Header />
       <main>
-        <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb' }}>
-          <div
-            style={{
-              maxWidth: '1200px',
-              margin: '0 auto',
-              padding: '12px 16px',
-              display: 'flex',
-              gap: '8px',
-              fontSize: '13px',
-              color: '#6b7280',
-            }}
-          >
-            <a href="/" style={{ color: '#6b7280', textDecoration: 'none' }}>
-              홈
-            </a>
-            <span>{'>'}</span>
-            <span style={{ color: '#111827', fontWeight: 500 }}>{categoryName}</span>
+
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-[1200px] mx-auto px-4 py-6 flex flex-col justify-center">
+            <h1 className="text-2xl font-black italic uppercase text-gray-900 mb-1">{categoryName}</h1>
           </div>
         </div>
 
-        <div className="bg-white border-b border-gray-200">
-          <div className="max-w-[1200px] mx-auto px-4 py-6 flex items-start gap-4">
-            {categorySlug === 'first-choice' && (
-              <div className="w-16 h-16 bg-gray-100 flex-shrink-0">
-                <img
-                  src="https://contents.mediadecathlon.com/p3115871/sq/k$53ff826588e9362fc5dbc161f2cf08cc/%EC%97%AC%EC%84%B1-%EC%B9%B4%EB%B3%B8-%EB%A0%88%EC%9D%B4%EC%8B%B1%ED%99%94-%ED%82%B5%EC%8A%A4%ED%86%B0-%EC%B1%8C%EB%A6%B0%EC%A0%80-kiprun-8967622.jpg?f=200x200&format=auto"
-                  alt="Category icon"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
-            <div className="flex flex-col justify-center">
-              <h1 className="text-2xl font-black italic uppercase text-gray-900 mb-1">
-                {categorySlug === 'first-choice' ? 'FIRST CHOICE' : categoryName}
-              </h1>
-              <p className="text-xs text-gray-500">
-                {categorySlug === 'first-choice'
-                  ? '첫 구매라면? 이 제품부터 시작하세요.'
-                  : '데카트론 추천 상품을 만나보세요.'}
-              </p>
-            </div>
-          </div>
-        </div>
-        {/* Main Content Layout (Sidebar + Grid) */}
         <div className="max-w-[1200px] mx-auto px-4 py-6 flex gap-8 items-start">
           {/* LEFT SIDEBAR: Interactive Filters */}
-          <aside className="hidden lg:block w-1/4 flex-shrink-0 sticky top-[120px]">
+          <aside className="hidden lg:block w-1/4 flex-shrink-0 sticky top-[120px]  max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
             <div className="text-sm font-bold text-gray-900 mb-4 pb-2 border-b border-black flex justify-between">
               <span>필터</span>
-              {(selectedBrands.length > 0 || selectedCategories.length > 0) && (
-                <button 
-                  onClick={() => { setSelectedBrands([]); setSelectedCategories([]); }}
-                  className="text-xs text-blue-600 font-normal hover:underline"
-                >
-                  초기화
-                </button>
-              )}
+              <button onClick={clearAllFilters} className="text-xs text-blue-600 font-normal hover:underline">
+                초기화
+              </button>
             </div>
 
             {/* Brand Filter */}
             <div className="border-b border-gray-200 py-4">
-              <h3 className="text-sm font-bold text-gray-800 mb-3">브랜드</h3>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 성별</h3>
               <div className="flex flex-col gap-2">
-                {AVAILABLE_BRANDS.map(brand => (
-                  <label key={brand} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300"
-                      checked={selectedBrands.includes(brand)}
-                      onChange={() => toggleBrand(brand)}
-                    />
-                    <span className="text-sm text-gray-700">{brand}</span>
-                  </label>
-                ))}
+                {FILTER_GENDERS.map(gender => {
+                  const count = getFilterCount('gender', gender);
+                  if (count === 0) return null; // Hide empty filters
+                  return (
+                    <label key={gender} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedGenders.includes(gender)} onChange={() => toggleFilter(setSelectedGenders, gender)} />
+                        <span className="text-sm text-gray-700">{gender}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">({count})</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Category Filter */}
+            {/* Product Type Filter */}
             <div className="border-b border-gray-200 py-4">
-              <h3 className="text-sm font-bold text-gray-800 mb-3">스포츠 카테고리</h3>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 카테고리</h3>
               <div className="flex flex-col gap-2">
-                {AVAILABLE_CATEGORIES.map(category => (
-                  <label key={category} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300"
-                      checked={selectedCategories.includes(category)}
-                      onChange={() => toggleCategory(category)}
-                    />
-                    <span className="text-sm text-gray-700">{category}</span>
-                  </label>
-                ))}
+                {FILTER_TYPES.map(type => {
+                  const count = getFilterCount('productType', type);
+                  if (count === 0) return null;
+                  return (
+                    <label key={type} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedTypes.includes(type)} onChange={() => toggleFilter(setSelectedTypes, type)} />
+                        <span className="text-sm text-gray-700">{type}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">({count})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Size Filter */}
+            <div className="border-b border-gray-200 py-4">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 사이즈</h3>
+              <div className="flex flex-col gap-2">
+                {FILTER_SIZES.map(size => {
+                  const count = getFilterCount('sizes', size);
+                  if (count === 0) return null;
+                  return (
+                    <label key={size} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedSizes.includes(size)} onChange={() => toggleFilter(setSelectedSizes, size)} />
+                        <span className="text-sm text-gray-700">{size}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">({count})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Color Filter */}
+            <div className="border-b border-gray-200 py-4">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 색상</h3>
+              <div className="flex flex-col gap-2">
+                {FILTER_COLORS.map(color => {
+                  const count = getFilterCount('colors', color);
+                  if (count === 0) return null;
+                  return (
+                    <label key={color} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedColors.includes(color)} onChange={() => toggleFilter(setSelectedColors, color)} />
+                        <span className="text-sm text-gray-700">{color}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">({count})</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           </aside>
