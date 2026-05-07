@@ -49,7 +49,7 @@ From: node:24.15.0-slim
         exit 1
     fi
     # SRE FIX: Explicitly target the configuration file
-    exec lhci server --port=$PORT --config=/workspace/lighthouserc.json
+    exec npx lhci server --port=$PORT --config=/workspace/lighthouserc.json
 
 %help
     Luminara Production LHCI Server
