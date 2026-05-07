@@ -46,6 +46,37 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     return () => observer.disconnect();
   }, []);
 
+  // --- ADD TO CART LOGIC ---
+  const handleAddToCart = () => {
+    const existingCart = JSON.parse(localStorage.getItem('decathlon_cart') || '[]');
+
+    const cartItem = {
+      id: product.id,
+      name: product.name,
+      brand: product.brand,
+      price: product.price,
+      originalPrice: product.originalPrice,
+      size: 'M', // Defaulting to M for now, can be wired to the dropdown later!
+      quantity: 1,
+      imageUrl: product.images[0],
+    };
+
+    const existingItemIndex = existingCart.findIndex(
+      (item: any) => item.id === cartItem.id && item.size === cartItem.size,
+    );
+
+    if (existingItemIndex > -1) {
+      existingCart[existingItemIndex].quantity += 1;
+    } else {
+      existingCart.push(cartItem);
+    }
+
+    localStorage.setItem('decathlon_cart', JSON.stringify(existingCart));
+    window.dispatchEvent(new Event('cartUpdated'));
+    alert('장바구니에 추가되었습니다!'); // "Added to cart!"
+  };
+  // -------------------------
+
   const baseProduct = runningProducts.find((p) => p.id === productId);
 
   // If someone types a random ID in the URL, show a 404 message
@@ -173,11 +204,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
               {/* Buttons */}
               <div ref={mainCartButtonRef}>
-                <Link href="/cart">
-                  <button className="w-full bg-[#3543b4] hover:bg-blue-800 text-white font-bold py-4 rounded-md mb-3 transition-colors">
-                    장바구니 담기
-                  </button>
-                </Link>
+                <button
+                  onClick={handleAddToCart}
+                  className="w-full bg-[#3543b4] hover:bg-blue-800 text-white font-bold py-4 rounded-md mb-3 transition-colors"
+                >
+                  장바구니 담기
+                </button>
               </div>
             </div>
           </div>
@@ -273,11 +305,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   <option key={size}>{size}</option>
                 ))}
               </select>
-              <Link href="/cart" className="flex-1 md:flex-none">
-                <button className="w-full bg-[#3543b4] text-white font-bold py-3 px-8 rounded hover:bg-blue-800 transition-colors">
-                  장바구니 담기
-                </button>
-              </Link>
+              <button
+                onClick={handleAddToCart}
+                className="wflex-1 md:flex-none bg-[#3543b4] text-white font-bold py-3 px-8 rounded hover:bg-blue-800 transition-colors-full bg-[#3543b4] text-white font-bold py-3 px-8 rounded hover:bg-blue-800 transition-colors"
+              >
+                장바구니 담기
+              </button>
             </div>
           </div>
         </div>
