@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
@@ -28,18 +28,22 @@ const defaultProduct = {
 
 export function ProductDetailPage({ productId }: { productId: string }) {
   const [showStickyCart, setShowStickyCart] = useState(false);
+  const mainCartButtonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      // If the user scrolls down 600px (past the main buy button), show the sticky bar
-      if (window.scrollY > 600) {
-        setShowStickyCart(true);
-      } else {
-        setShowStickyCart(false);
-      }
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // If the main button is NOT on the screen (isIntersecting is false), show the sticky bar
+        setShowStickyCart(!entry.isIntersecting);
+      },
+      { threshold: 0, rootMargin: '-112px 0px 0px 0px' }, // Offsets the 112px header!
+    );
+
+    if (mainCartButtonRef.current) {
+      observer.observe(mainCartButtonRef.current);
+    }
+
+    return () => observer.disconnect();
   }, []);
 
   const baseProduct = runningProducts.find((p) => p.id === productId);
@@ -168,11 +172,13 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               </div>
 
               {/* Buttons */}
-              <Link href="/cart">
-                <button className="w-full bg-[#3543b4] hover:bg-blue-800 text-white font-bold py-4 rounded-md mb-3 transition-colors">
-                  장바구니 담기
-                </button>
-              </Link>
+              <div ref={mainCartButtonRef}>
+                <Link href="/cart">
+                  <button className="w-full bg-[#3543b4] hover:bg-blue-800 text-white font-bold py-4 rounded-md mb-3 transition-colors">
+                    장바구니 담기
+                  </button>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -238,7 +244,9 @@ export function ProductDetailPage({ productId }: { productId: string }) {
         </div>
         <div
           className={`fixed top-[112px] left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50 p-4 transform transition-transform duration-300 ${
-            showStickyCart ? 'translate-y-0' : 'translate-y-full'
+            showStickyCart
+              ? 'translate-y-0 opacity-100 visible'
+              : 'translate-y-full opacity-0 invisible'
           }`}
         >
           <div className="max-w-[1200px] mx-auto flex items-center justify-between gap-4">
