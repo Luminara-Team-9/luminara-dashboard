@@ -16,6 +16,7 @@ From: postgres:15.6-bookworm
     export PGSOCKETS=/tmp
     export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+
 %post
     # SRE FIX 1: Restore the PATH immediately
     # This prevents the "mkdir: not found" error by telling the shell where binaries live.
@@ -32,6 +33,7 @@ From: postgres:15.6-bookworm
     
     # SRE FIX 3: Disable disk space check and install tools
     apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
+        postgresql-15-pgvector \
         ca-certificates \
         curl
         
