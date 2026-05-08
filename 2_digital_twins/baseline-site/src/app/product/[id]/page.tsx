@@ -2,6 +2,6 @@ import { ProductDetailPage } from "@/page-components/product-detail/ui/ProductDe
 
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }){
-  const { id } = await params;
-  return <ProductDetailPage productId={id} />;
+  const resolvedParams = await params;
+  return <ProductDetailPage productId={resolvedParams.id} />;
 }

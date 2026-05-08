@@ -1,6 +1,7 @@
-"use client";
+'use client';
 
-import { useState, useMemo, useEffect} from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
 import { ProductCard } from '@/entities/product/ui/ProductCard';
@@ -24,6 +25,7 @@ const FILTER_TYPES = ['반바지', '반소매 티셔츠', '긴소매 티셔츠',
 const FILTER_SIZES = ['S', 'M', 'L', 'XL', '2XL', 'Free'];
 
 export function CategoryPage({ categorySlug }: { categorySlug: string }) {
+  const router = useRouter();
   const categoryName = categoryNames[categorySlug] || categorySlug;
 
   // State Management for ALL complex filters
@@ -33,35 +35,45 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
 
-  
   const [sortOrder, setSortOrder] = useState<string>('추천순');
 
   useEffect(() => {
     setSelectedCategories(categoryName !== 'FIRST CHOICE' ? [categoryName] : []);
-    setSelectedBrands([]); // Optional: clear brands when swapping categories
   }, [categoryName]);
 
   // Generic Toggle Handler
   const toggleFilter = (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
-    setter(prev => prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]);
-
+    setter((prev) =>
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+    );
   };
 
   const clearAllFilters = () => {
-    setSelectedCategories([]); setSelectedGenders([]); setSelectedColors([]);
-    setSelectedTypes([]); setSelectedSizes([]);
+    setSelectedCategories([]);
+    setSelectedGenders([]);
+    setSelectedColors([]);
+    setSelectedTypes([]);
+    setSelectedSizes([]);
   };
 
   const filteredProducts = useMemo(() => {
-    let result = runningProducts.filter(product => {
-      const matchesCat = selectedCategories.length === 0 || selectedCategories.includes(product.category);
-      const matchesGender = selectedGenders.length === 0 || (product.gender && selectedGenders.includes(product.gender));
-      const matchesColor = selectedColors.length === 0 || (product.colors && product.colors.some(c => selectedColors.includes(c)));
-      const matchesType = selectedTypes.length === 0 || (product.productType && selectedTypes.includes(product.productType));
-      const matchesSize = selectedSizes.length === 0 || (product.sizes && product.sizes.some(s => selectedSizes.includes(s)));
-      
-      return matchesCat && matchesGender && matchesColor && matchesType && matchesSize;
+    let result = runningProducts.filter((product) => {
+      const matchesCat =
+        selectedCategories.length === 0 || selectedCategories.includes(product.category);
+      const matchesGender =
+        selectedGenders.length === 0 ||
+        (product.gender && selectedGenders.includes(product.gender));
+      const matchesColor =
+        selectedColors.length === 0 ||
+        (product.colors && product.colors.some((c) => selectedColors.includes(c)));
+      const matchesType =
+        selectedTypes.length === 0 ||
+        (product.productType && selectedTypes.includes(product.productType));
+      const matchesSize =
+        selectedSizes.length === 0 ||
+        (product.sizes && product.sizes.some((s) => selectedSizes.includes(s)));
 
+      return matchesCat && matchesGender && matchesColor && matchesType && matchesSize;
     });
 
     // Step B: Sort
@@ -71,15 +83,22 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
       result.sort((a, b) => b.price - a.price);
     } else if (sortOrder === '추천순') {
       // Sort by rating (highest first), fallback to 0 if no rating exists
-      result.sort((a, b) => (b.rating || 0) - (a.rating || 0)); 
+      result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     }
 
     return result;
-  }, [selectedCategories, selectedGenders, selectedColors, selectedTypes, selectedSizes, sortOrder]);
+  }, [
+    selectedCategories,
+    selectedGenders,
+    selectedColors,
+    selectedTypes,
+    selectedSizes,
+    sortOrder,
+  ]);
 
   // Helper function to calculate real-time counts for the sidebar!
   const getFilterCount = (field: 'gender' | 'colors' | 'productType' | 'sizes', value: string) => {
-    return runningProducts.filter(p => {
+    return runningProducts.filter((p) => {
       if (!p[field]) return false;
       if (Array.isArray(p[field])) return (p[field] as string[]).includes(value);
       return p[field] === value;
@@ -90,10 +109,11 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb' }}>
       <Header />
       <main>
-
         <div className="bg-white border-b border-gray-200">
           <div className="max-w-[1200px] mx-auto px-4 py-6 flex flex-col justify-center">
-            <h1 className="text-2xl font-black italic uppercase text-gray-900 mb-1">{categoryName}</h1>
+            <h1 className="text-2xl font-black italic uppercase text-gray-900 mb-1">
+              {categoryName}
+            </h1>
           </div>
         </div>
 
@@ -102,7 +122,10 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
           <aside className="hidden lg:block w-1/4 flex-shrink-0 sticky top-[120px]  max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
             <div className="text-sm font-bold text-gray-900 mb-4 pb-2 border-b border-black flex justify-between">
               <span>필터</span>
-              <button onClick={clearAllFilters} className="text-xs text-blue-600 font-normal hover:underline">
+              <button
+                onClick={clearAllFilters}
+                className="text-xs text-blue-600 font-normal hover:underline"
+              >
                 초기화
               </button>
             </div>
@@ -111,13 +134,21 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
             <div className="border-b border-gray-200 py-4">
               <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 성별</h3>
               <div className="flex flex-col gap-2">
-                {FILTER_GENDERS.map(gender => {
+                {FILTER_GENDERS.map((gender) => {
                   const count = getFilterCount('gender', gender);
                   if (count === 0) return null; // Hide empty filters
                   return (
-                    <label key={gender} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <label
+                      key={gender}
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded"
+                    >
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedGenders.includes(gender)} onChange={() => toggleFilter(setSelectedGenders, gender)} />
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 rounded"
+                          checked={selectedGenders.includes(gender)}
+                          onChange={() => toggleFilter(setSelectedGenders, gender)}
+                        />
                         <span className="text-sm text-gray-700">{gender}</span>
                       </div>
                       <span className="text-xs text-gray-400">({count})</span>
@@ -131,13 +162,21 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
             <div className="border-b border-gray-200 py-4">
               <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 카테고리</h3>
               <div className="flex flex-col gap-2">
-                {FILTER_TYPES.map(type => {
+                {FILTER_TYPES.map((type) => {
                   const count = getFilterCount('productType', type);
                   if (count === 0) return null;
                   return (
-                    <label key={type} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <label
+                      key={type}
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded"
+                    >
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedTypes.includes(type)} onChange={() => toggleFilter(setSelectedTypes, type)} />
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 rounded"
+                          checked={selectedTypes.includes(type)}
+                          onChange={() => toggleFilter(setSelectedTypes, type)}
+                        />
                         <span className="text-sm text-gray-700">{type}</span>
                       </div>
                       <span className="text-xs text-gray-400">({count})</span>
@@ -151,13 +190,21 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
             <div className="border-b border-gray-200 py-4">
               <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 사이즈</h3>
               <div className="flex flex-col gap-2">
-                {FILTER_SIZES.map(size => {
+                {FILTER_SIZES.map((size) => {
                   const count = getFilterCount('sizes', size);
                   if (count === 0) return null;
                   return (
-                    <label key={size} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <label
+                      key={size}
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded"
+                    >
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedSizes.includes(size)} onChange={() => toggleFilter(setSelectedSizes, size)} />
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 rounded"
+                          checked={selectedSizes.includes(size)}
+                          onChange={() => toggleFilter(setSelectedSizes, size)}
+                        />
                         <span className="text-sm text-gray-700">{size}</span>
                       </div>
                       <span className="text-xs text-gray-400">({count})</span>
@@ -171,13 +218,21 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
             <div className="border-b border-gray-200 py-4">
               <h3 className="text-sm font-bold text-gray-800 mb-3">필터 기준 색상</h3>
               <div className="flex flex-col gap-2">
-                {FILTER_COLORS.map(color => {
+                {FILTER_COLORS.map((color) => {
                   const count = getFilterCount('colors', color);
                   if (count === 0) return null;
                   return (
-                    <label key={color} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <label
+                      key={color}
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 rounded"
+                    >
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={selectedColors.includes(color)} onChange={() => toggleFilter(setSelectedColors, color)} />
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 rounded"
+                          checked={selectedColors.includes(color)}
+                          onChange={() => toggleFilter(setSelectedColors, color)}
+                        />
                         <span className="text-sm text-gray-700">{color}</span>
                       </div>
                       <span className="text-xs text-gray-400">({count})</span>
@@ -197,7 +252,7 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-500 hidden md:inline">정렬기준</span>
-                <select 
+                <select
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value)}
                   className="text-sm font-bold text-gray-800 outline-none cursor-pointer bg-transparent border-none"
@@ -218,9 +273,13 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
               /* Filtered Grid */
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredProducts.map((product) => (
-                  <a key={product.id} href={`/product/${product.id}`} style={{ textDecoration: 'none' }}>
+                  <div
+                    key={product.id}
+                    onClick={() => router.push(`/product/${product.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <ProductCard product={product} />
-                  </a>
+                  </div>
                 ))}
               </div>
             )}
