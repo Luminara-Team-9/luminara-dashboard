@@ -118,6 +118,44 @@ jobs:
           output_path: "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}"
 
       # ---------------------------------------------------------
+      # PHASE 5: AUTOMATED SERVICE ORCHESTRATION
+      # ---------------------------------------------------------
+      - name: 🔄 Restart Fleet Service
+        run: |
+          echo "Mapping Artifact ${{ env.SAFE_NAME }} to Fleet Target..."
+          
+          # SRE Translation Map: Converts container name to bash script target
+          case "${{ env.SAFE_NAME }}" in
+            "infrastructure_db_postgres") TARGET="postgres" ;;
+            "infrastructure_db_redis") TARGET="redis" ;;
+            "infrastructure_db_clickhouse") TARGET="clickhouse" ;;
+            "infrastructure_lhci_server") TARGET="lhci" ;;
+            "infrastructure_swetrix_rum") TARGET="swetrix" ;;
+            "infrastructure_agentic_remediation") TARGET="agent" ;;
+            *) 
+              echo "⚠️ Unknown target mapping for ${{ env.SAFE_NAME }}. Skipping auto-restart."
+              TARGET="unknown"
+              ;;
+          esac
+          
+          if [ "$TARGET" != "unknown" ]; then
+            echo "🚀 Triggering Zero-Downtime Restart for: $TARGET"
+            # Execute your orchestrator script (ensure path is correct and it is executable)
+            /abr/coss41/Luminara_App/luminara_up.sh restart "$TARGET"
+            
+            # Brief health check pause
+            sleep 10
+            
+            echo "🩺 Verifying instance health..."
+            if singularity instance list | grep -q "luminara_"; then
+              echo "✅ Service successfully restarted and is live!"
+            else
+              echo "❌ CRITICAL: Service failed to boot after restart."
+              exit 1
+            fi
+          fi
+
+      # ---------------------------------------------------------
       # PHASE 5: GLOBAL FAIL-SAFE CLEANUP
       # ---------------------------------------------------------
       - name: Cleanup
