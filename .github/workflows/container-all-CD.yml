@@ -6,6 +6,7 @@ on:
     paths:
       - '**.def'
       - '!infrastructure/web.def'  # 🚨 THE FIX: Ignore the dashboard container!
+      - '!infrastructure/digital_clone.def'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
