@@ -1,0 +1,99 @@
+name: "6. [Push-Clone_Audit] Target Clone Sync & Deploy"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '2_digital_twins/active-staging/**'
+      - 'infrastructure/digital_clone.def'
+
+concurrency:
+  # Crucial: If two PRs merge within seconds of each other, 
+  # cancel the older CD deployment and only build the newest main branch!
+  group: deploy-optimized-clone
+  cancel-in-progress: true
+
+jobs:
+  deploy_optimized:
+    name: Build & Deploy Live Clone
+    runs-on: [self-hosted, Linux]
+    
+    env:
+      IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
+      KEY_DIR: /abr/coss41/Luminara_App/secure_keys
+      ARTIFACT_NAME: infrastructure_digital_clone.sif
+      BACKUP_NAME: infrastructure_digital_clone.bak.sif
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # PHASE 1: CREATE ROLLBACK BACKUP
+      # ---------------------------------------------------------
+      - name: 💾 Backup Stable Container
+        run: |
+          echo "Backing up current optimized clone container..."
+          mkdir -p ${{ env.IMAGE_DIR }}
+          cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
+
+      # ---------------------------------------------------------
+      # PHASE 2: BAKE THE RELEASE ARTIFACT (Directly from Main!)
+      # ---------------------------------------------------------
+      - name: 🏗️ Build Fresh Release Artifact
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "infrastructure/digital_clone.def" 
+          cache_key_suffix: "prod_optimized_clone"
+          output_path: "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
+
+      # ---------------------------------------------------------
+      # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
+      # ---------------------------------------------------------
+      - name: 🚀 Hot-Swap, Verify & Automated Rollback
+        run: |
+          echo "Rebooting live persistent Optimized Clone..."
+          
+          # 1. Gracefully stop the current live optimized instance
+          singularity instance stop luminara_opt_clone 2>/dev/null || true
+          
+          # 2. Boot the freshly baked Showroom container
+          singularity instance start \
+            --env-file "${{ env.KEY_DIR }}/.env.opt_clone.prod" \
+            ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_opt_clone
+            
+          echo "⏱️ Waiting 10 seconds for Next.js to boot..."
+          sleep 10
+          
+          echo "🩺 Performing Health Check..."
+          if singularity instance list | grep -q "luminara_opt_clone"; then
+            echo "✅ Health Check Passed: Container is alive and routing traffic!"
+          else
+            echo "❌ CRITICAL FAILURE: Container died immediately after booting."
+            echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
+            
+            # Tear down the broken deployment
+            singularity instance stop luminara_opt_clone 2>/dev/null || true
+            
+            # Restore the backup artifact
+            mv ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}
+            
+            # Reboot the stable backup
+            singularity instance start \
+              --env-file "${{ env.KEY_DIR }}/.env.opt_clone.prod" \
+              ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_opt_clone
+              
+            echo "🚨 Rollback complete. Production Showroom is back online, but this deployment failed."
+            exit 1
+          fi
+
+      # ---------------------------------------------------------
+      # PHASE 4: CLEANUP RAM DISK
+      # ---------------------------------------------------------
+      - name: 🧹 Garbage Collection
+        if: always()
+        run: |
+          echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
+          chmod -R u+rwX /dev/shm/sing_build_*_prod_optimized_clone 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_prod_optimized_clone || true

@@ -1,4 +1,4 @@
-name: "3. [PR-Prod] Dashboard Gatekeeper & Builder (Pure Container)"
+name: "3. [PR-Dashboard] Dashboard Gatekeeper & Builder"
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     paths:
       - '1_dashboard_app/**'
       - '0_shared_packages/**'
-      - 'infrastructure/web.def' # SRE FIX: Updated to new def file
+      - 'infrastructure/web.def'
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
@@ -17,35 +17,40 @@ env:
 
 jobs:
   build-and-stage:
+    name: Pure Container Validation
     runs-on: [self-hosted, Linux]
     
     steps:
-      - name: Checkout Code
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      # SRE FIX: Completely removed the Host Node/PNPM Dry-Run.
-      # The container compilation IS the dry-run now.
-
       # ---------------------------------------------------------
-      # PHASE 1: BUILD PURE CONTAINER ARTIFACT
+      # PHASE 1: BUILD PURE CONTAINER ARTIFACT (Validation)
       # ---------------------------------------------------------
-      - name: Build & Verify Dashboard Container
+      # If the code has errors, pnpm build fails inside the container, 
+      # the Singularity build crashes, and this Action prevents the merge.
+      - name: 🏗️ Build & Verify Dashboard Container
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/web.def" # SRE FIX: Point to the Pure Container definition
-          cache_key_suffix: "prod_dashboard" # Aligned suffix with the CD pipeline
+          def_file_path: "infrastructure/web.def" 
+          cache_key_suffix: "pr_dashboard" 
           output_path: "${{ env.STAGING_PATH }}/pr_${{ github.event.pull_request.number }}.sif"
 
       # ---------------------------------------------------------
-      # PHASE 2: GLOBAL FAIL-SAFE CLEANUP
+      # PHASE 2: GLOBAL FAIL-SAFE CLEANUP (Zero-Bloat Protocol)
       # ---------------------------------------------------------
-      - name: Garbage Collection
+      - name: 🧹 Garbage Collection
         if: always()
         run: |
+          echo "🗑️ Deleting Ephemeral PR Artifact to save disk space..."
+          # Since CD builds on main, we immediately destroy the PR artifact!
+          rm -f "${{ env.STAGING_PATH }}/pr_${{ github.event.pull_request.number }}.sif" || true
+          
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
-          chmod -R u+rwX /dev/shm/sing_build_*_prod_dashboard 2>/dev/null || true
-          rm -rf /dev/shm/sing_build_*_prod_dashboard || true
+          chmod -R u+rwX /dev/shm/sing_build_*_pr_dashboard 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_pr_dashboard || true
           
           echo "🗑️ Running NFS Cache Garbage Collection..."
           find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
-          echo "✅ Cleanup complete."
+          
+          echo "✅ Cleanup complete. Zero storage bloat left behind."

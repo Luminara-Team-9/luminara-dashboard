@@ -1,4 +1,4 @@
-name: "4. [Push-Prod] Dashboard Deployer"
+name: "4. [Push-Dashboard] Dashboard Deployer"
 
 on:
   push:
@@ -9,87 +9,56 @@ on:
       - 'infrastructure/web.def'
 
 concurrency:
-  group: production-deployment
-  cancel-in-progress: false
+  # Crucial: Cancels older deployments if multiple PRs merge concurrently
+  group: deploy-dashboard
+  cancel-in-progress: true
 
 env:
-  # Notice PROD_CODE_PATH is completely gone! 
   PROD_SIF_PATH: "/abr/coss41/Luminara_App/images-prod"
-  STAGING_PATH: "/abr/coss41/Luminara_App/images-staging"
   KEY_DIR: "/abr/coss41/Luminara_App/secure_keys"
+  ARTIFACT_NAME: "infrastructure_web.sif"
+  BACKUP_NAME: "infrastructure_web.bak.sif"
 
 jobs:
   deploy-to-prod:
     runs-on: [self-hosted, Linux]
     
     steps:
-      - name: Checkout Merged Code
+      - name: 📥 Checkout Merged Code
         uses: actions/checkout@v4
 
       # ---------------------------------------------------------
-      # PHASE 1: LOCATE STAGED ARTIFACTS
+      # PHASE 1: CREATE ROLLBACK BACKUP
       # ---------------------------------------------------------
-      - name: Locate Staged PR Artifacts
-        id: staging_check
+      - name: 💾 Backup Stable Container
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          PR_NUMBER=$(echo "$COMMIT_MSG" | grep -o -E '#[0-9]+' | head -1 | sed 's/#//')
-          STAGED_FILE="${{ env.STAGING_PATH }}/pr_${PR_NUMBER}.sif"
-          
-          if [ -n "$PR_NUMBER" ] && [ -f "$STAGED_FILE" ]; then
-            echo "found=true" >> $GITHUB_OUTPUT
-            echo "pr_file=$STAGED_FILE" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-
-      # ---------------------------------------------------------
-      # PHASE 2: BACKUP & PROMOTE (OR FLAG FOR BUILD)
-      # ---------------------------------------------------------
-      - name: Create Rollback Backup
-        run: |
-          echo "💾 Backing up current production container..."
+          echo "Backing up current production container..."
           mkdir -p ${{ env.PROD_SIF_PATH }}
-          cp ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif ${{ env.PROD_SIF_PATH }}/infrastructure_web.bak.sif || echo "ℹ️ No previous SIF found to backup."
-
-      - name: Artifact Promotion or Force Build
-        run: |
-          # SRE FIX: If no staged artifact exists, we MUST build a new one 
-          # because the code changes need to be baked into the image.
-          if [ "${{ steps.staging_check.outputs.found }}" == "true" ]; then
-            echo "✅ Promoting staged container for PR #${PR_NUMBER}..."
-            cp ${{ steps.staging_check.outputs.pr_file }} ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif
-            echo "REQUIRES_BUILD=false" >> $GITHUB_ENV
-          else
-            echo "🚨 No staged artifact found (Direct push to main?). Flagging for Build..."
-            echo "REQUIRES_BUILD=true" >> $GITHUB_ENV
-          fi
+          cp ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
 
       # ---------------------------------------------------------
-      # PHASE 3: ON-DEMAND CONTAINER BUILD (CONDITIONAL)
+      # PHASE 2: BAKE ON MAIN (Race-Condition Fix)
       # ---------------------------------------------------------
-      - name: Run Production Container Build
-        if: env.REQUIRES_BUILD == 'true'
+      - name: 🏗️ Bake Fresh Production Artifact
+        # We ALWAYS build from the freshly merged main branch! No stale artifacts.
         uses: ./.github/actions/build-sif-images
         with:
-          # Ensure this points to your new Pure Container definition
           def_file_path: "infrastructure/web.def" 
           cache_key_suffix: "prod_dashboard"
-          output_path: "${{ env.PROD_SIF_PATH }}/infrastructure_web_prod.sif"
+          output_path: "${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}"
 
       # ---------------------------------------------------------
-      # PHASE 4: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
+      # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
-      - name: Hot-Swap & Verify Production Container
+      - name: 🔄 Hot-Swap & Verify Production Container
         run: |
-          echo "🔄 Restarting Singularity Instance..."
-          singularity instance stop luminara_web_live || true
+          echo "Restarting Singularity Instance..."
+          singularity instance stop luminara_web_live 2>/dev/null || true
           
-          # SRE FIX: Removed the --bind workspace flag. 
-          # Added the --env-file flag to inject production secrets.
+          # Booting the freshly baked container
           singularity instance start \
             --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
-            ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif \
+            ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
             luminara_web_live
             
           echo "⏱️ Waiting 10 seconds for application to boot..."
@@ -102,12 +71,16 @@ jobs:
             echo "❌ CRITICAL FAILURE: Container died immediately after booting."
             echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
             
-            singularity instance stop luminara_web_live || true
-            mv ${{ env.PROD_SIF_PATH }}/infrastructure_web.bak.sif ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif
+            # Tear down the broken deployment
+            singularity instance stop luminara_web_live 2>/dev/null || true
             
+            # Restore the backup artifact
+            mv ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}
+            
+            # Reboot the stable backup
             singularity instance start \
               --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
-              ${{ env.PROD_SIF_PATH }}/infrastructure_web.sif \
+              ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
               luminara_web_live
               
             echo "🚨 Rollback complete. Production is back online, but this deployment failed."
@@ -115,14 +88,11 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      # PHASE 5: FAIL-SAFE CLEANUP
+      # PHASE 4: FAIL-SAFE CLEANUP
       # ---------------------------------------------------------
-      - name: Garbage Collection
+      - name: 🧹 Garbage Collection
         if: always()
         run: |
-          echo "🧹 Cleaning up 3-day old PR artifacts..."
-          find ${{ env.STAGING_PATH }} -type f -name "*.sif" -mtime +3 -exec rm {} \; || true
-          
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
           chmod -R u+rwX /dev/shm/sing_build_*_prod_dashboard 2>/dev/null || true
           rm -rf /dev/shm/sing_build_*_prod_dashboard || true

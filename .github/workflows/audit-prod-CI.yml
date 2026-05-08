@@ -1,0 +1,88 @@
+name: "5. [PR-Clone_Audit] Autonomous Audit Pipeline"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '2_digital_twins/active-staging/**'
+      - 'infrastructure/digital_clone.def' # Trigger rebuild if infrastructure changes
+
+concurrency:
+  # Ensures multiple pushes to the same PR cancel the older staging runs
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  performance_audit:
+    name: Immutable Artifact Build & Audit
+    runs-on: [self-hosted, Linux]
+    
+    env:
+      TARGET_SITE: 2_digital_twins/active-staging
+      IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
+      STAGING_PATH: /abr/coss41/Luminara_App/images-staging
+      ARTIFACT_NAME: clone_pr_${{ github.event.pull_request.number }}.sif
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # PHASE 1: BAKE THE IMMUTABLE ARTIFACT
+      # ---------------------------------------------------------
+      - name: 🏗️ Build Immutable Web Clone
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "infrastructure/digital_clone.def" 
+          cache_key_suffix: "pr_staging_clone"
+          output_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
+
+      # ---------------------------------------------------------
+      # PHASE 2: AUDIT THE ARTIFACT
+      # ---------------------------------------------------------
+      - name: 🧪 Run Ephemeral Gatekeeper Audit
+        # Calls your custom composite action
+        uses: ./.github/actions/clone-audit
+        with:
+          twin_image_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
+          audit_image_dir: ${{ env.IMAGE_DIR }}
+          target_site: ${{ env.TARGET_SITE }}
+          lhci_token: ${{ secrets.LHCI_BUILD_TOKEN }}
+
+      # ---------------------------------------------------------
+      # PHASE 3: AGENT TRIGGER OR SUCCESS HANDOFF
+      # ---------------------------------------------------------
+      - name: 🤖 Awaken AI Remediation Agent
+        # ONLY executes if the Composite Action throws an error!
+        if: failure()
+        run: |
+          echo "❌ Audit Failed! Triggering Remediation Daemon..."
+          curl -X POST http://localhost:5000/api/trigger-agent \
+            -H "Content-Type: application/json" \
+            -d '{
+              "pr_branch": "${{ github.head_ref }}",
+              "target_dir": "${{ env.TARGET_SITE }}",
+              "thread_id": "pr_${{ github.event.pull_request.number }}"
+            }'
+          echo "✅ Signal sent to AI Agent."
+      
+      # ---------------------------------------------------------
+      # PHASE 4: GLOBAL FAIL-SAFE CLEANUP (Zero-Bloat Protocol)
+      # ---------------------------------------------------------
+      - name: 🧹 Garbage Collection
+        if: always()
+        run: |
+          echo "🗑️ Deleting Ephemeral PR Artifact to save disk space..."
+          # Since CD builds on main, we immediately destroy the PR artifact!
+          rm -f "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}" || true
+          
+          echo "🧹 Force-cleaning local RAM disk to free memory..."
+          # SRE FIX: Aligned the suffix with the cache_key_suffix in Phase 1
+          chmod -R u+rwX /dev/shm/sing_build_*_pr_staging_clone 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_pr_staging_clone || true
+          
+          echo "🗑️ Running NFS Cache Garbage Collection..."
+          find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
+          
+          echo "✅ Cleanup complete. Zero storage bloat left behind."
