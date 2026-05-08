@@ -46,7 +46,7 @@ jobs:
           # 🚨 SRE FIX: Targeted Bind Mount
           # Instead of '.', we drill down directly into the specific Next.js site
           singularity instance start \
-            --bind ./2_digital_twins/active-staging:/workspace \
+            --bind ./${{ env.TARGET_SITE }}:/workspace \
             --env PORT=${{ env.TWIN_PORT }} \
             $IMAGE_DIR/infrastructure_web.sif $TWIN_NAME
             
@@ -78,9 +78,25 @@ jobs:
           singularity exec \
             --bind ./${{ env.TARGET_SITE }}:/workspace \
             --bind ./4_automation_tests/lighthouse-runner/lighthouserc.js:/workspace/lighthouserc.js \
-            $IMAGE_DIR/infrastructure_audit_ephermeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
+            $IMAGE_DIR/infrastructure_audit_ephemeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
 
-      - name: 🛑 Stage 4 - Mandatory Teardown (Failsafe)
+      - name: 🤖 Stage 4 - Awaken AI Remediation Agent
+        # 🚨 THE TRIPWIRE: This step ONLY executes if Stage 3 throws an error!
+        if: failure()
+        run: |
+          echo "❌ Audit Failed! Handing off to the Persistent Remediation Daemon..."
+          
+          curl -X POST http://localhost:5000/api/trigger-agent \
+            -H "Content-Type: application/json" \
+            -d '{
+              "pr_branch": "${{ github.head_ref }}",
+              "target_dir": "${{ env.TARGET_SITE }}",
+              "thread_id": "pr_${{ github.event.pull_request.number }}"
+            }'
+            
+          echo "✅ Handoff complete. Watch the Luminara Dashboard for live updates!"
+
+      - name: 🛑 Stage 5 - Mandatory Teardown (Failsafe)
         # SRE FIX: if: always() guarantees this step runs even if Stage 3 fails (e.g., terrible Lighthouse score)
         if: always()
         run: |
