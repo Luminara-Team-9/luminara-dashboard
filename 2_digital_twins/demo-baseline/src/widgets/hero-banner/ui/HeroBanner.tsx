@@ -24,6 +24,9 @@ export function HeroBanner() {
     },
   ];
 
+  const nextSlide = () => setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
+  const prevSlide = () => setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
@@ -61,6 +64,52 @@ export function HeroBanner() {
           />
         ))}
       </div>
+      {/* Left/Right Arrows */}
+      <button
+        onClick={prevSlide}
+        style={{
+          position: 'absolute',
+          left: '16px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 20,
+          backgroundColor: 'rgba(255,255,255,0.7)',
+          border: 'none',
+          borderRadius: '50%',
+          width: '40px',
+          height: '40px',
+          fontSize: '20px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        〈
+      </button>
+      <button
+        onClick={nextSlide}
+        style={{
+          position: 'absolute',
+          right: '16px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 20,
+          backgroundColor: 'rgba(255,255,255,0.7)',
+          border: 'none',
+          borderRadius: '50%',
+          width: '40px',
+          height: '40px',
+          fontSize: '20px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        〉
+      </button>
+
       {/* Dot indicators */}
       <div
         style={{

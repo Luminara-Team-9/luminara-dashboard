@@ -52,16 +52,14 @@ export function LayoutShiftBomb() {
     <div
       style={{
         width: '100%',
-        height: '160px',
-        backgroundColor: '#ececec',
+        height: '20px',
+        backgroundColor: 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         borderBottom: '5px solid red',
       }}
-    >
-      <h2 style={{ color: '#666' }}>[Legacy Ad Banner Loading...]</h2>
-    </div>
+    ></div>
   );
 }
 
