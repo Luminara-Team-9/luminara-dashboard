@@ -122,4 +122,4 @@ Thumbs.db
 
 # Cursor IDE specific
 .cursor/
-!.cursorrules
+!.cursorrules4_automation_tests/lighthouse-runner/results/
