@@ -3,12 +3,8 @@ transform.py
 Cleans and validates extracted Lighthouse metrics.
 Prepares data for loading into PostgreSQL.
 
-Flow:
-    extract.py output (raw dict)
-            ↓
-    transform(extracted)
-            ↓
-    clean validated dict ready for load.py
+Flow: extract.py output → transform() → dict
+Verified against: Decathlon Korea + Nike Lighthouse JSON
 """
 
 from datetime import datetime, timezone
@@ -16,17 +12,15 @@ from datetime import datetime, timezone
 
 def transform(extracted):
     """
-    Clean and validate extracted Lighthouse metrics.
-    Input:  extracted = raw dict from extract.py
-    Output: clean validated dict ready for PostgreSQL
+    Clean and validate extracted metrics.
+    Input:  raw dict from extract.py
+    Output: clean dict ready for load.py
     """
 
-    # ─────────────────────────────────────────────────
-    # HELPER FUNCTIONS
-    # ─────────────────────────────────────────────────
+    # ── Helper functions ──────────────────────────────
 
     def safe_float(value):
-        # safely convert to float, None if fails
+        """Convert to float, None if fails."""
         if value is None:
             return None
         try:
@@ -35,7 +29,7 @@ def transform(extracted):
             return None
 
     def safe_int(value):
-        # safely convert to int, None if fails
+        """Convert to int, None if fails."""
         if value is None:
             return None
         try:
@@ -44,8 +38,7 @@ def transform(extracted):
             return None
 
     def safe_round(value, decimals=2):
-        # safely round float, None if fails
-        # Example: 4039.58755 → 4039.59
+        """Round float safely, None if fails."""
         if value is None:
             return None
         try:
@@ -54,8 +47,7 @@ def transform(extracted):
             return None
 
     def score_to_100(value):
-        # convert Lighthouse 0-1 score → 0-100
-        # Example: 0.33 → 33.0
+        """Convert Lighthouse 0-1 score → 0-100."""
         if value is None:
             return None
         try:
@@ -64,7 +56,10 @@ def transform(extracted):
             return None
 
     def parse_timestamp(fetch_time):
-        # convert "2026-05-05T18:02:51.468Z" → datetime
+        """
+        Convert Lighthouse fetchTime → datetime.
+        Format: "2026-05-05T18:02:51.468Z"
+        """
         if fetch_time is None:
             return None
         try:
@@ -76,8 +71,10 @@ def transform(extracted):
             return None
 
     def get_severity(savings_ms):
-        # assign severity based on savings_ms
-        # high > 500ms, medium 200-500ms, low < 200ms
+        """
+        Severity based on savings_ms.
+        high > 500ms / medium 200-500ms / low < 200ms
+        """
         if savings_ms is None:
             return 'low'
         if savings_ms > 500:
@@ -87,65 +84,108 @@ def transform(extracted):
         else:
             return 'low'
 
-    # ─────────────────────────────────────────────────
-    # TRANSFORM OPPORTUNITIES
-    # adds severity to each opportunity
-    # ─────────────────────────────────────────────────
+    def get_category(opportunity_id):
+        """
+        Auto-detect category from opportunity_id keywords.
+        """
+        oid = opportunity_id.lower()
 
+        if any(k in oid for k in [
+            'javascript', 'js', 'script',
+            'render-blocking', 'bootup',
+            'mainthread', 'third-part',
+        ]):
+            return 'js'
+
+        elif any(k in oid for k in [
+            'css', 'stylesheet', 'style'
+        ]):
+            return 'css'
+
+        elif any(k in oid for k in [
+            'image', 'img', 'webp',
+            'responsive', 'offscreen',
+            'animated'
+        ]):
+            return 'image'
+
+        elif any(k in oid for k in [
+            'server', 'response-time', 'ttfb'
+        ]):
+            return 'server'
+
+        elif any(k in oid for k in [
+            'network', 'compression', 'preconnect',
+            'redirect', 'byte', 'transfer',
+            'font', 'cache', 'http', 'latency'
+        ]):
+            return 'network'
+
+        elif any(k in oid for k in [
+            'dom', 'html', 'document'
+        ]):
+            return 'html'
+
+        else:
+            return 'other'
+
+    # ── Transform opportunities ───────────────────────
+    # adds severity + category to each opportunity
+    # passes details through for JSONB storage
+    # order preserved: highest savings_ms first (from extract.py)
     transformed_opportunities = []
     for opp in extracted.get('opportunities', []):
         savings = safe_round(opp.get('savings_ms'))
         transformed_opportunities.append({
             'opportunity_id': opp.get('opportunity_id', ''),
-            'title': opp.get('title', ''),
-            'description': opp.get('description', ''),
-            'savings_ms': savings,
-            'severity': get_severity(savings),
+            'title':          opp.get('title', ''),
+            'description':    opp.get('description', ''),
+            'savings_ms':     savings,
+            'severity':       get_severity(savings),
+            'category':       get_category(
+                opp.get('opportunity_id', '')
+            ),
+            'details':        opp.get('details', None),
         })
 
-    # ─────────────────────────────────────────────────
-    # RETURN CLEAN DATA
-    # ─────────────────────────────────────────────────
-
+    # ── Return clean data ─────────────────────────────
     return {
 
-        # page metadata
-        'url': extracted.get('url', None),
-
+        # metadata
+        'url':       extracted.get('url', None),
         'timestamp': parse_timestamp(
             extracted.get('fetch_time')
         ),
-        # renamed fetch_time → timestamp
-        # matches lighthouse_runs.timestamp column
 
-        # category scores 0-1 → 0-100
-        'performance_score': score_to_100(
+        # scores: 0-1 → 0-100
+        'performance_score':    score_to_100(
             extracted.get('performance_score')
         ),
-        'accessibility_score': score_to_100(
+        'accessibility_score':  score_to_100(
             extracted.get('accessibility_score')
         ),
         'best_practices_score': score_to_100(
             extracted.get('best_practices_score')
         ),
-        'seo_score': score_to_100(
+        'seo_score':            score_to_100(
             extracted.get('seo_score')
         ),
 
-        # performance metrics rounded to 2 decimals
-        'lcp_ms': safe_round(extracted.get('lcp_ms')),
-        'tbt_ms': safe_round(extracted.get('tbt_ms')),
+        # timing metrics rounded to 2 decimals
+        'lcp_ms':    safe_round(extracted.get('lcp_ms')),
+        'tbt_ms':    safe_round(extracted.get('tbt_ms')),
         'cls_score': safe_round(
             extracted.get('cls_score'), 4
+            # CLS needs 4 decimals e.g. 0.1318
         ),
-        # CLS needs 4 decimals (small number e.g. 0.1318)
-        'fcp_ms': safe_round(extracted.get('fcp_ms')),
-        'si_ms': safe_round(extracted.get('si_ms')),
-        'tti_ms': safe_round(extracted.get('tti_ms')),
-        'ttfb_ms': safe_round(extracted.get('ttfb_ms')),
-        'inp_ms': safe_round(extracted.get('inp_ms')),
+        'fcp_ms':    safe_round(extracted.get('fcp_ms')),
+        'si_ms':     safe_round(extracted.get('si_ms')),
+        'tti_ms':    safe_round(extracted.get('tti_ms')),
+        'ttfb_ms':   safe_round(extracted.get('ttfb_ms')),
+        'inp_ms':    safe_round(extracted.get('inp_ms')),
 
-        # resource metrics
+        # resource sizes
+        # total_page_size_bytes → KB (÷ 1024)
         'page_size_kb': safe_round(
             safe_float(
                 extracted.get('total_page_size_bytes')
@@ -153,17 +193,20 @@ def transform(extracted):
             if extracted.get('total_page_size_bytes')
             else None
         ),
-        # renamed total_page_size_bytes → page_size_kb
-        # converted bytes → KB (divide by 1024)
-        # matches lighthouse_runs.page_size_kb column
-
-        'js_size_kb': safe_round(
+        'js_size_kb':    safe_round(
             extracted.get('js_size_kb')
+        ),
+        'css_size_kb':   safe_round(
+            extracted.get('css_size_kb')
+        ),
+        'image_size_kb': safe_round(
+            extracted.get('image_size_kb')
         ),
         'total_requests': safe_int(
             extracted.get('total_requests')
         ),
 
-        # opportunities with severity added
+        # opportunities with severity + category added
+        # order: highest savings_ms first
         'opportunities': transformed_opportunities,
     }
