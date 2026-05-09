@@ -7,4 +7,6 @@ export type Product = {
   category: string;
   badge?: 'new' | 'sale' | 'best';
   rating?: number;
+  title: string;
+  brand: string;
 };

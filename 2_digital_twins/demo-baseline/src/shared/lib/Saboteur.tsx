@@ -52,7 +52,7 @@ export function LayoutShiftBomb() {
     <div
       style={{
         width: '100%',
-        height: '300px',
+        height: '160px',
         backgroundColor: '#ececec',
         display: 'flex',
         alignItems: 'center',
@@ -68,7 +68,7 @@ export function LayoutShiftBomb() {
 // THE ULTIMATE WRAPPER: Drop this into any page to ruin its performance
 export function LegacyPerformanceWrapper({ children }: { children: React.ReactNode }) {
   if (typeof window !== 'undefined') {
-    simulateHeavyExecution(450);
+    simulateHeavyExecution(100);
   }
 
   return (
@@ -76,8 +76,8 @@ export function LegacyPerformanceWrapper({ children }: { children: React.ReactNo
       <LayoutShiftBomb />
       <AnalyticsPhantom />
       {/* Generate 5 sibling trees of 35-depth invisible Div Soup */}
-      {Array.from({ length: 5 }).map((_, i) => (
-        <DivSoup key={i} depth={35} />
+      {Array.from({ length: 15 }).map((_, i) => (
+        <DivSoup key={i} depth={100} />
       ))}
       {children}
     </>

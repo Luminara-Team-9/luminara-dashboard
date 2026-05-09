@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const navCategories = [
   { label: '모든 스포츠', href: '/c/all-sports' },
@@ -75,6 +75,20 @@ const megaMenuData: Record<
 export function Header() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+
+  useEffect(() => {
+    const handleCartUpdate = () => {
+      setCartCount((prevCount) => prevCount + 1);
+    };
+
+    // Listen for the event dispatched from the ProductCard
+    window.addEventListener('cart-updated', handleCartUpdate);
+
+    return () => {
+      window.removeEventListener('cart-updated', handleCartUpdate);
+    };
+  }, []);
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 50, backgroundColor: 'white' }}>
@@ -258,32 +272,35 @@ export function Header() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '2px',
+                gap: '4px',
                 textDecoration: 'none',
                 color: '#374151',
-                position: 'relative',
               }}
             >
-              <span style={{ fontSize: '20px' }}>🛒</span>
-              <span style={{ fontSize: '10px' }}>내 장바구니</span>
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  backgroundColor: '#0055A4',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '16px',
-                  height: '16px',
-                  fontSize: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                }}
-              >
-                0
+              <div style={{ position: 'relative', display: 'flex' }}>
+                <span style={{ fontSize: '20px', lineHeight: '1' }}>🛒</span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-8px',
+                    backgroundColor: '#0055A4',
+                    color: 'white',
+                    borderRadius: '50%',
+                    width: '16px',
+                    height: '16px',
+                    fontSize: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                  }}
+                >
+                  {cartCount}
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                내 장바구니
               </span>
             </a>
           </div>
