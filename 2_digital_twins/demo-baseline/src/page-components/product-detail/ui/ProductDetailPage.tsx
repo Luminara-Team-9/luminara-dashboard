@@ -28,6 +28,8 @@ const defaultProduct = {
 
 export function ProductDetailPage({ productId }: { productId: string }) {
   const [showStickyCart, setShowStickyCart] = useState(false);
+  const [selectedSize, setSelectedSize] = useState('');
+  const [showError, setShowError] = useState(false);
   const mainCartButtonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +50,15 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
   // --- ADD TO CART LOGIC ---
   const handleAddToCart = () => {
+    if (!selectedSize) {
+      setShowError(true);
+      if (showStickyCart) window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => setShowError(false), 2000);
+      return;
+    }
+
+    setShowError(false);
+
     const existingCart = JSON.parse(localStorage.getItem('decathlon_cart') || '[]');
 
     const cartItem = {
@@ -56,7 +67,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
       brand: product.brand,
       price: product.price,
       originalPrice: product.originalPrice,
-      size: 'M', // Defaulting to M for now, can be wired to the dropdown later!
+      size: selectedSize,
       quantity: 1,
       imageUrl: product.images[0],
     };
@@ -72,8 +83,8 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     }
 
     localStorage.setItem('decathlon_cart', JSON.stringify(existingCart));
-    window.dispatchEvent(new Event('cartUpdated'));
-    alert('장바구니에 추가되었습니다!'); // "Added to cart!"
+    window.dispatchEvent(new Event('cart-updated'));
+    alert('장바구니에 추가되었습니다!');
   };
   // -------------------------
 
@@ -184,32 +195,82 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                 )}
               </div>
 
-              {/* NEW: Size Dropdown */}
-              <div className="mb-8">
+              {/* Size Dropdown & Error */}
+              <div className="mb-6 relative">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-bold text-gray-900">사이즈:</span>
-                  <a href="#" className="text-sm text-blue-600 underline">
+                  <span className="text-sm font-bold text-gray-900">
+                    사이즈 <span className="text-red-500">*</span>
+                  </span>
+                  <a href="#" className="text-sm text-[#0055A4] underline">
                     내 사이즈 찾기
                   </a>
                 </div>
-                <select className="w-full border border-gray-300 rounded-md p-4 text-sm bg-white outline-none focus:border-blue-600 cursor-pointer appearance-none">
-                  <option>사이즈를 선택하세요</option>
+
+                <select
+                  value={selectedSize}
+                  onChange={(e) => {
+                    setSelectedSize(e.target.value);
+                    setShowError(false);
+                  }}
+                  className={`w-full border rounded-md p-4 text-sm bg-white outline-none cursor-pointer appearance-none transition-colors ${showError ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-[#0055A4]'}`}
+                >
+                  <option value="" disabled>
+                    사이즈를 선택하세요 (필수)
+                  </option>
                   {sizes.map((size) => (
                     <option key={size} value={size}>
                       {size}
                     </option>
                   ))}
                 </select>
+
+                {/* Error Toast Message */}
+                <div
+                  className={`absolute -top-10 left-0 right-0 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded shadow transition-opacity duration-300 text-center ${showError ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                >
+                  옵션을 선택해주세요 (No size selected)
+                </div>
               </div>
 
               {/* Buttons */}
               <div ref={mainCartButtonRef}>
                 <button
                   onClick={handleAddToCart}
-                  className="w-full bg-[#3543b4] hover:bg-blue-800 text-white font-bold py-4 rounded-md mb-3 transition-colors"
+                  className="w-full bg-[#0055A4] hover:bg-blue-800 text-white font-bold py-4 rounded-md mb-6 transition-colors shadow-lg"
                 >
                   장바구니 담기
                 </button>
+              </div>
+
+              {/* NEW: Detailed Product Specs */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="font-bold text-gray-900 mb-4">상품 상세 정보</h3>
+                <div className="space-y-3 text-sm text-gray-600">
+                  <p>
+                    <span className="font-bold text-gray-800">제품 번호:</span> 8488034
+                  </p>
+                  <p>
+                    <span className="font-bold text-gray-800">주요 소재:</span> 100% 폴리에스터
+                    (가볍고 땀 흡수/배출 탁월)
+                  </p>
+                  <p>
+                    <span className="font-bold text-gray-800">유지 관리:</span> 30°C 이하 물세탁
+                    권장. 섬유유연제 및 표백제 사용 금지.
+                  </p>
+                  <p>
+                    <span className="font-bold text-gray-800">용도:</span> 봄/여름철 러닝, 야외
+                    트레이닝, 실내 피트니스
+                  </p>
+                  <div className="bg-gray-50 p-4 mt-2 rounded border border-gray-100">
+                    <p className="font-bold text-xs text-gray-800 mb-1">
+                      💡 에코 디자인 (Eco-Design)
+                    </p>
+                    <p className="text-xs">
+                      이 제품은 환경에 미치는 영향을 최소화하기 위해 재생 폴리에스터를 사용해
+                      제작되었습니다.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -275,14 +336,13 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           </div>
         </div>
         <div
-          className={`fixed top-[112px] left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50 p-4 transform transition-transform duration-300 ${
+          className={`fixed top-[112px] left-0 right-0 bg-white border-b border-gray-200 shadow-lg z-40 p-3 transform transition-all duration-300 ease-in-out ${
             showStickyCart
-              ? 'translate-y-0 opacity-100 visible'
-              : 'translate-y-full opacity-0 invisible'
+              ? 'translate-y-0 opacity-100'
+              : '-translate-y-full opacity-0 pointer-events-none'
           }`}
         >
           <div className="max-w-[1200px] mx-auto flex items-center justify-between gap-4">
-            {/* Left side: Image & Title (Hidden on tiny mobile screens) */}
             <div className="hidden md:flex items-center gap-4">
               <img
                 src={product.images[0]}
@@ -291,23 +351,37 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               />
               <div>
                 <p className="text-sm font-bold text-gray-900">{product.name}</p>
-                <p className="text-lg font-black text-gray-900">
+                <p className="text-sm font-black text-gray-900">
                   {product.price.toLocaleString()}원
                 </p>
               </div>
             </div>
 
-            {/* Right side: Size & Button */}
-            <div className="flex flex-1 md:flex-none items-center gap-4 w-full md:w-auto">
-              <select className="flex-1 md:w-48 border border-gray-300 rounded p-3 text-sm bg-white">
-                <option>사이즈 선택</option>
+            <div className="flex flex-1 md:flex-none items-center gap-2 w-full md:w-auto justify-end">
+              {showError && (
+                <span className="text-xs font-bold text-red-500 mr-2">사이즈를 선택하세요!</span>
+              )}
+              <select
+                value={selectedSize}
+                onChange={(e) => {
+                  setSelectedSize(e.target.value);
+                  setShowError(false);
+                }}
+                className={`flex-1 md:w-48 border rounded p-2.5 text-sm bg-white outline-none transition-colors ${showError ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-[#0055A4]'}`}
+              >
+                <option value="" disabled>
+                  사이즈 선택
+                </option>
+
                 {sizes.map((size) => (
-                  <option key={size}>{size}</option>
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
                 ))}
               </select>
               <button
                 onClick={handleAddToCart}
-                className="wflex-1 md:flex-none bg-[#3543b4] text-white font-bold py-3 px-8 rounded hover:bg-blue-800 transition-colors-full bg-[#3543b4] text-white font-bold py-3 px-8 rounded hover:bg-blue-800 transition-colors"
+                className="bg-[#0055A4] text-white font-bold py-2.5 px-6 rounded hover:bg-blue-800 transition-colors"
               >
                 장바구니 담기
               </button>
