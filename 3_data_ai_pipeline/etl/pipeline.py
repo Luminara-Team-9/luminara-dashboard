@@ -2,142 +2,166 @@
 pipeline.py
 Master ETL pipeline — connects extract → transform → load.
 
+Two modes:
 
-Modes:
-    LOCAL (APP_ENV=development):
-    → reads from sample JSON file
-    → uses local PostgreSQL
-    → run manually: python pipeline.py
+    MANUAL (--file):
+        Test pipeline with one real Lighthouse JSON file.
+        Use this before Phoo's automation is ready.
 
-    PRODUCTION (APP_ENV=production):
-    → reads from luminara_phoo database
-    → Phoo inserts metadata + raw JSON
-    → ETL fills metrics + opportunities
-    → runs automatically via cron job at 2:30am
+        python pipeline.py \
+            --file path/to/lighthouse.json \
+            --site_type decathlon \
+            --page_type main \
+            --device_type mobile \
+            --run_number 1
 
-Flow (Production):
-    Phoo's Playwright (2:00am):
-    → INSERTs into playwright_runs
-    → INSERTs into lighthouse_runs (metadata only)
-    → INSERTs into lighthouse_raw_reports (raw JSON)
+    AUTO (--auto):
+        Reads ALL unprocessed raw JSON from core_db.
+        Runs automatically via cron job every night.
+        Use this after Phoo's automation is ready.
+
+        python pipeline.py --auto
+        Cron: 30 2 * * * python pipeline.py --auto
+
+Flow:
+    raw Lighthouse JSON
             ↓
-    This ETL (2:30am cron job):
-    → READs unprocessed rows (lcp_ms IS NULL)
-    → EXTRACTs metrics from raw JSON
-    → UPDATEs lighthouse_runs (fills metrics)
-    → INSERTs into lighthouse_opportunities
+    extract_metrics() → transform() → load()
+            ↓
+    core_db:
+    → playwright_runs
+    → lighthouse_runs
+    → lighthouse_raw_reports
+    → lighthouse_opportunities
 """
 
 import os
 import json
+import argparse
 from dotenv import load_dotenv
-from extract import extract_from_file, extract_metrics
+from extract import extract_metrics
 from transform import transform
 from load import (
     load,
     get_db_connection,
     update_playwright_run,
-    insert_opportunities
 )
 
 load_dotenv()
 
-# reads APP_ENV from .env
-# 'development' = local testing
-# 'production'  = real server
-APP_ENV = os.getenv('APP_ENV', 'development')
 
+def run_pipeline(
+    filepath,
+    site_type,
+    page_type,
+    device_type,
+    run_number,
+    competitor_name=None,
+    network_profile=None,
+    playwright_run_id=None
+):
+    """
+    Run full ETL pipeline on one Lighthouse JSON file.
 
-def run_pipeline_local():
+    Args:
+        filepath:          path to Lighthouse JSON file
+        site_type:         'decathlon' or 'competitor'
+        page_type:         'main', 'product', 'cart' etc.
+        device_type:       'mobile' or 'desktop'
+        run_number:        1, 2, or 3
+        competitor_name:   'nike', 'adidas' etc. (None for Decathlon)
+        network_profile:   'WiFi', '4G' etc. (None if unknown)
+        playwright_run_id: continue existing session or None = new
+
+    Returns:
+        dict with success, playwright_run_id, test_id
+    """
     print("=" * 50)
-    print("ETL PIPELINE — LOCAL MODE")
+    print("ETL PIPELINE — MANUAL MODE")
     print("=" * 50)
+    print(f"→ File:       {filepath}")
+    print(f"→ Site:       {site_type}")
+    print(f"→ Page:       {page_type}")
+    print(f"→ Device:     {device_type}")
+    print(f"→ Run:        {run_number}")
+    if competitor_name:
+        print(f"→ Competitor: {competitor_name}")
 
-    import glob
-    # get all JSON files in sample_data folder
-    json_files = glob.glob('sample_data/*.json')
+    # run_type based on site_type
+    run_type = (
+        'competitor_scan'
+        if site_type == 'competitor'
+        else 'decathlon_daily'
+    )
 
-    if not json_files:
-        print("❌ No JSON files found in sample_data/")
-        return
+    # read raw JSON from file
+    with open(filepath, 'r', encoding='utf-8') as f:
+        raw_json = json.load(f)
 
-    print(f"Found {len(json_files)} JSON files")
+    # STEP 1 — Extract
+    print(f"\n[1/3] Extracting...")
+    extracted = extract_metrics(raw_json)
+    print(f"✅ URL:           {extracted.get('url')}")
+    print(f"✅ Opportunities: {len(extracted['opportunities'])}")
 
-    for filepath in json_files:
-        print(f"\n→ Processing: {filepath}")
+    # STEP 2 — Transform
+    print(f"\n[2/3] Transforming...")
+    transformed = transform(extracted)
+    print(f"✅ Performance:   {transformed['performance_score']}")
+    print(f"✅ LCP:           {transformed['lcp_ms']}ms")
+    print(f"✅ TBT:           {transformed['tbt_ms']}ms")
 
-        with open(filepath, 'r', encoding='utf-8') as f:
-            raw_json = json.load(f)
+    # metadata from args + url from JSON
+    metadata = {
+        'run_type':        run_type,
+        'site_type':       site_type,
+        'competitor_name': competitor_name,
+        'page_type':       page_type,
+        'device_type':     device_type,
+        'network_profile': network_profile,
+        'run_number':      run_number,
+        'url':             extracted.get('url'),
+    }
 
-        # detect site_type from filename
-        if 'nike' in filepath.lower():
-            site_type = 'competitor'
-            competitor_name = 'nike_korea'
-        else:
-            site_type = 'decathlon'
-            competitor_name = None
-
-        metadata = {
-            'run_type': 'decathlon_daily',
-            'site_type': site_type,
-            'competitor_name': competitor_name,
-            'page_type': 'main',
-            'device_type': 'desktop',
-            'network_profile': 'WiFi',
-            'run_number': 1,
-        }
-
-        print(f"→ Site: {metadata['site_type']}")
-        print(f"→ Competitor: {metadata['competitor_name']}")
-
-        # Extract
-        print(f"\n[1/3] Extracting...")
-        extracted = extract_from_file(filepath)
-        print(f"✅ {len(extracted['opportunities'])} opportunities")
-
-        # Transform
-        print(f"\n[2/3] Transforming...")
-        transformed = transform(extracted)
-        print(f"✅ Performance: {transformed['performance_score']}")
-        print(f"✅ LCP: {transformed['lcp_ms']}ms")
-
-        # Load
-        print(f"\n[3/3] Loading...")
-        from load import load
-        result = load(
-            transformed=transformed,
-            raw_json=raw_json,
-            metadata=metadata
-        )
-
-        if result['success']:
-            print(f"✅ Loaded! test_id: {result['test_id']}")
-        else:
-            print(f"❌ Failed: {result['error']}")
+    # STEP 3 — Load into core_db
+    print(f"\n[3/3] Loading into core_db...")
+    result = load(
+        transformed=transformed,
+        raw_json=raw_json,
+        metadata=metadata,
+        playwright_run_id=playwright_run_id
+    )
 
     print(f"\n{'=' * 50}")
-    print(f"✅ All files processed!")
+    if result['success']:
+        print(f"✅ Pipeline completed!")
+        print(f"   playwright_run_id: {result['playwright_run_id']}")
+        print(f"   test_id:           {result['test_id']}")
+    else:
+        print(f"❌ Pipeline failed: {result.get('error')}")
     print("=" * 50)
-def run_pipeline_production():
+
+    return result
+
+
+def run_auto():
     """
-    Production mode.
+    AUTO mode — for cron job daily use.
+    Reads ALL unprocessed raw JSON from core_db.
+    Unprocessed = lighthouse_raw_reports rows
+                  where lighthouse_runs.lcp_ms IS NULL.
 
-    Reads unprocessed rows from luminara_phoo:
-    → lighthouse_runs WHERE lcp_ms IS NULL
-      (Phoo inserted metadata, ETL fills metrics)
-    → joins lighthouse_raw_reports to get raw JSON
+    Phoo's automation inserts:
+    → playwright_runs (session info)
+    → lighthouse_runs (metadata only, metrics = NULL)
+    → lighthouse_raw_reports (raw JSON)
 
-    Then:
-    → extracts metrics from raw JSON
-    → updates lighthouse_runs with metrics
-    → inserts into lighthouse_opportunities
-
-    Note:
-    → Phoo manages playwright_runs herself
-    → ETL only fills metrics + opportunities
+    This ETL fills:
+    → lighthouse_runs (metrics columns)
+    → lighthouse_opportunities (fixable issues)
     """
     print("=" * 50)
-    print("ETL PIPELINE — PRODUCTION MODE")
+    print("ETL PIPELINE — AUTO MODE")
     print("=" * 50)
 
     conn = None
@@ -149,12 +173,12 @@ def run_pipeline_production():
         cursor = conn.cursor()
 
         # get all unprocessed raw reports
-        # unprocessed = lighthouse_runs where lcp_ms IS NULL
-        # meaning Phoo inserted metadata but
-        # ETL hasn't filled metrics yet
+        # unprocessed = lcp_ms IS NULL
+        # meaning Phoo inserted metadata but ETL hasn't run yet
         cursor.execute("""
             SELECT
                 lr.test_id,
+                lr.playwright_run_id,
                 lr.site_type,
                 lr.competitor_name,
                 lr.page_type,
@@ -168,45 +192,55 @@ def run_pipeline_production():
             WHERE lr.lcp_ms IS NULL
             ORDER BY lr.timestamp ASC
         """)
-        # lcp_ms IS NULL = not yet processed by ETL
-        # JOIN = get raw_json matching this test
 
         rows = cursor.fetchall()
         print(f"Found {len(rows)} unprocessed reports")
 
-        for row in rows:
-            try:
-                (test_id, site_type,
-                 competitor_name, page_type,
-                 device_type, network_profile,
-                 run_number, raw_json) = row
+        if len(rows) == 0:
+            print("✅ Nothing to process — all up to date!")
+            return
 
-                # STEP 1 — Extract metrics from raw JSON
+        # track unique playwright_run_ids for status update
+        playwright_run_ids = set()
+
+        for row in rows:
+            (test_id, playwright_run_id,
+             site_type, competitor_name,
+             page_type, device_type,
+             network_profile, run_number,
+             raw_json) = row
+
+            try:
+                print(f"\n→ Processing test_id: {test_id}")
+
+                # STEP 1 — Extract from raw JSON
                 extracted = extract_metrics(raw_json)
 
                 # STEP 2 — Transform
                 transformed = transform(extracted)
 
-                # STEP 3 — Update existing lighthouse_runs
+                # STEP 3 — Update lighthouse_runs metrics
                 # Phoo created row with metadata only
-                # ETL fills the NULL metric columns
+                # ETL fills NULL metric columns
                 cursor.execute("""
                     UPDATE lighthouse_runs SET
-                        lcp_ms = %s,
-                        tbt_ms = %s,
-                        cls_score = %s,
-                        fcp_ms = %s,
-                        si_ms = %s,
-                        tti_ms = %s,
-                        ttfb_ms = %s,
-                        inp_ms = %s,
-                        performance_score = %s,
-                        accessibility_score = %s,
+                        lcp_ms               = %s,
+                        tbt_ms               = %s,
+                        cls_score            = %s,
+                        fcp_ms               = %s,
+                        si_ms                = %s,
+                        tti_ms               = %s,
+                        ttfb_ms              = %s,
+                        inp_ms               = %s,
+                        performance_score    = %s,
+                        accessibility_score  = %s,
                         best_practices_score = %s,
-                        seo_score = %s,
-                        total_requests = %s,
-                        page_size_kb = %s,
-                        js_size_kb = %s
+                        seo_score            = %s,
+                        total_requests       = %s,
+                        page_size_kb         = %s,
+                        js_size_kb           = %s,
+                        css_size_kb          = %s,
+                        image_size_kb        = %s
                     WHERE test_id = %s
                 """, (
                     transformed['lcp_ms'],
@@ -224,10 +258,13 @@ def run_pipeline_production():
                     transformed['total_requests'],
                     transformed['page_size_kb'],
                     transformed['js_size_kb'],
-                    test_id
+                    transformed['css_size_kb'],
+                    transformed['image_size_kb'],
+                    test_id,
                 ))
 
                 # STEP 4 — Insert opportunities
+                from load import insert_opportunities
                 insert_opportunities(
                     conn, test_id,
                     transformed['opportunities']
@@ -235,15 +272,26 @@ def run_pipeline_production():
 
                 conn.commit()
                 success_count += 1
-                print(f"✅ Processed test_id: {test_id}")
+                playwright_run_ids.add(playwright_run_id)
+                print(f"✅ test_id {test_id} done")
+                print(f"   performance: {transformed['performance_score']}")
+                print(f"   opportunities: {len(transformed['opportunities'])}")
 
             except Exception as e:
                 conn.rollback()
                 failed_count += 1
-                print(f"❌ Failed test_id {test_id}: {e}")
+                print(f"❌ test_id {test_id} failed: {e}")
+
+        # update all playwright_run sessions status
+        for pr_id in playwright_run_ids:
+            update_playwright_run(
+                conn, pr_id,
+                success_count, failed_count
+            )
+        conn.commit()
 
     except Exception as e:
-        print(f"❌ Pipeline failed: {e}")
+        print(f"❌ Auto pipeline failed: {e}")
         if conn:
             conn.rollback()
 
@@ -258,7 +306,71 @@ def run_pipeline_production():
 
 
 if __name__ == '__main__':
-    if APP_ENV == 'production':
-        run_pipeline_production()
+    parser = argparse.ArgumentParser(
+        description='Luminara ETL Pipeline'
+    )
+
+    # mode selection
+    parser.add_argument(
+        '--auto', action='store_true',
+        help='Auto mode: process all unprocessed rows from DB'
+    )
+
+    # manual mode args
+    parser.add_argument(
+        '--file',
+        help='Path to Lighthouse JSON file (manual mode)'
+    )
+    parser.add_argument(
+        '--site_type',
+        choices=['decathlon', 'competitor'],
+        help='decathlon or competitor'
+    )
+    parser.add_argument(
+        '--page_type',
+        help='main, product, cart etc.'
+    )
+    parser.add_argument(
+        '--device_type',
+        choices=['mobile', 'desktop'],
+        help='mobile or desktop'
+    )
+    parser.add_argument(
+        '--run_number', type=int, default=1,
+        help='Run number 1, 2, or 3'
+    )
+    parser.add_argument(
+        '--competitor_name', default=None,
+        help='nike, adidas etc.'
+    )
+    parser.add_argument(
+        '--network_profile', default=None,
+        help='WiFi, 4G etc.'
+    )
+
+    args = parser.parse_args()
+
+    if args.auto:
+        # AUTO mode — cron job daily
+        run_auto()
+
+    elif args.file:
+        # MANUAL mode — test with one JSON file
+        if not all([args.site_type, args.page_type, args.device_type]):
+            print("❌ Manual mode requires:")
+            print("   --site_type, --page_type, --device_type")
+        else:
+            run_pipeline(
+                filepath=args.file,
+                site_type=args.site_type,
+                page_type=args.page_type,
+                device_type=args.device_type,
+                run_number=args.run_number,
+                competitor_name=args.competitor_name,
+                network_profile=args.network_profile,
+            )
+
     else:
-        run_pipeline_local()
+        print("❌ Please specify mode:")
+        print("   Manual: --file lighthouse.json --site_type ...")
+        print("   Auto:   --auto")
