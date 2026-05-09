@@ -1,0 +1,91 @@
+Bootstrap: docker
+From: redis:7-bookworm
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service Redis-Development
+    Role Swetrix-Cache-And-Agent-State
+    Team_Size 5
+    Tested
+
+%environment
+    # DEV PARITY: Offset port to prevent colliding with Prod if run on the same server
+    export PORT=${PORT:-6380}
+    export REDIS_DATA=${REDIS_DATA:-/data/redis_dev}
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    # 🛡️ Fallback Defaults (Ensuring parity with Production logic)
+    export REDIS_HOST=${REDIS_HOST:-0.0.0.0}
+    export REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-1024mb}
+    export REDIS_MAXMEMORY_POLICY=${REDIS_MAXMEMORY_POLICY:-volatile-lru}
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+    
+    # DEV PARITY: Isolated data folder
+    mkdir -p /data/redis_dev
+
+    # SRE FIX: Bypassing the statvfs error & adding Dev Tools
+    mkdir -p /tmp/apt-cache
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3 
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
+        ca-certificates \
+        curl \
+        htop \
+        nano \
+        procps
+    apt-get clean
+    rm -rf /tmp/apt-cache
+
+%startscript
+    echo "------------------------------------------------"
+    echo "🔴 Luminara DEVELOPMENT: REDIS Starting"
+    echo "🌐 Port: $PORT | Bind: $REDIS_HOST | Data: $REDIS_DATA"
+    echo "🧠 Policy: $REDIS_MAXMEMORY_POLICY (Protects AI State)"
+    echo "👥 Team Sandbox Mode Active"
+    echo "------------------------------------------------"
+    
+    if [ -z "$REDIS_PASSWORD" ]; then
+        echo "⚠️  DEV NOTICE: REDIS_PASSWORD is empty. Running in open sandbox mode."
+    fi
+
+    # SRE FIX: Logic parity with Production. 
+    # Dynamically maps variables and protects against empty password strings.
+    if [ -n "$REDIS_PASSWORD" ]; then
+        exec redis-server \
+            --port "$PORT" \
+            --bind "$REDIS_HOST" \
+            --dir "$REDIS_DATA" \
+            --dbfilename dump.rdb \
+            --appendonly yes \
+            --pidfile /tmp/redis_dev.pid \
+            --maxmemory "$REDIS_MAXMEMORY" \
+            --maxmemory-policy "$REDIS_MAXMEMORY_POLICY" \
+            --requirepass "$REDIS_PASSWORD"
+    else
+        exec redis-server \
+            --port "$PORT" \
+            --bind "$REDIS_HOST" \
+            --dir "$REDIS_DATA" \
+            --dbfilename dump.rdb \
+            --appendonly yes \
+            --pidfile /tmp/redis_dev.pid \
+            --maxmemory "$REDIS_MAXMEMORY" \
+            --maxmemory-policy "$REDIS_MAXMEMORY_POLICY"
+    fi
+
+%help
+    Luminara Development Redis (Team Sandbox)
+    -----------------------------------------
+    This container mirrors production logic but operates on Port 6380 
+    and includes troubleshooting tools (htop, nano, procps).
+    
+    Usage: 
+    export SINGULARITYENV_REDIS_PASSWORD="dev_password"
+    singularity run --bind /host/path/redis_dev_data:/data redis_dev.sif

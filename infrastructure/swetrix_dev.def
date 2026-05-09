@@ -1,0 +1,43 @@
+Bootstrap: docker
+From: swetrix/swetrix-api:latest
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-RUM
+    Service Swetrix-API-Development
+    Tested
+
+%environment
+    export PORT=${PORT:-5006}
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+%post
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # 🚦 VERTICAL PARITY: GHA Infrastructure Anchors
+    mkdir -p /data
+    mkdir -p /workspace
+
+    # Dev Tools
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+        htop \
+        nano \
+        procps \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+    
+    # NPM Cache Bomb defusal
+    npm cache clean --force || true
+
+%startscript
+    echo "------------------------------------------------"
+    echo "📈 Luminara DEVELOPMENT: SWETRIX API Starting"
+    echo "🌐 Port: $PORT"
+    echo "------------------------------------------------"
+    
+    # SRE FIX: The Human Fallback UX
+    if [ $# -gt 0 ]; then
+        exec "$@"
+    else
+        exec node dist/main.js
+    fi

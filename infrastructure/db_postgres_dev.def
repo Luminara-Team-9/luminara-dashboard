@@ -6,11 +6,12 @@ From: postgres:15.6-bookworm
     Project Luminara-Infrastructure
     Service Database-Development
     Team_Size 5
+    Tested
 
 %environment
     # DEV PARITY: Offset port to 5433
-    export PGPORT=5433
-    export PGDATA=/data/postgres_dev
+    export PGPORT=${PGPORT:-5433}
+    export PGDATA=${PGDATA:-/data/postgres_dev}
     export PGSOCKETS=/tmp
     export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -26,10 +27,10 @@ From: postgres:15.6-bookworm
     # We tell apt to use /tmp for its archives so it doesn't get confused by the overlay.
     mkdir -p /tmp/apt-cache
     
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache update
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3 
     
     # SRE FIX 3: Disable disk space check and install tools
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
         htop \
         nano \
         vim \
@@ -46,13 +47,17 @@ From: postgres:15.6-bookworm
 
     echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
 
-%runscript
+%startscript
     # ------------------------------------------------------------------
     # DEVELOPMENT BOOTSTRAP PROTOCOL
     # ------------------------------------------------------------------
     if [ ! -f "$PGDATA/PG_VERSION" ]; then
         echo "🛠️ Initializing DEVELOPMENT Database at $PGDATA..."
-        initdb -D "$PGDATA" --auth=md5 --pwfile=<(echo "${POSTGRES_PASSWORD:-admin}")
+        
+        # SRE FIX: Shell-safe password injection
+        echo "${POSTGRES_PASSWORD:-admin}" > /tmp/pg_pw.txt
+        initdb -D "$PGDATA" --auth=md5 --pwfile=/tmp/pg_pw.txt
+        rm /tmp/pg_pw.txt
     fi
 
     echo "------------------------------------------------"

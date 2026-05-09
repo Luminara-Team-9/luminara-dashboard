@@ -121,7 +121,14 @@ Thumbs.db
 *.code-workspace
 
 # Cursor IDE specific
+.cursor/
 !.cursorrules
 
 # Lighthouse results
 /4_automation_tests/lighthouse-runner/results/
+
+# 9. LOCAL TESTING DATA
+3_data_ai_pipeline/etl/sample_data/
+3_data_ai_pipeline/etl/test_extract.py
+3_data_ai_pipeline/etl/test_transform.py
+3_data_ai_pipeline/etl/test_load.py

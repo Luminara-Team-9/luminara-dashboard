@@ -1,0 +1,98 @@
+name: "4. [Push-Dashboard] Dashboard Deployer"
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '1_dashboard_app/**'
+      - '0_shared_packages/**'
+      - 'infrastructure/web.def'
+
+concurrency:
+  # Crucial: Cancels older deployments if multiple PRs merge concurrently
+  group: deploy-dashboard
+  cancel-in-progress: true
+
+env:
+  PROD_SIF_PATH: "/abr/coss41/Luminara_App/images-prod"
+  KEY_DIR: "/abr/coss41/Luminara_App/secure_keys"
+  ARTIFACT_NAME: "infrastructure_web.sif"
+  BACKUP_NAME: "infrastructure_web.bak.sif"
+
+jobs:
+  deploy-to-prod:
+    runs-on: [self-hosted, Linux]
+    
+    steps:
+      - name: 📥 Checkout Merged Code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # PHASE 1: CREATE ROLLBACK BACKUP
+      # ---------------------------------------------------------
+      - name: 💾 Backup Stable Container
+        run: |
+          echo "Backing up current production container..."
+          mkdir -p ${{ env.PROD_SIF_PATH }}
+          cp ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
+
+      # ---------------------------------------------------------
+      # PHASE 2: BAKE ON MAIN (Race-Condition Fix)
+      # ---------------------------------------------------------
+      - name: 🏗️ Bake Fresh Production Artifact
+        # We ALWAYS build from the freshly merged main branch! No stale artifacts.
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "infrastructure/web.def" 
+          cache_key_suffix: "prod_dashboard"
+          output_path: "${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}"
+
+      # ---------------------------------------------------------
+      # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
+      # ---------------------------------------------------------
+      - name: 🔄 Hot-Swap & Verify Production Container
+        run: |
+          echo "Restarting Singularity Instance..."
+          singularity instance stop luminara_web_live 2>/dev/null || true
+          
+          # Booting the freshly baked container
+          singularity instance start \
+            --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
+            ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
+            luminara_web_live
+            
+          echo "⏱️ Waiting 10 seconds for application to boot..."
+          sleep 10
+          
+          echo "🩺 Performing Health Check..."
+          if singularity instance list | grep -q "luminara_web_live"; then
+            echo "✅ Health Check Passed: Container is alive and running!"
+          else
+            echo "❌ CRITICAL FAILURE: Container died immediately after booting."
+            echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
+            
+            # Tear down the broken deployment
+            singularity instance stop luminara_web_live 2>/dev/null || true
+            
+            # Restore the backup artifact
+            mv ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}
+            
+            # Reboot the stable backup
+            singularity instance start \
+              --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
+              ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
+              luminara_web_live
+              
+            echo "🚨 Rollback complete. Production is back online, but this deployment failed."
+            exit 1
+          fi
+
+      # ---------------------------------------------------------
+      # PHASE 4: FAIL-SAFE CLEANUP
+      # ---------------------------------------------------------
+      - name: 🧹 Garbage Collection
+        if: always()
+        run: |
+          echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
+          chmod -R u+rwX /dev/shm/sing_build_*_prod_dashboard 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_prod_dashboard || true

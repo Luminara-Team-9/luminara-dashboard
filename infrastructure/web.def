@@ -4,66 +4,69 @@ From: node:24-slim
 %labels
     Maintainer Luminara-SRE
     Project Luminara-Dashboard
-    Tier Production
+    Tier Production-Pure
 
-%setup
-    mkdir -p ${SINGULARITY_ROOTFS}/data
-    mkdir -p ${SINGULARITY_ROOTFS}/workspace
+# ---------------------------------------------------------
+# 📦 INJECT SOURCE CODE
+# Singularity copies these from your GitHub runner workspace 
+# directly into the container's internal /workspace
+# ---------------------------------------------------------
+%files
+    ./1_dashboard_app /workspace/1_dashboard_app
+    ./0_shared_packages /workspace/0_shared_packages
+    ./pnpm-workspace.yaml /workspace/pnpm-workspace.yaml
+    ./package.json /workspace/package.json
+
+    # SRE FIX: Inject the lockfile so frozen-lockfile has a blueprint to read
+    ./pnpm-lock.yaml /workspace/pnpm-lock.yaml
 
 %environment
     export PORT=${PORT:-3000}
     export NODE_ENV=production
-    export DATA_PATH=/data
-    
-    # THE FIX: Point PNPM_HOME to /tmp, which is always writable at runtime
     export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
-    export COREPACK_ENABLE_AUTO_PIN=0
 
+# ---------------------------------------------------------
+# 🛠️ INTERNAL BUILD PHASE
+# This happens ONCE when the .sif file is being created.
+# ---------------------------------------------------------
 %post
     set -e
+    export NODE_ENV=production
 
-    # Install system tools
+    # 1. Install system tools
     apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates \
+        curl ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-
-    # Install pnpm
-    npm install -g pnpm@latest
+    # 2. Install Global JS Tools
+    npm install -g pnpm@latest pm2
     
-    # Configure pnpm to use the bound workspace for its store
-    pnpm config set store-dir /workspace/.pnpm-store
-    # Disable the "update check" which causes the mkdir error
-    pnpm config set update-notifier false
-
-    # SRE FIX: Nuke the massive NPM cache before compression
+    # 3. Build the Application INSIDE the Container
+    cd /workspace
+    echo "📦 Installing Dependencies Internally..."
+    pnpm install --frozen-lockfile
+    
+    echo "🏗️ Building Next.js Internally..."
+    pnpm --filter ./1_dashboard_app build
+    
+    # Optional SRE Cleanup: Remove node_modules and reinstall ONLY production 
+    # dependencies to make the final .sif file smaller
+    rm -rf node_modules
+    pnpm install --prod --frozen-lockfile
     npm cache clean --force
 
-%runscript
-    cd /workspace
+# ---------------------------------------------------------
+# 🚀 RUN PHASE
+# This happens every time you start the container.
+# ---------------------------------------------------------
+%startscript
+    cd /workspace/1_dashboard_app
     
     echo "------------------------------------------------"
-    echo "🚀 Luminara PRODUCTION Dashboard Starting"
+    echo "🚀 Luminara PURE PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
-    echo "📂 Data Source: $DATA_PATH"
     echo "------------------------------------------------"
 
-    # 1. Install dependencies (Production only to save space)
-    # Using --frozen-lockfile ensures the build is predictable
-    pnpm install --frozen-lockfile
-
-    # 2. Build the Next.js application
-    # This generates the optimized .next folder in the bound workspace
-    pnpm build
-
-    # 3. Start the production server
-    # Bound to 0.0.0.0 for external access
-    exec pnpm start --port $PORT --hostname 0.0.0.0
-
-%help
-    Luminara Production Dashboard
-    ------------------------------
-    This image runs the optimized Next.js build. 
-    It is recommended to use a dedicated production branch of your code.
+    # It will never fail this check now, because it was baked in during %post
+    exec pm2-runtime start npm --name "luminara-dashboard-prod" -- run start -- -p $PORT

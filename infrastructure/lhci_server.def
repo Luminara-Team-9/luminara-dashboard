@@ -5,6 +5,7 @@ From: node:24.15.0-slim
     Maintainer Luminara-SRE
     Project Luminara-Infrastructure
     Service LHCI-Production
+    Tested
 
 %environment
     export PORT=${PORT:-9001}
@@ -22,7 +23,7 @@ From: node:24.15.0-slim
     mkdir -p /workspace
 
     set -e
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
         ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -33,7 +34,7 @@ From: node:24.15.0-slim
     # SRE FIX: Nuke the massive NPM cache before compression
     npm cache clean --force
     
-%runscript
+%startscript
     cd /workspace
     
     echo "------------------------------------------------"
@@ -47,8 +48,8 @@ From: node:24.15.0-slim
         echo "The LHCI server cannot connect to Postgres without this file."
         exit 1
     fi
-
-    exec lhci server --port=$PORT
+    # SRE FIX: Explicitly target the configuration file
+    exec npx lhci server --port=$PORT --config=/workspace/lighthouserc.json
 
 %help
     Luminara Production LHCI Server

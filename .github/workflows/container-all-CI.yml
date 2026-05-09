@@ -1,0 +1,92 @@
+name: "1. [PR-All] Luminara Container Builder"
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.def'
+      - '!infrastructure/web.def'
+      - '!infrastructure/digital_clone.def'
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PROD_RELEASE_PATH: "/abr/coss41/Luminara_App/images-prod"
+  DEV_RELEASE_PATH: "/abr/coss41/shared_workspace/images_dev"
+  STAGING_DIR: "/abr/coss41/Luminara_App/images-staging"
+
+jobs:
+  detect-changes:
+    runs-on: [self-hosted, Linux]
+    outputs:
+      def_files: ${{ steps.safe_output.outputs.files }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed .def files
+        id: filter
+        uses: tj-actions/changed-files@v44
+        with:
+          files: "**/*.def"
+          escape_json: false
+          json: true
+
+      - name: SRE Matrix Safety Intercept
+        id: safe_output
+        run: |
+          FILES='${{ steps.filter.outputs.all_changed_files }}'
+          if [ "$FILES" = "[]" ] || [ -z "$FILES" ]; then
+            echo "files=[\"skip\"]" >> $GITHUB_OUTPUT
+          else
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-verify:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.def_files != '[]' && needs.detect-changes.outputs.def_files != '["skip"]'
+    runs-on: [self-hosted, Linux]
+    strategy:
+      matrix:
+        def_file: ${{ fromJson(needs.detect-changes.outputs.def_files) }}
+      max-parallel: 2
+      fail-fast: false
+      
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # PHASE 1: DYNAMIC VARIABLES
+      # ---------------------------------------------------------
+      - name: Generate Safe_Name & SIF_Name
+        run: |
+          SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
+          echo "SAFE_NAME=$SAFE_NAME" >> $GITHUB_ENV
+          echo "SIF_NAME=${SAFE_NAME}.sif" >> $GITHUB_ENV
+
+      # ---------------------------------------------------------
+      # PHASE 2: HARDENED SIF BUILDER (Includes Verification & Staging)
+      # ---------------------------------------------------------
+      - name: Build Matrix Container
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "${{ matrix.def_file }}"
+          cache_key_suffix: "${{ env.SAFE_NAME }}"
+          # 🚨 FIX: Action outputs directly to the final Staging destination!
+          output_path: "${{ env.STAGING_DIR }}/pr_${{ github.event.pull_request.number }}_${{ env.SIF_NAME }}"
+
+      # ---------------------------------------------------------
+      # PHASE 3: GLOBAL FAIL-SAFE CLEANUP
+      # ---------------------------------------------------------
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
+          # The wildcard handles any parallel matrix runs perfectly
+          chmod -R u+rwX /dev/shm/sing_build_${{ github.run_id }}_* 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_${{ github.run_id }}_${{ env.SAFE_NAME }} || true
+          
+          echo "🗑️ Running NFS Cache Garbage Collection..."
+          find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
+          echo "✅ Cleanup complete."

@@ -1,0 +1,63 @@
+Bootstrap: docker
+From: python:3.12-slim-bookworm
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-AI-Foundation
+    Description Base for the agentic_remediation (LangGraph, DB Connectors, Node.js tools)
+    Tested
+
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # --- SRE Standard Mount Anchors ---
+    mkdir -p /data
+    mkdir -p /workspace
+    chmod 777 /data /workspace
+
+   # 1. System Essentials & Workspace Tools
+    # We add Git (for PRs) and Node.js foundation (for auditing the websites)
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+        curl \
+        git \
+        ca-certificates \
+        gnupg \
+        libpq-dev \
+        build-essential \
+        && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+        && apt-get install -y nodejs \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+    
+    git config --system init.defaultBranch main
+    git config --system core.filemode false
+
+    # ---------------------------------------------------------
+    # "LIGHTWEIGHT" AI FOUNDATION (CPU-ONLY)
+    # ---------------------------------------------------------
+    # We remove the 5GB CUDA version of Torch and install the CPU version.
+    # This allows the Agent to still run "Sentence-Transformers" for RAG
+    # without needing a GPU on the main server.
+    
+    echo "Installing CPU-only PyTorch for RAG/Embeddings..."
+    pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+
+    # 2. Orchestration & Database Connectors
+    # These are the "heavy" libraries for the Agent's logic.
+    cat > base_requirements.txt <<EOF
+langgraph>=1.1.9
+langchain-openai>=0.1.0
+psycopg2-binary>=2.9.10
+clickhouse-connect>=0.7.0
+sentence-transformers>=5.4.1
+transformers>=4.45.0
+pydantic>=2.12.0
+openai>=1.65.0
+langchain>=0.4.2
+EOF
+
+    echo "Installing Heavy Inference Libraries..."
+    pip install --no-cache-dir -r base_requirements.txt
+    rm base_requirements.txt
+    
+    echo "Luminara-SRE: TIER 1 BASE IMAGE COMPLETE ✅"

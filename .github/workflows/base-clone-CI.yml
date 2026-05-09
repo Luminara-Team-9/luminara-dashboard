@@ -1,0 +1,57 @@
+name: "7. [PR-Base_Clone] Silent Artifact Builder"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '2_digital_twins/baseline-site/**'
+      # Note: We track the .def file here too, so if you update the infrastructure, 
+      # BOTH the staging and baseline artifacts get rebuilt!
+      - 'infrastructure/digital_clone.def' 
+
+concurrency:
+  group: baseline-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build_baseline:
+    name: Build Frozen Baseline
+    runs-on: [self-hosted, Linux]
+    
+    env:
+      STAGING_PATH: /abr/coss41/Luminara_App/images-staging
+      ARTIFACT_NAME: baseline_pr_${{ github.event.pull_request.number }}.sif
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # PHASE 1: BAKE THE IMMUTABLE ARTIFACT (Validation)
+      # ---------------------------------------------------------
+      - name: 🏗️ Build Immutable Web Clone (Baseline)
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "infrastructure/digital_clone.def" 
+          cache_key_suffix: "pr_baseline_clone"
+          output_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
+
+      # ---------------------------------------------------------
+      # PHASE 2: GLOBAL FAIL-SAFE CLEANUP (Zero-Bloat Protocol)
+      # ---------------------------------------------------------
+      - name: 🧹 Garbage Collection
+        if: always()
+        run: |
+          echo "🗑️ Deleting Ephemeral PR Artifact to save disk space..."
+          # Since CD builds directly on main, we immediately destroy this validation artifact!
+          rm -f "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}" || true
+
+          echo "🧹 Force-cleaning local RAM disk to free memory..."
+          chmod -R u+rwX /dev/shm/sing_build_*_pr_baseline_clone 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_pr_baseline_clone || true
+          
+          echo "🗑️ Running NFS Cache Garbage Collection..."
+          find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
+          
+          echo "✅ Validation complete. Zero storage bloat left behind."

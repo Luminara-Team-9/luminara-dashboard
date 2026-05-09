@@ -5,6 +5,7 @@ From: node:24.15.0-slim
     Maintainer Luminara-SRE
     Project Luminara-Infrastructure
     Service LHCI-Development
+    Tested
     
 
 %setup
@@ -21,14 +22,14 @@ From: node:24.15.0-slim
 %post
     # SRE FIX: Restore PATH and create mandatory Infrastructure Anchors
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    
+    export DEBIAN_FRONTEND=noninteractive
     # Create the folders the GHA Runner expects to see
     mkdir -p /data
     mkdir -p /workspace
 
     set -e
     # 🛠️ DEV TOOLS
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
         ca-certificates \
         htop \
@@ -40,7 +41,7 @@ From: node:24.15.0-slim
     # SRE FIX: Nuke the massive NPM cache before compression
     npm cache clean --force
 
-%runscript
+%startscript
     cd /workspace
     
     echo "------------------------------------------------"
@@ -48,16 +49,25 @@ From: node:24.15.0-slim
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
 
-    # Validation for the dev-specific lighthouserc.json
-    if [ ! -f "/workspace/lighthouserc.dev.json" ]; then
-        echo "WARNING: lighthouserc.dev.json not found. Checking for default lighthouserc.json..."
-        if [ ! -f "/workspace/lighthouserc.json" ]; then
-            echo "CRITICAL ERROR: No LHCI configuration found."
-            exit 1
-        fi
+    # SRE FIX: Dynamically capture the correct config flag
+    LHCI_CONFIG=""
+    if [ -f "/workspace/lighthouserc.dev.json" ]; then
+        echo "[INFO] Detected lighthouserc.dev.json"
+        LHCI_CONFIG="--config=/workspace/lighthouserc.dev.json"
+    elif [ -f "/workspace/lighthouserc.json" ]; then
+        echo "[INFO] Detected standard lighthouserc.json"
+        LHCI_CONFIG="--config=/workspace/lighthouserc.json"
+    else
+        echo "CRITICAL ERROR: No LHCI configuration found in /workspace."
+        exit 1
     fi
 
-    exec lhci server --port=$PORT
+    # SRE FIX: The Human Fallback UX
+    if [ $# -gt 0 ]; then
+        exec "$@"
+    else
+        exec lhci server --port=$PORT $LHCI_CONFIG
+    fi
 
 %help
     Luminara Development LHCI Server

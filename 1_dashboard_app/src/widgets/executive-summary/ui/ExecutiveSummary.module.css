@@ -1,0 +1,272 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: linear-gradient(180deg, #111827 0%, #0f1a2e 100%);
+  border-bottom: 1px solid #1a2234;
+  padding: 0 28px;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ── KPI 카드 ── */
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px 10px 0;
+  flex: 1;
+}
+
+.card_icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1a2234;
+  border-radius: 8px;
+}
+
+.card_info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card_label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.card_value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f1f5f9;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.card_sub {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* ── 상태 뱃지 ── */
+.status_badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  border: 1px solid;
+  border-radius: 5px;
+  padding: 2px 7px;
+  width: fit-content;
+  text-transform: uppercase;
+}
+
+/* ── 탄소 카드 (secondary, 작게) ── */
+.card_carbon {
+  flex: 0.6;
+}
+.card_value_sm {
+  font-size: 15px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.card_sub_sm {
+  font-size: 10px;
+  color: #334155;
+  font-weight: 400;
+}
+
+/* ── 카드 사이 구분선 ── */
+.divider {
+  width: 1px;
+  height: 36px;
+  background: linear-gradient(180deg, transparent, #1e293b 30%, #1e293b 70%, transparent);
+  flex-shrink: 0;
+  margin-right: 20px;
+}
+
+/* ── 경쟁사 평균 맥락 ── */
+.comp_avg {
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ── 체크리스트 트리거 버튼 ── */
+.checklist_trigger {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  background: none;
+  border: 1px solid #1e293b;
+  border-radius: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s, border-color 0.15s;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+.checklist_trigger:hover { color: #94a3b8; border-color: #334155; }
+
+/* ── 오버레이 ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+/* ── 모달 ── */
+.modal {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 18px;
+  padding: 28px;
+  width: 540px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.modal_head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.modal_eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.modal_score {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.modal_close {
+  font-size: 14px;
+  color: #475569;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+.modal_close:hover { color: #94a3b8; }
+
+/* ── 프로그레스 바 ── */
+.progress_track {
+  height: 4px;
+  background: #1e293b;
+  border-radius: 2px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.progress_bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ── 체크리스트 바디 ── */
+.checklist_body {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-right: 4px;
+}
+.checklist_body::-webkit-scrollbar { width: 4px; }
+.checklist_body::-webkit-scrollbar-track { background: transparent; }
+.checklist_body::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+
+/* ── 카테고리 그룹 ── */
+.cat_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.cat_name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cat_count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* ── 체크 아이템 ── */
+.check_item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.check_icon {
+  font-size: 12px;
+  font-weight: 800;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.check_label_wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.check_label { font-size: 12px; }
+
+.check_detail {
+  font-size: 10px;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.check_pass .check_icon  { color: #10b981; }
+.check_pass .check_label { color: #cbd5e1; }
+.check_fail .check_icon  { color: #ef4444; }
+.check_fail .check_label { color: #64748b; }

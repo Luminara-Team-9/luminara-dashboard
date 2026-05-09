@@ -1,0 +1,171 @@
+name: "2. [Push-All] Luminara Container Deployer"
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.def'
+      - '!infrastructure/web.def'  # 🚨 THE FIX: Ignore the dashboard container!
+      - '!infrastructure/digital_clone.def'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PROD_RELEASE_PATH: "/abr/coss41/Luminara_App/images-prod"
+  DEV_RELEASE_PATH: "/abr/coss41/shared_workspace/images_dev"
+  STAGING_DIR: "/abr/coss41/Luminara_App/images-staging"
+
+jobs:
+  detect-changes:
+    runs-on: [self-hosted, Linux]
+    outputs:
+      def_files: ${{ steps.safe_output.outputs.files }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed .def files
+        id: filter
+        uses: tj-actions/changed-files@v44
+        with:
+          files: "**/*.def"
+          escape_json: false
+          json: true
+
+      - name: SRE Matrix Safety Intercept
+        id: safe_output
+        run: |
+          FILES='${{ steps.filter.outputs.all_changed_files }}'
+          if [ "$FILES" = "[]" ] || [ -z "$FILES" ]; then
+            echo "files=[\"skip\"]" >> $GITHUB_OUTPUT
+          else
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+  deploy-sif:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.def_files != '[]' && needs.detect-changes.outputs.def_files != '["skip"]'
+    runs-on: [self-hosted, Linux]
+    strategy:
+      matrix:
+        def_file: ${{ fromJson(needs.detect-changes.outputs.def_files) }}
+      max-parallel: 2
+      fail-fast: false
+      
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # PHASE 1: SRE DYNAMIC ROUTING & VARIABLES
+      # ---------------------------------------------------------
+      - name: Set Routing Variables
+        run: |
+          SAFE_NAME=$(echo "${{ matrix.def_file }}" | sed 's/\//_/g' | sed 's/\.def//g')
+          echo "SIF_NAME=${SAFE_NAME}.sif" >> $GITHUB_ENV
+          echo "SAFE_NAME=$SAFE_NAME" >> $GITHUB_ENV
+          
+          # 🚦 The Routing Logic
+          if [[ "${{ matrix.def_file }}" == *"_dev.def" ]]; then
+            echo "TARGET_DIR=${{ env.DEV_RELEASE_PATH }}" >> $GITHUB_ENV
+            echo "TIER=Development" >> $GITHUB_ENV
+            echo "Detected DEV environment. Routing to dev_release."
+          else
+            echo "TARGET_DIR=${{ env.PROD_RELEASE_PATH }}" >> $GITHUB_ENV
+            echo "TIER=Production" >> $GITHUB_ENV
+            echo "Detected PROD environment. Routing to release."
+          fi
+
+      # ---------------------------------------------------------
+      # PHASE 2: LOCATE STAGED ARTIFACTS
+      # ---------------------------------------------------------
+      - name: Locate Staged Artifacts
+        id: staging_check
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          PR_NUMBER=$(echo "$COMMIT_MSG" | grep -o -E '#[0-9]+' | head -1 | sed 's/#//')
+          STAGED_FILE="${{ env.STAGING_DIR }}/pr_${PR_NUMBER}_${{ env.SIF_NAME }}"
+          
+          if [ -n "$PR_NUMBER" ] && [ -f "$STAGED_FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "pr_file=$STAGED_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ---------------------------------------------------------
+      # PHASE 3: PROMOTE STAGED SIF (HAPPY PATH)
+      # ---------------------------------------------------------
+      - name: Promote Staged Artifact
+        if: steps.staging_check.outputs.found == 'true'
+        run: |
+          echo "✅ Found pre-built SIF from PR! Bypassing build phase."
+          mkdir -p ${{ env.TARGET_DIR }}
+          # Using cp preserves the staging file as a forensic record
+          cp "${{ steps.staging_check.outputs.pr_file }}" "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}"
+          echo "🚀 Successfully deployed ${{ env.SIF_NAME }} to ${{ env.TIER }} (${{ env.TARGET_DIR }})"
+
+      # ---------------------------------------------------------
+      # PHASE 4: EMERGENCY FALLBACK BUILD
+      # ---------------------------------------------------------
+      - name: Run Emergency Fallback Build
+        if: steps.staging_check.outputs.found == 'false'
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "${{ matrix.def_file }}"
+          cache_key_suffix: "emergency_${{ env.SAFE_NAME }}"
+          # 🚨 FIX: Action outputs directly to the final deployment destination!
+          output_path: "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}"
+
+      # ---------------------------------------------------------
+      # PHASE 5: AUTOMATED SERVICE ORCHESTRATION
+      # ---------------------------------------------------------
+      - name: 🔄 Restart Fleet Service
+        run: |
+          echo "Mapping Artifact ${{ env.SAFE_NAME }} to Fleet Target..."
+          
+          # SRE Translation Map: Converts container name to bash script target
+          case "${{ env.SAFE_NAME }}" in
+            "infrastructure_db_postgres") TARGET="postgres" ;;
+            "infrastructure_db_redis") TARGET="redis" ;;
+            "infrastructure_db_clickhouse") TARGET="clickhouse" ;;
+            "infrastructure_lhci_server") TARGET="lhci" ;;
+            "infrastructure_swetrix_rum") TARGET="swetrix" ;;
+            "infrastructure_agentic_remediation") TARGET="agent" ;;
+            *) 
+              echo "⚠️ Unknown target mapping for ${{ env.SAFE_NAME }}. Skipping auto-restart."
+              TARGET="unknown"
+              ;;
+          esac
+          
+          if [ "$TARGET" != "unknown" ]; then
+            echo "🚀 Triggering Zero-Downtime Restart for: $TARGET"
+            # Execute your orchestrator script (ensure path is correct and it is executable)
+            /abr/coss41/Luminara_App/luminara_up.sh restart "$TARGET"
+            
+            # Brief health check pause
+            sleep 10
+            
+            echo "🩺 Verifying instance health..."
+            if singularity instance list | grep -q "luminara_"; then
+              echo "✅ Service successfully restarted and is live!"
+            else
+              echo "❌ CRITICAL: Service failed to boot after restart."
+              exit 1
+            fi
+          fi
+
+      # ---------------------------------------------------------
+      # PHASE 5: GLOBAL FAIL-SAFE CLEANUP
+      # ---------------------------------------------------------
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
+          # The wildcard handles any parallel matrix runs perfectly
+          chmod -R u+rwX /dev/shm/sing_build_${{ github.run_id }}_* 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_${{ github.run_id }}_${{ env.SAFE_NAME }} || true
+          
+          echo "🗑️ Running NFS Cache Garbage Collection..."
+          find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
+          echo "✅ Cleanup complete."
