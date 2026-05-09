@@ -73,11 +73,10 @@ export function HikerProducts() {
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {products.map((p) => (
-            <a
+            <div
               key={p.id}
-              href={`/product/${p.id}`}
               className="flex-none w-[160px] md:w-[240px] snap-start block"
-              style={{ textDecoration: 'none' }}
+              style={{ cursor: 'default' }}
             >
               <div style={{ backgroundColor: '#f9fafb', borderRadius: '8px', overflow: 'hidden' }}>
                 <img
@@ -112,7 +111,7 @@ export function HikerProducts() {
                   </div>
                 </div>
               </div>
-            </a>
+            </div>
           ))}
         </div>
       </div>

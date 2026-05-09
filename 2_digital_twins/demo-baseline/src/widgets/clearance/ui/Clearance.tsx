@@ -64,11 +64,11 @@ export function Clearance() {
           {products.map((p) => {
             const discount = Math.round((1 - p.price / p.originalPrice) * 100);
             return (
-              <a
+              /* REPLACED: Changed <a> to <div> and removed href */
+              <div
                 key={p.id}
-                href={`/product/${p.id}`}
                 className="flex-none w-[160px] md:w-[240px] snap-start block"
-                style={{ textDecoration: 'none' }}
+                style={{ cursor: 'default' }}
               >
                 <div
                   style={{ backgroundColor: '#f9fafb', borderRadius: '8px', overflow: 'hidden' }}
@@ -136,7 +136,7 @@ export function Clearance() {
                     </p>
                   </div>
                 </div>
-              </a>
+              </div>
             );
           })}
         </div>

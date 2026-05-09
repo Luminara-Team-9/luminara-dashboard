@@ -18,7 +18,7 @@ const megaMenuData: Record<
 > = {
   '모든 스포츠': {
     title: '모든 스포츠',
-    link: '/c/all-sports',
+    link: '/category/all-sports',
     items: [
       '러닝',
       '등산',
@@ -116,7 +116,6 @@ export function Header() {
             gap: '16px',
           }}
         >
-          {/* Logo */}
           <a href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
             <div
               style={{
@@ -394,8 +393,7 @@ export function Header() {
             );
           })}
         </div>
-
-        {/* 3-Column Mega Menu */}
+        {/* Mega Menu */}
         {activeMenu && megaMenuData[activeMenu] && (
           <>
             <div
@@ -429,173 +427,233 @@ export function Header() {
                 height: '480px',
               }}
             >
-              {/* Column 1: Parent Categories (Like Screenshot) */}
-              <div
-                style={{
-                  width: '25%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  padding: '24px 0 24px 24px',
-                  backgroundColor: 'white',
-                  borderRight: '1px solid #f3f4f6',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-end',
-                    borderBottom: '2px solid #0055A4',
-                    paddingBottom: '8px',
-                    marginRight: '24px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#111827' }}>
-                    {megaMenuData[activeMenu].title}
-                  </h3>
-                  <a
-                    href={megaMenuData[activeMenu].link}
-                    style={{ fontSize: '11px', color: '#6b7280' }}
+              {activeMenu === '모든 스포츠' ? (
+                /* --- 3-COLUMN LAYOUT (모든 스포츠) --- */
+                <>
+                  <div
+                    style={{
+                      width: '25%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '24px 0 24px 24px',
+                      backgroundColor: 'white',
+                      borderRight: '1px solid #f3f4f6',
+                    }}
                   >
-                    모두 보기
-                  </a>
-                </div>
-                <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
-                  {megaMenuData[activeMenu].items.map((item, idx) => (
                     <div
-                      key={item}
-                      onClick={idx === 0 ? undefined : handleEmptyLink} // Only first item is active for PoC
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '12px 16px',
-                        borderBottom: '1px solid #f3f4f6',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        color: idx === 0 ? '#111827' : '#6b7280',
-                        backgroundColor: idx === 0 ? '#f3f4f6' : 'transparent',
-                        fontWeight: idx === 0 ? 700 : 400,
+                        alignItems: 'flex-end',
+                        borderBottom: '2px solid #0055A4',
+                        paddingBottom: '8px',
+                        marginRight: '24px',
+                        marginBottom: '8px',
                       }}
                     >
-                      <span>{item}</span>
-                      <span style={{ color: '#9ca3af' }}>›</span>
+                      <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#111827' }}>
+                        {megaMenuData[activeMenu]?.title}
+                      </h3>
+                      <a
+                        href={megaMenuData[activeMenu]?.link}
+                        style={{ fontSize: '11px', color: '#6b7280' }}
+                      >
+                        모두 보기
+                      </a>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
+                      {megaMenuData[activeMenu]?.items?.map((item, idx) => (
+                        <div
+                          key={item}
+                          onClick={idx === 0 ? undefined : handleEmptyLink}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            borderBottom: '1px solid #f3f4f6',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            color: idx === 0 ? '#111827' : '#6b7280',
+                            backgroundColor: idx === 0 ? '#f3f4f6' : 'transparent',
+                            fontWeight: idx === 0 ? 700 : 400,
+                          }}
+                        >
+                          <span>{item}</span>
+                          <span style={{ color: '#9ca3af' }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Column 2: Sub Categories (Hardcoded to Running for PoC to match screenshot) */}
-              <div
-                style={{
-                  width: '25%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  padding: '24px 24px 24px 16px',
-                  backgroundColor: 'white',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-end',
-                    borderBottom: '2px solid #0055A4',
-                    paddingBottom: '8px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#111827' }}>러닝</h3>
-                  <a href="/category/running" style={{ fontSize: '11px', color: '#6b7280' }}>
-                    모두 보기
-                  </a>
-                </div>
-                <div style={{ overflowY: 'auto' }}>
-                  {[
-                    '신제품',
-                    '베스트셀러',
-                    '러닝화',
-                    '남성',
-                    '여성',
-                    '용품',
-                    '트레일러닝',
-                    '러닝 클리어런스',
-                    '러닝웨어',
-                  ].map((subItem) => (
+                  <div
+                    style={{
+                      width: '25%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '24px 24px 24px 16px',
+                      backgroundColor: 'white',
+                    }}
+                  >
                     <div
-                      key={subItem}
-                      onClick={handleEmptyLink}
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '12px 8px',
-                        borderBottom: '1px solid #f3f4f6',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        color: '#374151',
+                        alignItems: 'flex-end',
+                        borderBottom: '2px solid #0055A4',
+                        paddingBottom: '8px',
+                        marginBottom: '8px',
                       }}
                     >
-                      <span>{subItem}</span>
-                      <span style={{ color: '#9ca3af' }}>›</span>
+                      <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#111827' }}>러닝</h3>
+                      <a href="/category/running" style={{ fontSize: '11px', color: '#6b7280' }}>
+                        모두 보기
+                      </a>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div style={{ overflowY: 'auto' }}>
+                      {[
+                        '신제품',
+                        '베스트셀러',
+                        '러닝화',
+                        '남성',
+                        '여성',
+                        '용품',
+                        '트레일러닝',
+                        '러닝 클리어런스',
+                        '러닝웨어',
+                      ].map((subItem) => (
+                        <div
+                          key={subItem}
+                          onClick={handleEmptyLink}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 8px',
+                            borderBottom: '1px solid #f3f4f6',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            color: '#374151',
+                          }}
+                        >
+                          <span>{subItem}</span>
+                          <span style={{ color: '#9ca3af' }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Column 3: Promo Images & App Banner (Matches Screenshot) */}
-              <div
-                style={{
-                  width: '50%',
-                  padding: '24px',
-                  backgroundColor: '#ffffff',
-                  display: 'flex',
-                  gap: '16px',
-                }}
-              >
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <img
-                    src="https://contents.mediadecathlon.com/p2861117/k$f230ceac9888cc19f9b50093d1d0d77d/1200x800/QUECHUA.jpg?format=auto"
-                    alt="promo1"
-                    style={{ flex: 1, width: '100%', objectFit: 'cover', borderRadius: '4px' }}
-                  />
-                  <img
-                    src="https://contents.mediadecathlon.com/p3048178/k$8983f233e80f2bcbd10ca3793459d355/2200x1103/5000pt3791/10000xcr5017/KIPRUN.webp"
-                    alt="promo2"
-                    style={{ flex: 1, width: '100%', objectFit: 'cover', borderRadius: '4px' }}
-                  />
-                </div>
-                <div
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#3A4EB5',
-                    borderRadius: '4px',
-                    padding: '24px',
-                    color: 'white',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    textAlign: 'center',
-                  }}
-                >
-                  <h4 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>
-                    데카트론 APP에서
-                    <br />
-                    편리한 쇼핑
-                  </h4>
-                  <p style={{ fontSize: '10px', color: '#e5e7eb', marginBottom: '16px' }}>
-                    앱 알림 활성화 시 정기적으로 혜택 제공
-                  </p>
-                  <img
-                    src="https://contents.mediadecathlon.com/s1012444/k$f9cd9f79c6b583f1c842884359c0843e/app%20store%20button%20tr.svg"
-                    alt="app"
-                    style={{ width: '120px', marginTop: 'auto' }}
-                  />
-                </div>
-              </div>
+                  <div
+                    style={{
+                      width: '50%',
+                      padding: '24px',
+                      backgroundColor: '#ffffff',
+                      display: 'flex',
+                      gap: '16px',
+                    }}
+                  >
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <img
+                        src="https://contents.mediadecathlon.com/p2861117/k$f230ceac9888cc19f9b50093d1d0d77d/1200x800/QUECHUA.jpg?format=auto"
+                        alt="promo1"
+                        style={{ flex: 1, width: '100%', objectFit: 'cover', borderRadius: '4px' }}
+                      />
+                      <img
+                        src="https://contents.mediadecathlon.com/p3048178/k$8983f233e80f2bcbd10ca3793459d355/2200x1103/5000pt3791/10000xcr5017/KIPRUN.webp"
+                        alt="promo2"
+                        style={{ flex: 1, width: '100%', objectFit: 'cover', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#3A4EB5',
+                        borderRadius: '4px',
+                        padding: '24px',
+                        color: 'white',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <h4 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>
+                        데카트론 APP에서
+                        <br />
+                        편리한 쇼핑
+                      </h4>
+                      <img
+                        src="https://contents.mediadecathlon.com/s1012444/k$f9cd9f79c6b583f1c842884359c0843e/app%20store%20button%20tr.svg"
+                        alt="app"
+                        style={{ width: '120px', marginTop: 'auto' }}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* --- 2-COLUMN LAYOUT --- */
+                <>
+                  <div
+                    style={{
+                      width: '30%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '32px',
+                      backgroundColor: 'white',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-end',
+                        borderBottom: '2px solid #0055A4',
+                        paddingBottom: '8px',
+                        marginBottom: '16px',
+                      }}
+                    >
+                      <h3 style={{ fontWeight: 700, fontSize: '18px', color: '#111827' }}>
+                        {megaMenuData[activeMenu as string]?.title}
+                      </h3>
+                      <a
+                        href={megaMenuData[activeMenu as string]?.link}
+                        style={{ fontSize: '12px', color: '#6b7280', textDecoration: 'none' }}
+                      >
+                        모두 보기
+                      </a>
+                    </div>
+                    <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
+                      {megaMenuData[activeMenu as string]?.items?.map((item) => (
+                        <div
+                          key={item}
+                          onClick={handleEmptyLink}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '14px 0',
+                            borderBottom: '1px solid #f3f4f6',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            color: '#374151',
+                          }}
+                        >
+                          <span>{item}</span>
+                          <span style={{ color: '#9ca3af' }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ width: '70%', position: 'relative', backgroundColor: '#f3f4f6' }}>
+                    <img
+                      src={megaMenuData[activeMenu as string]?.image}
+                      alt={`${activeMenu} Promo`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                </>
+              )}
 
-              {/* Close Button */}
               <button
                 onClick={() => setActiveMenu(null)}
                 style={{
