@@ -6,6 +6,7 @@ import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
 import { ProductCard } from '@/entities/product/ui/ProductCard';
 import { runningProducts } from '@/page-components/main-landing/ui/mockData';
+import Link from 'next/link';
 
 const categoryNames: Record<string, string> = {
   'first-choice': 'FIRST CHOICE',
@@ -286,11 +287,17 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
                     imageUrl: product.imageUrl || product.img || product.image, // Fixes broken images
                     name: product.name || product.title, // Fixes missing names
                   };
-
                   return (
-                    <div key={product.id} className="h-full">
-                      <ProductCard product={safeProduct} />
-                    </div>
+                    <Link
+                      href={`/product/${product.id}`}
+                      key={product.id}
+                      className="h-full"
+                      style={{ textDecoration: 'none' }}
+                    >
+                      <div className="h-full pointer-events-auto">
+                        <ProductCard product={safeProduct} />
+                      </div>
+                    </Link>
                   );
                 })}
               </div>

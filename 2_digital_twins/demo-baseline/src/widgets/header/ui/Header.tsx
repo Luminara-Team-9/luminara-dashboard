@@ -83,15 +83,21 @@ export function Header() {
   };
 
   useEffect(() => {
-    const handleCartUpdate = () => {
-      setCartCount((prevCount) => prevCount + 1);
+    // Function to calculate total items in the cart
+    const updateCartCount = () => {
+      const cart = JSON.parse(localStorage.getItem('decathlon_cart') || '[]');
+      const totalItems = cart.reduce((sum: number, item: any) => sum + item.quantity, 0);
+      setCartCount(totalItems);
     };
 
-    // Listen for the event dispatched from the ProductCard
-    window.addEventListener('cart-updated', handleCartUpdate);
+    // 1. Run immediately on page load to prevent showing 0
+    updateCartCount();
+
+    // 2. Listen for events from ProductCard and PDP
+    window.addEventListener('cart-updated', updateCartCount);
 
     return () => {
-      window.removeEventListener('cart-updated', handleCartUpdate);
+      window.removeEventListener('cart-updated', updateCartCount);
     };
   }, []);
 

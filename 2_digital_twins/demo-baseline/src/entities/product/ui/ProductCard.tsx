@@ -29,10 +29,38 @@ export function ProductCard({ product }: ProductCardProps) {
       return;
     }
 
+    // --- NEW: Save to Local Storage ---
+    const existingCart = JSON.parse(localStorage.getItem('decathlon_cart') || '[]');
+
+    const cartItem = {
+      id: product.id || String(Math.random()),
+      name: product.name,
+      brand: product.category || 'DECATHLON',
+      price: product.price,
+      originalPrice: product.originalPrice,
+      size: selectedSize,
+      quantity: quantity,
+      imageUrl: product.imageUrl,
+    };
+
+    const existingItemIndex = existingCart.findIndex(
+      (item: any) => item.id === cartItem.id && item.size === cartItem.size,
+    );
+
+    if (existingItemIndex > -1) {
+      existingCart[existingItemIndex].quantity += quantity;
+    } else {
+      existingCart.push(cartItem);
+    }
+
+    localStorage.setItem('decathlon_cart', JSON.stringify(existingCart));
+    // ----------------------------------
+
     setShowError(false);
-    setShowSuccess(true); // Switch to the Success UI (Image 3)
-    window.dispatchEvent(new CustomEvent('cart-updated')); // Update global header
+    setShowSuccess(true);
+    window.dispatchEvent(new CustomEvent('cart-updated'));
   };
+
   const discount = product.originalPrice
     ? Math.round((1 - product.price / product.originalPrice) * 100)
     : null;
