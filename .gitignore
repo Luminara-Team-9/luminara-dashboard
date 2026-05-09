@@ -121,5 +121,7 @@ Thumbs.db
 *.code-workspace
 
 # Cursor IDE specific
-.cursor/
-!.cursorrules4_automation_tests/lighthouse-runner/results/
+!.cursorrules
+
+# Lighthouse results
+/4_automation_tests/lighthouse-runner/results/
