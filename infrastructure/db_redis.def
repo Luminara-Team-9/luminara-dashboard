@@ -36,7 +36,7 @@ From: redis:7-bookworm
     apt-get clean
     rm -rf /tmp/apt-cache
 
-%runscript
+%startscript
     echo "------------------------------------------------"
     echo "🔴 Luminara RUM: REDIS Starting"
     echo "🌐 Port: $PORT | Bind: $REDIS_HOST | Data: /data/redis"

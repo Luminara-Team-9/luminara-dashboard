@@ -1,0 +1,81 @@
+name: "Ephemeral Clone Audit"
+description: "Boots an immutable Next.js twin, runs LHCI against performance budgets, and gracefully tears down."
+
+inputs:
+  twin_image_path:
+    description: "The absolute path to the baked .sif artifact (e.g., pr_123.sif)"
+    required: true
+  lhci_token:
+    description: "Token for the LHCI Server"
+    required: true
+  audit_image_dir:
+    description: "Path to the production Singularity images (for the auditor)"
+    required: true
+  target_site:
+    description: "Path to the codebase (still needed for the Agent trigger)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: 🎲 Stage 1 - Allocate Dynamic Port & Init
+      shell: bash
+      run: |        
+        # Pre-cleanup
+        echo "Ensuring clean slate for Run ID: ${{ github.run_id }}"
+        singularity instance stop clone_${{ github.run_id }} 2>/dev/null || true
+        singularity instance stop audit_${{ github.run_id }} 2>/dev/null || true
+
+        FREE_PORT=$(comm -23 <(seq 3060 3200 | sort) <(ss -Htan | awk '{print $4}' | cut -d':' -f2 | sort -u) | shuf | head -n 1)
+        echo "TWIN_PORT=$FREE_PORT" >> $GITHUB_ENV
+        echo "TWIN_NAME=clone_${{ github.run_id }}" >> $GITHUB_ENV
+        echo "Assigned Port: $FREE_PORT"
+
+    - name: 🚀 Stage 2 - Boot Digital Twin
+      shell: bash
+      run: |
+        echo "Booting instance: ${{ inputs.twin_image_path }} on port ${{ env.TWIN_PORT }}"
+        
+        # 🚨 SRE FIX: Notice there is NO --bind flag for the workspace here!
+        # The container is 100% self-contained and baked.
+        singularity instance start \
+          --env PORT=${{ env.TWIN_PORT }} \
+          ${{ inputs.twin_image_path }} ${{ env.TWIN_NAME }}
+          
+        echo "⏳ Waiting for Next.js to finish building and start routing..."
+        TIMEOUT=180
+        ELAPSED=0
+        until curl -s http://localhost:${{ env.TWIN_PORT }} > /dev/null; do
+          if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo "❌ ERROR: Twin failed to boot within $TIMEOUT seconds."
+            exit 1
+          fi
+          printf "."
+          sleep 3
+          ELAPSED=$((ELAPSED+3))
+        done
+        echo -e "\n✅ Digital Twin is online and ready for audit!"
+
+    - name: ⚡ Stage 3 - Execute Ephemeral Audit
+      shell: bash
+      env:
+        LHCI_BUILD_TOKEN: ${{ inputs.lhci_token }}
+        LHCI_COLLECT_URL: http://localhost:${{ env.TWIN_PORT }}/
+      run: |
+        echo "Firing LHCI metrics against the Digital Twin..."
+        # 🚨 SRE FIX: Multi-Bind Architecture
+        # 1. Bind the Next.js code folder
+        # 2. Surgically bind the central config file into the same workspace
+        singularity exec \
+          --bind ./${{ inputs.target_site }}:/workspace \
+          --bind ./4_automation_tests/lighthouse-runner/lighthouserc.js:/workspace/lighthouserc.js \
+          ${{ inputs.image_dir }}/infrastructure_audit_ephemeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
+
+    - name: 🛑 Mandatory Teardown
+      if: always()
+      shell: bash
+      run: |
+        echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
+        # Destroys ONLY the twin and audit containers tied to this specific PR execution
+        singularity instance stop ${{ env.TWIN_NAME }} 2>/dev/null || echo "Twin cleanly stopped."
+        singularity instance stop $AUDIT_NAME 2>/dev/null || echo "Audit already cleanly stopped."

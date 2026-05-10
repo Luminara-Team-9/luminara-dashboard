@@ -33,7 +33,7 @@ From: clickhouse/clickhouse-server:24.3
         procps \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-%runscript
+%startscript
     echo "------------------------------------------------"
     echo "📊 Luminara DEVELOPMENT: CLICKHOUSE Starting"
     echo "🌐 HTTP: 8124 | Native: 9001"

@@ -1,21 +1,16 @@
 """
 load.py
-Loads transformed Lighthouse data into PostgreSQL
+Inserts processed Lighthouse data into core_db.
+Part of ETL pipeline — runs after transform.py.
 
-Flow:
-    transform.py output (clean dict)
-            ↓
-    load(transformed, raw_json, metadata)
-            ↓
-    PostgreSQL tables:
-    → playwright_runs
-    → lighthouse_runs
-    → lighthouse_raw_reports
-    → lighthouse_opportunities
+Tables affected:
+    playwright_runs        (session tracking)
+    lighthouse_runs        (metrics)
+    lighthouse_raw_reports (raw JSON)
+    lighthouse_opportunities (fixable issues)
 """
 
 import os
-import json
 import psycopg2
 from psycopg2.extras import Json
 from dotenv import load_dotenv
@@ -25,94 +20,66 @@ load_dotenv()
 
 def get_db_connection():
     """
-    Create and return PostgreSQL connection
-    Uses .env variables for credentials
-
-    LOCAL:      connects to local PostgreSQL
-    PRODUCTION: connects to NAS PostgreSQL
-    → only .env changes, code stays same ✅
+    Connect to core_db on production server.
+    Variable names match .env.example template.
     """
     return psycopg2.connect(
-        host=os.getenv('HOST_IP', 'localhost'),
+        host=os.getenv('HOST_IP', '127.0.0.1'),
         port=os.getenv('PGPORT', '5432'),
-        dbname=os.getenv('POSTGRES_DB', 'luminara_dev'),
-        user=os.getenv('POSTGRES_USER', 'postgres'),
-        password=os.getenv('POSTGRES_PASSWORD', '')
+        dbname=os.getenv('POSTGRES_DB'),
+        user=os.getenv('POSTGRES_USER'),
+        password=os.getenv('POSTGRES_PASSWORD')
     )
-    # psycopg2.connect = open connection to PostgreSQL
-    # os.getenv() = read value from .env file
-    # second argument = default value if not found in .env
 
 
-def create_playwright_run(conn, run_type='decathlon_daily'):
+def create_playwright_run(conn, metadata):
     """
-    Insert a new playwright session record
-    Input:  conn = database connection
-            run_type = type of run
-    Output: id of created playwright_run row
-
-    Called ONCE per ETL session
-    All lighthouse_runs in this session
-    will reference this playwright_run_id
+    Create session record in playwright_runs.
+    run_type: 'decathlon_daily' / 'competitor_scan' / 'manual_test'
+    Returns playwright_run_id.
     """
     cursor = conn.cursor()
-    # cursor = tool to execute SQL commands
-
     cursor.execute("""
         INSERT INTO playwright_runs (
             run_type,
+            url,
+            device_type,
             started_at,
             status
-        ) VALUES (
-            %s,
-            NOW(),
-            'running'
-        )
+        ) VALUES (%s, %s, %s, NOW(), 'running')
         RETURNING id
-    """, (run_type,))
-    # %s = placeholder for value
-    #      prevents SQL injection
-    # NOW() = current timestamp
-    # RETURNING id = give back the
-    #               auto-generated id
-
-    playwright_run_id = cursor.fetchone()[0]
-    # fetchone() = get first row of result
-    # [0] = get first column (the id)
-
-    return playwright_run_id
+    """, (
+        metadata.get('run_type'),
+        metadata.get('url', None),
+        metadata.get('device_type', None),
+    ))
+    return cursor.fetchone()[0]
 
 
-def update_playwright_run(conn, playwright_run_id,
-                          success_count, failed_count):
+def update_playwright_run(
+    conn, playwright_run_id,
+    success_count, failed_count
+):
     """
-    Update playwright_run status when ETL finishes
-    Input:  conn = database connection
-            playwright_run_id = id to update
-            success_count = how many tests succeeded
-            failed_count = how many tests failed
+    Update session status when ETL finishes.
+    status: 'completed' / 'partial' / 'failed'
     """
     cursor = conn.cursor()
 
-    # determine overall status
     if failed_count == 0:
         status = 'completed'
-        # all tests passed ✅
     elif success_count == 0:
         status = 'failed'
-        # all tests failed ❌
     else:
         status = 'partial'
-        # some passed, some failed ⚠️
 
     cursor.execute("""
         UPDATE playwright_runs
-        SET
-            finished_at = NOW(),
-            total_tests = %s,
-            success_count = %s,
-            failed_count = %s,
-            status = %s
+        SET finished_at    = NOW(),
+            total_tests    = %s,
+            success_count  = %s,
+            failed_count   = %s,
+            status         = %s
         WHERE id = %s
     """, (
         success_count + failed_count,
@@ -121,54 +88,33 @@ def update_playwright_run(conn, playwright_run_id,
         status,
         playwright_run_id
     ))
-    # UPDATE = modify existing row
-    # SET = which columns to change
-    # WHERE id = %s = which row to update
 
 
-def insert_lighthouse_run(conn, transformed, metadata,
-                          playwright_run_id):
+def insert_lighthouse_run(
+    conn, transformed, metadata,
+    playwright_run_id
+):
     """
-    Insert transformed metrics into lighthouse_runs table
-    Input:  conn = database connection
-            transformed = clean dict from transform.py
-            metadata = dict with site info from Phoo
-                       (site_type, page_type etc.)
-            playwright_run_id = links to playwright session
-    Output: test_id of created row
+    Insert one page scan into lighthouse_runs.
+    Returns test_id to link raw_reports + opportunities.
     """
     cursor = conn.cursor()
-
     cursor.execute("""
         INSERT INTO lighthouse_runs (
             playwright_run_id,
-            url,
-            site_type,
-            competitor_name,
-            page_type,
-            device_type,
-            network_profile,
-            run_number,
-            timestamp,
-            lcp_ms,
-            tbt_ms,
-            cls_score,
-            fcp_ms,
-            si_ms,
-            tti_ms,
-            ttfb_ms,
-            inp_ms,
-            performance_score,
-            accessibility_score,
-            best_practices_score,
-            seo_score,
-            total_requests,
-            page_size_kb,
-            js_size_kb
+            url, site_type, competitor_name,
+            page_type, device_type, network_profile,
+            run_number, timestamp,
+            lcp_ms, tbt_ms, cls_score, fcp_ms,
+            si_ms, tti_ms, ttfb_ms, inp_ms,
+            performance_score, accessibility_score,
+            best_practices_score, seo_score,
+            total_requests, page_size_kb,
+            js_size_kb, css_size_kb, image_size_kb
         ) VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s
         )
         RETURNING test_id
     """, (
@@ -195,141 +141,123 @@ def insert_lighthouse_run(conn, transformed, metadata,
         transformed['seo_score'],
         transformed['total_requests'],
         transformed['page_size_kb'],
-        transformed['js_size_kb']
+        transformed['js_size_kb'],
+        transformed['css_size_kb'],
+        transformed['image_size_kb'],
     ))
-
-    test_id = cursor.fetchone()[0]
-    return test_id
+    return cursor.fetchone()[0]
 
 
 def insert_raw_report(conn, test_id, raw_json):
     """
-    Insert raw Lighthouse JSON into lighthouse_raw_reports
-    Input:  conn = database connection
-            test_id = links to lighthouse_runs row
-            raw_json = original Lighthouse JSON dict
+    Store complete raw Lighthouse JSON.
+    Kept for reprocessing without re-running audits.
     """
     cursor = conn.cursor()
-
     cursor.execute("""
         INSERT INTO lighthouse_raw_reports (
-            test_id,
-            raw_json
+            test_id, raw_json
         ) VALUES (%s, %s)
-    """, (
-        test_id,
-        Json(raw_json)
-        # Json() = converts Python dict to PostgreSQL JSONB
-        # psycopg2.extras.Json handles this conversion
-    ))
+    """, (test_id, Json(raw_json)))
 
 
 def insert_opportunities(conn, test_id, opportunities):
     """
-    Insert all opportunities into lighthouse_opportunities
-    Input:  conn = database connection
-            test_id = links to lighthouse_runs row
-            opportunities = list from transform.py
+    Insert fixable issues found by Lighthouse.
+    Sorted highest savings_ms first (from extract.py).
+    Agent uses frequency across 3 runs to prioritize fixes.
     """
     cursor = conn.cursor()
-
     for opp in opportunities:
         cursor.execute("""
             INSERT INTO lighthouse_opportunities (
-                test_id,
-                opportunity_id,
-                title,
-                description,
-                savings_ms,
-                severity
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                test_id, opportunity_id,
+                title, description,
+                savings_ms, severity,
+                category, details
+            ) VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s
+            )
         """, (
             test_id,
             opp['opportunity_id'],
             opp['title'],
             opp['description'],
             opp['savings_ms'],
-            opp['severity']
+            opp['severity'],
+            opp['category'],
+            Json(opp['details']) if opp.get('details') else None,
         ))
-        # loop inserts one row per opportunity
-        # each row links to same test_id
 
 
 def load(transformed, raw_json, metadata,
          playwright_run_id=None):
     """
-    Main load function — inserts all data into PostgreSQL
-    Input:  transformed = clean dict from transform.py
-            raw_json = original Lighthouse JSON dict
-            metadata = site info (site_type, page_type etc.)
-            playwright_run_id = existing session id
-                                (None = create new session)
-    Output: dict with inserted IDs
+    Main load function.
+    Runs all inserts in one transaction.
+    If anything fails → full rollback, no partial data.
 
-    Uses transaction:
-    → if anything fails → rollback everything
-    → no partial data in database
+    Args:
+        transformed:       clean metrics from transform.py
+        raw_json:          original Lighthouse JSON
+        metadata:          scan info (site_type, page_type etc.)
+        playwright_run_id: pass existing session ID to continue
+                          None = create new session
+
+    Returns:
+        dict with success, playwright_run_id, test_id
     """
     conn = None
-    # conn = None = no connection yet
-
     try:
-        # open connection to PostgreSQL
         conn = get_db_connection()
 
-        # create playwright_run if not provided
+        # create new session or continue existing one
         if playwright_run_id is None:
             playwright_run_id = create_playwright_run(
-                conn,
-                metadata.get('run_type', 'decathlon_daily')
+                conn, metadata
             )
 
-        # insert main metrics row
+        # insert metrics → get test_id
         test_id = insert_lighthouse_run(
-            conn, transformed, metadata, playwright_run_id
+            conn, transformed, metadata,
+            playwright_run_id
         )
 
-        # insert raw JSON
+        # store raw JSON for reprocessing later
         insert_raw_report(conn, test_id, raw_json)
 
-        # insert all opportunities
+        # insert opportunities for agent analysis
         insert_opportunities(
-            conn, test_id, transformed['opportunities']
+            conn, test_id,
+            transformed['opportunities']
         )
 
-        # commit = save all changes to database
-        # if we reach here = everything worked ✅
         conn.commit()
 
         print(f"✅ Loaded successfully!")
+        print(f"   db:                {os.getenv('POSTGRES_DB')}")
         print(f"   playwright_run_id: {playwright_run_id}")
-        print(f"   test_id: {test_id}")
-        print(f"   opportunities: "
-              f"{len(transformed['opportunities'])}")
+        print(f"   test_id:           {test_id}")
+        print(f"   url:               {transformed['url']}")
+        print(f"   performance:       {transformed['performance_score']}")
+        print(f"   opportunities:     {len(transformed['opportunities'])}")
 
         return {
             'playwright_run_id': playwright_run_id,
-            'test_id': test_id,
-            'success': True
+            'test_id':           test_id,
+            'success':           True
         }
 
     except Exception as e:
-        # something went wrong
         if conn:
             conn.rollback()
-            # rollback = undo ALL changes
-            # database stays clean
-            # no partial data ✅
         print(f"❌ Load failed: {e}")
         return {
             'success': False,
-            'error': str(e)
+            'error':   str(e)
         }
 
     finally:
-        # finally = always runs
-        # even if error occurred
         if conn:
             conn.close()
-            # always close connection
-            # prevents connection leaks

@@ -24,7 +24,7 @@ From: swetrix/swetrix-api:latest
     # NPM Cache Bomb defusal (Cleans any garbage left by the base image)
     npm cache clean --force || true
 
-%runscript
+%startscript
     echo "------------------------------------------------"
     echo "📈 Luminara RUM: SWETRIX API Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"

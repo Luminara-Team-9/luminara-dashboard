@@ -16,6 +16,7 @@ From: postgres:15.6-bookworm
     export PGSOCKETS=/tmp
     export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+
 %post
     # SRE FIX 1: Restore the PATH immediately
     # This prevents the "mkdir: not found" error by telling the shell where binaries live.
@@ -32,6 +33,7 @@ From: postgres:15.6-bookworm
     
     # SRE FIX 3: Disable disk space check and install tools
     apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends -o Acquire::Retries=3 \
+        postgresql-15-pgvector \
         ca-certificates \
         curl
         
@@ -44,10 +46,11 @@ From: postgres:15.6-bookworm
 
     echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
 
-%runscript
+%startscript
     # ------------------------------------------------------------------
     # PRODUCTION BOOTSTRAP PROTOCOL
     # ------------------------------------------------------------------
+    DB_USER=${POSTGRES_USER:-coss41}
     
     # 1. Automatic Initialization (Runs only if /data is empty)
     if [ ! -f "$PGDATA/PG_VERSION" ]; then
@@ -58,8 +61,9 @@ From: postgres:15.6-bookworm
         echo "🐘 First-time boot: Initializing Production Database Cluster..."
         # SRE FIX: POSIX-compliant password injection (No Bashisms)
         echo "$POSTGRES_PASSWORD" > /tmp/pg_pw.txt
-        initdb -D "$PGDATA" --auth=md5 --pwfile=/tmp/pg_pw.txt
-        rm /tmp/pg_pw.tx
+        # Add the -U flag here!
+        initdb -D "$PGDATA" -U "$DB_USER" --auth=md5 --pwfile=/tmp/pg_pw.txt
+        rm /tmp/pg_pw.txt
     fi
 
     echo "------------------------------------------------"

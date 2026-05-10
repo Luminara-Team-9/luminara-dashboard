@@ -61,27 +61,13 @@ pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 # Note: Ensure the wheel matches Torch 2.6.0, CUDA 12.4, and Python 3.12 (cp312)
 pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl
 
+echo -e "[..] Installing Unsloth Training Engine..."
+pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+
 # 3. Then run the requirements (Ensure flash-attn is REMOVED from requirements-server.txt)
+echo -e "[..] Synchronizing requirements-server.txt..."
 pip install -r requirements-server.txt
 
-
-echo -e "[..] Installing Core AI Engine (PyTorch 2.6.0 for CUDA 12.4)..."
-pip install torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu124
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}[OK] PyTorch 2.6.0 Engine installed.${NC}"
-else
-    echo -e "${RED}[!] FAILED to install Torch.${NC}"
-    exit 1
-fi
-
-echo -e "[..] Installing Flash Attention explicitly..."
-# 2. Install pre-compiled Flash Attention explicitly
-# Note: Ensure the wheel matches Torch 2.6.0, CUDA 12.4, and Python 3.12 (cp312)
-pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl
-
-
-echo -e "[..] Installing requirements-server.txt dependencies..."
-pip install -r requirements-server.txt
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] All Python dependencies synchronized.${NC}"
 else

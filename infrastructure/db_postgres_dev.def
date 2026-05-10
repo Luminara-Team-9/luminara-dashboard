@@ -47,7 +47,7 @@ From: postgres:15.6-bookworm
 
     echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
 
-%runscript
+%startscript
     # ------------------------------------------------------------------
     # DEVELOPMENT BOOTSTRAP PROTOCOL
     # ------------------------------------------------------------------

@@ -4,59 +4,69 @@ From: node:24-slim
 %labels
     Maintainer Luminara-SRE
     Project Luminara-Dashboard
-    Tier Production
+    Tier Production-Pure
 
-%setup
-    mkdir -p ${SINGULARITY_ROOTFS}/data
-    mkdir -p ${SINGULARITY_ROOTFS}/workspace
+# ---------------------------------------------------------
+# 📦 INJECT SOURCE CODE
+# Singularity copies these from your GitHub runner workspace 
+# directly into the container's internal /workspace
+# ---------------------------------------------------------
+%files
+    ./1_dashboard_app /workspace/1_dashboard_app
+    ./0_shared_packages /workspace/0_shared_packages
+    ./pnpm-workspace.yaml /workspace/pnpm-workspace.yaml
+    ./package.json /workspace/package.json
+
+    # SRE FIX: Inject the lockfile so frozen-lockfile has a blueprint to read
+    ./pnpm-lock.yaml /workspace/pnpm-lock.yaml
 
 %environment
     export PORT=${PORT:-3000}
     export NODE_ENV=production
-    export DATA_PATH=/data
-    
     export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
 
+# ---------------------------------------------------------
+# 🛠️ INTERNAL BUILD PHASE
+# This happens ONCE when the .sif file is being created.
+# ---------------------------------------------------------
 %post
     set -e
+    export NODE_ENV=production
 
-    # Install system tools
+    # 1. Install system tools
     apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates \
+        curl ca-certificates \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    npm install -g pnpm@latest
+    # 2. Install Global JS Tools
+    npm install -g pnpm@latest pm2
     
-    # SRE FIX: Install PM2 for robust process management
-    npm install -g pm2
+    # 3. Build the Application INSIDE the Container
+    cd /workspace
+    echo "📦 Installing Dependencies Internally..."
+    pnpm install --frozen-lockfile
     
+    echo "🏗️ Building Next.js Internally..."
+    pnpm --filter ./1_dashboard_app build
+    
+    # Optional SRE Cleanup: Remove node_modules and reinstall ONLY production 
+    # dependencies to make the final .sif file smaller
+    rm -rf node_modules
+    pnpm install --prod --frozen-lockfile
     npm cache clean --force
 
-%runscript
-    # 1. Navigate deep into the monorepo structure
+# ---------------------------------------------------------
+# 🚀 RUN PHASE
+# This happens every time you start the container.
+# ---------------------------------------------------------
+%startscript
     cd /workspace/1_dashboard_app
     
     echo "------------------------------------------------"
-    echo "🚀 Luminara PRODUCTION Dashboard Starting"
+    echo "🚀 Luminara PURE PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
 
-    # 2. Instant validation
-    if [ ! -d ".next" ]; then
-        # SRE FIX: Updated the error log to point to the correct monorepo path
-        echo "CRITICAL ERROR: No compiled Next.js build found in /workspace/1_dashboard_app/.next"
-        echo "Did the CI/CD pipeline correctly sync the 1_dashboard_app directory?"
-        exit 1
-    fi
-
-    # 3. PM2 Execution
+    # It will never fail this check now, because it was baked in during %post
     exec pm2-runtime start npm --name "luminara-dashboard-prod" -- run start -- -p $PORT
-
-%help
-    Luminara Production Dashboard
-    ------------------------------
-    This image is strictly for SERVING compiled Next.js code.
-    You must run `pnpm install` and `pnpm build` on the host machine (or via the CI/CD pipeline) 
-    BEFORE launching this container.
