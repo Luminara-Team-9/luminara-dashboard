@@ -132,3 +132,4 @@ Thumbs.db
 3_data_ai_pipeline/etl/test_extract.py
 3_data_ai_pipeline/etl/test_transform.py
 3_data_ai_pipeline/etl/test_load.py
+4_automation_tests/lighthouse-runner/results/
