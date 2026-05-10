@@ -131,3 +131,10 @@ Thumbs.db
 3_data_ai_pipeline/etl/test_extract.py
 3_data_ai_pipeline/etl/test_transform.py
 3_data_ai_pipeline/etl/test_load.py
+
+# ========================================
+# 10. CREDENTIALS
+# ========================================
+*_github
+*_github.pub
+*.pub
