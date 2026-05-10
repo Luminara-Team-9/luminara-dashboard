@@ -9,39 +9,59 @@ export function CartPage() {
   // 1. Dynamic State for Cart Items
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [isLoaded, setIsLoaded] = useState(false); // Prevents Next.js hydration errors
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null); // NEW: Modal state
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false); // NEW: Checkout loading
 
-  // 2. Load the cart from browser memory when the page opens
+  // 2. Load the cart from browser memory
   useEffect(() => {
     const savedCart = localStorage.getItem('decathlon_cart');
     if (savedCart) {
       try {
         setCartItems(JSON.parse(savedCart));
       } catch (e) {
-        console.error('Cart parsing error', e);
+        console.error(e);
       }
     }
     setIsLoaded(true);
   }, []);
 
-  // 3. Save the cart back to memory whenever it changes (like clicking + or -)
+  // 3. Save the cart and FIX THE EVENT NAME
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem('decathlon_cart', JSON.stringify(cartItems));
-      // Triggers an event so we can make the Header cart count update later!
-      window.dispatchEvent(new Event('cartUpdated'));
+      window.dispatchEvent(new CustomEvent('cart-updated')); // FIXED: Now matches Header exactly!
     }
   }, [cartItems, isLoaded]);
 
-  // 4. Function to handle + and - buttons
+  // 4. Quantity update and Delete logic
   const updateQuantity = (index: number, delta: number) => {
     const newCart = [...cartItems];
-    newCart[index].quantity += delta;
+    const newQuantity = newCart[index].quantity + delta;
 
-    // If quantity goes to 0, remove the item entirely
-    if (newCart[index].quantity < 1) {
-      newCart.splice(index, 1);
+    if (newQuantity < 1) {
+      setItemToDelete(index); // Trigger the modal instead of instant delete
+    } else {
+      newCart[index].quantity = newQuantity;
+      setCartItems(newCart);
     }
-    setCartItems(newCart);
+  };
+
+  const executeDelete = () => {
+    if (itemToDelete !== null) {
+      const newCart = [...cartItems];
+      newCart.splice(itemToDelete, 1);
+      setCartItems(newCart);
+      setItemToDelete(null);
+    }
+  };
+
+  const handleCheckout = () => {
+    setIsCheckoutLoading(true);
+    // Simulate SRE API delay (2.5 seconds)
+    setTimeout(() => {
+      setIsCheckoutLoading(false);
+      alert('결제가 완료되었습니다! (Checkout Complete)');
+    }, 2500);
   };
 
   // 5. Dynamic Calculations
@@ -125,30 +145,50 @@ export function CartPage() {
                       justifyContent: 'space-between',
                     }}
                   >
-                    <div>
-                      <p
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <div>
+                        <p
+                          style={{
+                            fontSize: '12px',
+                            color: '#0055A4',
+                            marginBottom: '4px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {item.brand}
+                        </p>
+                        <p
+                          style={{
+                            fontSize: '14px',
+                            fontWeight: 700,
+                            marginBottom: '8px',
+                            color: '#111827',
+                          }}
+                        >
+                          {item.name}
+                        </p>
+                        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>
+                          사이즈: {item.size}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setItemToDelete(index)}
                         style={{
-                          fontSize: '12px',
-                          color: '#0082C3',
-                          marginBottom: '4px',
-                          fontWeight: 'bold',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#6b7280',
+                          fontSize: '18px',
                         }}
                       >
-                        {item.brand}
-                      </p>
-                      <p
-                        style={{
-                          fontSize: '14px',
-                          fontWeight: 700,
-                          marginBottom: '8px',
-                          color: '#111827',
-                        }}
-                      >
-                        {item.name}
-                      </p>
-                      <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>
-                        사이즈: {item.size}
-                      </p>
+                        🗑️
+                      </button>
                     </div>
                     <div
                       style={{
@@ -259,20 +299,29 @@ export function CartPage() {
               </span>
             </div>
             <button
-              disabled={cartItems.length === 0}
+              onClick={handleCheckout}
+              disabled={cartItems.length === 0 || isCheckoutLoading}
               style={{
                 width: '100%',
                 padding: '16px',
-                backgroundColor: cartItems.length === 0 ? '#e5e7eb' : '#0082C3',
+                backgroundColor: cartItems.length === 0 ? '#e5e7eb' : '#3A4EB5',
                 color: cartItems.length === 0 ? '#9ca3af' : 'white',
                 border: 'none',
-                borderRadius: '8px',
+                borderRadius: '4px',
                 fontSize: '16px',
                 fontWeight: 700,
-                cursor: cartItems.length === 0 ? 'not-allowed' : 'pointer',
+                cursor: cartItems.length === 0 || isCheckoutLoading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
-              결제하기
+              {isCheckoutLoading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                '결제하기'
+              )}
             </button>
             <a
               href="/category/running"
@@ -289,6 +338,90 @@ export function CartPage() {
             </a>
           </div>
         </div>
+        {/* --- NEW: Delete Confirmation Modal --- */}
+        {itemToDelete !== null && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              zIndex: 100,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '4px',
+                width: '400px',
+                overflow: 'hidden',
+                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '16px 24px',
+                  borderBottom: '1px solid #e5e7eb',
+                }}
+              >
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>
+                  선택 제품 삭제
+                </h3>
+                <button
+                  onClick={() => setItemToDelete(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '20px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ padding: '32px 24px' }}>
+                <p style={{ fontSize: '14px', color: '#111827' }}>
+                  선택된 1개의 제품을 삭제하시겠어요?
+                </p>
+              </div>
+              <div style={{ display: 'flex', padding: '16px 24px', gap: '8px' }}>
+                <button
+                  onClick={() => setItemToDelete(null)}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    border: '1px solid #d1d5db',
+                    backgroundColor: 'white',
+                    color: '#374151',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={executeDelete}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    border: 'none',
+                    backgroundColor: '#e5002b',
+                    color: 'white',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  확인
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
       <Footer />
     </div>

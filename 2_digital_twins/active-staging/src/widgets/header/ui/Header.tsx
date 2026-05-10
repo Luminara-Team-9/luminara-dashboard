@@ -1,23 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-
-const announcementItems = [
-  { icon: '🔄', text: '멤버십 프로그램', subText: '자세히 보기', href: '/s/korea_membership' },
-  { icon: '📍', text: '매장 안내', subText: '위치 보기', href: '/s/our-stores' },
-  {
-    icon: '🚚',
-    text: '5만원 이상 무료배송',
-    subText: '자세히 보기',
-    href: '/s/return-and-exchange-1',
-  },
-  {
-    icon: 'ℹ️',
-    text: '데카트론 브랜드 이야기',
-    subText: '자세히 보기',
-    href: '/s/about-decathlon-korea',
-  },
-];
+import { useState, useEffect } from 'react';
 
 const navCategories = [
   { label: '모든 스포츠', href: '/c/all-sports' },
@@ -35,7 +18,7 @@ const megaMenuData: Record<
 > = {
   '모든 스포츠': {
     title: '모든 스포츠',
-    link: '/c/all-sports',
+    link: '/category/all-sports',
     items: [
       '러닝',
       '등산',
@@ -91,70 +74,166 @@ const megaMenuData: Record<
 
 export function Header() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+
+  const handleEmptyLink = (e: React.MouseEvent) => {
+    e.preventDefault();
+    alert('등록된 상품이 없습니다. (No relevant items yet)');
+  };
+
+  useEffect(() => {
+    // Function to calculate total items in the cart
+    const updateCartCount = () => {
+      const cart = JSON.parse(localStorage.getItem('decathlon_cart') || '[]');
+      const totalItems = cart.reduce((sum: number, item: any) => sum + item.quantity, 0);
+      setCartCount(totalItems);
+    };
+
+    // 1. Run immediately on page load to prevent showing 0
+    updateCartCount();
+
+    // 2. Listen for events from ProductCard and PDP
+    window.addEventListener('cart-updated', updateCartCount);
+
+    return () => {
+      window.removeEventListener('cart-updated', updateCartCount);
+    };
+  }, []);
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 50, backgroundColor: 'white' }}>
-      {/* Main Header */}
       <div style={{ borderBottom: '1px solid #e5e7eb' }}>
         <div
           style={{
             maxWidth: '1200px',
             margin: '0 auto',
             padding: '0 16px',
-            height: '64px',
+            height: '80px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '16px',
           }}
         >
-          {/* Logo */}
           <a href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
             <div
               style={{
-                backgroundColor: '#0082C3',
-                color: 'white',
+                color: '#0055A4',
                 fontWeight: 900,
-                fontSize: '18px',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                letterSpacing: '-0.5px',
+                fontSize: '28px',
+                fontStyle: 'italic',
+                letterSpacing: '-1px',
               }}
             >
               DECATHLON
             </div>
           </a>
 
-          {/* Search - centered and wide */}
-          <div style={{ flex: 1, maxWidth: '640px' }}>
+          {/* Search */}
+          <div style={{ flex: 1, maxWidth: '640px', position: 'relative' }}>
             <div
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                border: '2px solid #e5e7eb',
+                border: '2px solid transparent',
                 borderRadius: '999px',
                 overflow: 'hidden',
-                backgroundColor: 'white',
+                backgroundColor: '#F3F4F6',
+                padding: '12px 24px',
+                cursor: 'text',
               }}
             >
-              <span style={{ padding: '0 12px', color: '#9ca3af', fontSize: '18px' }}>🔍</span>
+              <span style={{ color: '#9ca3af', fontSize: '18px', marginRight: '12px' }}>🔍</span>
               <input
                 type="text"
                 placeholder="공식 리뷰 작성 시 500 포인트 증정!"
+                readOnly
                 style={{
                   flex: 1,
-                  padding: '10px 0',
                   fontSize: '14px',
                   outline: 'none',
                   border: 'none',
                   backgroundColor: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'center',
                 }}
               />
+              {isSearchOpen && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSearchOpen(false);
+                  }}
+                  style={{ color: '#9ca3af', cursor: 'pointer', marginLeft: '12px' }}
+                >
+                  ✕
+                </span>
+              )}
             </div>
+
+            {isSearchOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '60px',
+                  left: 0,
+                  width: '100%',
+                  backgroundColor: 'white',
+                  boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '24px',
+                  zIndex: 50,
+                  display: 'flex',
+                  gap: '24px',
+                }}
+              >
+                <div style={{ width: '33%', borderRight: '1px solid #f3f4f6' }}>
+                  <h3 style={{ fontWeight: 700, fontSize: '14px', marginBottom: '16px' }}>
+                    인기 검색어
+                  </h3>
+                  <ul
+                    style={{
+                      listStyle: 'none',
+                      padding: 0,
+                      margin: 0,
+                      fontSize: '14px',
+                      color: '#4b5563',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                    }}
+                  >
+                    <li>
+                      베스트셀러{' '}
+                      <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                        | 모든 스포츠 / 러닝
+                      </span>
+                    </li>
+                    <li>
+                      신제품{' '}
+                      <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                        | 모든 스포츠 / 등산
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                <div style={{ width: '66%' }}>
+                  <h3 style={{ fontWeight: 700, fontSize: '14px', marginBottom: '16px' }}>
+                    인기 상품
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                    [인기 상품 리스트 표시 영역]
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexShrink: 0 }}>
             <a
               href="/login"
               style={{
@@ -180,7 +259,7 @@ export function Header() {
                 color: '#374151',
               }}
             >
-              <span style={{ fontSize: '20px' }}>🏪</span>
+              <span style={{ fontSize: '20px' }}>🏬</span>
               <span style={{ fontSize: '10px' }}>매장 안내</span>
             </a>
             <a
@@ -203,32 +282,35 @@ export function Header() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '2px',
+                gap: '4px',
                 textDecoration: 'none',
                 color: '#374151',
-                position: 'relative',
               }}
             >
-              <span style={{ fontSize: '20px' }}>🛒</span>
-              <span style={{ fontSize: '10px' }}>내 장바구니</span>
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  backgroundColor: '#0082C3',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '16px',
-                  height: '16px',
-                  fontSize: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                }}
-              >
-                0
+              <div style={{ position: 'relative', display: 'flex' }}>
+                <span style={{ fontSize: '20px', lineHeight: '1' }}>🛒</span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-8px',
+                    backgroundColor: '#0055A4',
+                    color: 'white',
+                    borderRadius: '50%',
+                    width: '16px',
+                    height: '16px',
+                    fontSize: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                  }}
+                >
+                  {cartCount}
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                내 장바구니
               </span>
             </a>
           </div>
@@ -244,6 +326,7 @@ export function Header() {
             padding: '0 16px',
             display: 'flex',
             overflowX: 'auto',
+            justifyContent: 'center',
           }}
         >
           {navCategories.map((cat) => {
@@ -258,9 +341,8 @@ export function Header() {
                     style={{
                       fontSize: '14px',
                       fontWeight: 500,
-                      color: (cat as any).color || '#374151',
+                      color: cat.color || '#374151',
                       padding: '14px 20px',
-                      whiteSpace: 'nowrap',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
@@ -268,7 +350,7 @@ export function Header() {
                       border: 'none',
                       cursor: 'pointer',
                       fontFamily: 'inherit',
-                      borderBottom: isActive ? '2px solid #0082C3' : '2px solid transparent',
+                      borderBottom: isActive ? '2px solid #0055A4' : '2px solid transparent',
                     }}
                   >
                     {cat.label}
@@ -279,7 +361,7 @@ export function Header() {
                       fill="none"
                       style={{
                         transform: isActive ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease-in-out',
+                        transition: 'transform 0.2s',
                       }}
                     >
                       <path
@@ -297,10 +379,9 @@ export function Header() {
                     style={{
                       fontSize: '14px',
                       fontWeight: 500,
-                      color: (cat as any).color || '#374151',
+                      color: cat.color || '#374151',
                       textDecoration: 'none',
                       padding: '14px 20px',
-                      whiteSpace: 'nowrap',
                       display: 'block',
                       borderBottom: '2px solid transparent',
                     }}
@@ -312,55 +393,290 @@ export function Header() {
             );
           })}
         </div>
+        {/* Mega Menu */}
         {activeMenu && megaMenuData[activeMenu] && (
           <>
-            {/* Dark Background Overlay */}
             <div
-              className="fixed left-0 right-0 bottom-0 bg-black/50 z-40"
-              style={{ top: '112px' }}
-              onClick={() => setActiveMenu(null)} // Close when clicking the dark background!
+              style={{
+                position: 'fixed',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                zIndex: 40,
+                top: '128px',
+              }}
+              onClick={() => setActiveMenu(null)}
             />
-            {/* Floating White Modal Box */}
             <div
-              className="absolute left-1/2 -translate-x-1/2 w-[95%] max-w-[1100px] bg-white rounded-xl shadow-2xl z-50 flex overflow-hidden border border-gray-200"
-              style={{ top: '100%', marginTop: '12px', height: '480px' }}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '95%',
+                maxWidth: '1100px',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                zIndex: 50,
+                display: 'flex',
+                overflow: 'hidden',
+                border: '1px solid #e5e7eb',
+                top: '100%',
+                marginTop: '12px',
+                height: '480px',
+              }}
             >
-              {/* Left Side: Category List */}
-              <div className="w-[30%] flex flex-col p-8 bg-white">
-                <div className="flex justify-between items-end border-b-2 border-black pb-2 mb-4">
-                  <h3 className="font-bold text-lg text-gray-900">모든 스포츠</h3>
-                  <a href="/c/all-sports" className="text-xs text-gray-500 hover:underline">
-                    모두 보기
-                  </a>
-                </div>
-                <div className="overflow-y-auto pr-4" style={{ scrollbarWidth: 'none' }}>
-                  {megaMenuData[activeMenu].items.map((item) => (
+              {activeMenu === '모든 스포츠' ? (
+                /* --- 3-COLUMN LAYOUT (모든 스포츠) --- */
+                <>
+                  <div
+                    style={{
+                      width: '25%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '24px 0 24px 24px',
+                      backgroundColor: 'white',
+                      borderRight: '1px solid #f3f4f6',
+                    }}
+                  >
                     <div
-                      key={item}
-                      className="flex justify-between items-center py-3.5 border-b border-gray-100 cursor-pointer hover:font-bold text-sm text-gray-700 transition-all"
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-end',
+                        borderBottom: '2px solid #0055A4',
+                        paddingBottom: '8px',
+                        marginRight: '24px',
+                        marginBottom: '8px',
+                      }}
                     >
-                      <span>{item}</span>
-                      <span className="text-gray-400 font-light">›</span>
+                      <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#111827' }}>
+                        {megaMenuData[activeMenu]?.title}
+                      </h3>
+                      <a
+                        href={megaMenuData[activeMenu]?.link}
+                        style={{ fontSize: '11px', color: '#6b7280' }}
+                      >
+                        모두 보기
+                      </a>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
+                      {megaMenuData[activeMenu]?.items?.map((item, idx) => (
+                        <div
+                          key={item}
+                          onClick={idx === 0 ? undefined : handleEmptyLink}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            borderBottom: '1px solid #f3f4f6',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            color: idx === 0 ? '#111827' : '#6b7280',
+                            backgroundColor: idx === 0 ? '#f3f4f6' : 'transparent',
+                            fontWeight: idx === 0 ? 700 : 400,
+                          }}
+                        >
+                          <span>{item}</span>
+                          <span style={{ color: '#9ca3af' }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Right Side: Large Image */}
-              <div className="w-[70%] relative bg-gray-100">
-                <img
-                  src={megaMenuData[activeMenu].image}
-                  alt={`${activeMenu} Promo`}
-                  className="w-full h-full object-cover"
-                />
-                {/* Close 'X' Button in Top Right */}
-                <button
-                  onClick={() => setActiveMenu(null)}
-                  className="absolute top-4 right-4 bg-white/80 hover:bg-white text-gray-900 rounded-full w-8 h-8 flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
+                  <div
+                    style={{
+                      width: '25%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '24px 24px 24px 16px',
+                      backgroundColor: 'white',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-end',
+                        borderBottom: '2px solid #0055A4',
+                        paddingBottom: '8px',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#111827' }}>러닝</h3>
+                      <a href="/category/running" style={{ fontSize: '11px', color: '#6b7280' }}>
+                        모두 보기
+                      </a>
+                    </div>
+                    <div style={{ overflowY: 'auto' }}>
+                      {[
+                        '신제품',
+                        '베스트셀러',
+                        '러닝화',
+                        '남성',
+                        '여성',
+                        '용품',
+                        '트레일러닝',
+                        '러닝 클리어런스',
+                        '러닝웨어',
+                      ].map((subItem) => (
+                        <div
+                          key={subItem}
+                          onClick={handleEmptyLink}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 8px',
+                            borderBottom: '1px solid #f3f4f6',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            color: '#374151',
+                          }}
+                        >
+                          <span>{subItem}</span>
+                          <span style={{ color: '#9ca3af' }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      width: '50%',
+                      padding: '24px',
+                      backgroundColor: '#ffffff',
+                      display: 'flex',
+                      gap: '16px',
+                    }}
+                  >
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <img
+                        src="https://contents.mediadecathlon.com/p2861117/k$f230ceac9888cc19f9b50093d1d0d77d/1200x800/QUECHUA.jpg?format=auto"
+                        alt="promo1"
+                        style={{ flex: 1, width: '100%', objectFit: 'cover', borderRadius: '4px' }}
+                      />
+                      <img
+                        src="https://contents.mediadecathlon.com/p3048178/k$8983f233e80f2bcbd10ca3793459d355/2200x1103/5000pt3791/10000xcr5017/KIPRUN.webp"
+                        alt="promo2"
+                        style={{ flex: 1, width: '100%', objectFit: 'cover', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#3A4EB5',
+                        borderRadius: '4px',
+                        padding: '24px',
+                        color: 'white',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <h4 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>
+                        데카트론 APP에서
+                        <br />
+                        편리한 쇼핑
+                      </h4>
+                      <img
+                        src="https://contents.mediadecathlon.com/s1012444/k$f9cd9f79c6b583f1c842884359c0843e/app%20store%20button%20tr.svg"
+                        alt="app"
+                        style={{ width: '120px', marginTop: 'auto' }}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* --- 2-COLUMN LAYOUT --- */
+                <>
+                  <div
+                    style={{
+                      width: '30%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '32px',
+                      backgroundColor: 'white',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-end',
+                        borderBottom: '2px solid #0055A4',
+                        paddingBottom: '8px',
+                        marginBottom: '16px',
+                      }}
+                    >
+                      <h3 style={{ fontWeight: 700, fontSize: '18px', color: '#111827' }}>
+                        {megaMenuData[activeMenu as string]?.title}
+                      </h3>
+                      <a
+                        href={megaMenuData[activeMenu as string]?.link}
+                        style={{ fontSize: '12px', color: '#6b7280', textDecoration: 'none' }}
+                      >
+                        모두 보기
+                      </a>
+                    </div>
+                    <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
+                      {megaMenuData[activeMenu as string]?.items?.map((item) => (
+                        <div
+                          key={item}
+                          onClick={handleEmptyLink}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '14px 0',
+                            borderBottom: '1px solid #f3f4f6',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            color: '#374151',
+                          }}
+                        >
+                          <span>{item}</span>
+                          <span style={{ color: '#9ca3af' }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ width: '70%', position: 'relative', backgroundColor: '#f3f4f6' }}>
+                    <img
+                      src={megaMenuData[activeMenu as string]?.image}
+                      alt={`${activeMenu} Promo`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              <button
+                onClick={() => setActiveMenu(null)}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  backgroundColor: 'rgba(255,255,255,0.9)',
+                  color: '#111827',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '16px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  zIndex: 10,
+                }}
+              >
+                ✕
+              </button>
             </div>
           </>
         )}

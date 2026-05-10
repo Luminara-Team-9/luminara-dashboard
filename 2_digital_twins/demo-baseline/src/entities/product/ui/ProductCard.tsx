@@ -1,20 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Product } from '../model/types';
 import Link from 'next/link';
 
 type ProductCardProps = {
   product: Product;
+  index?: number;
 };
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, index = 0 }: ProductCardProps) {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedColor, setSelectedColor] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const [reviewsLoaded, setReviewsLoaded] = useState(false);
+
+  useEffect(() => {
+    // 1. The Staggered Fade-In (UI Realism)
+    const fadeTimer = setTimeout(() => setIsVisible(true), index * 150);
+
+    // 2. The Micro-Shift (The CLS Sabotage - 1.2s delay)
+    const shiftTimer = setTimeout(() => setReviewsLoaded(true), 1200);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(shiftTimer);
+    };
+  }, [index]);
 
   const colors = ['bg-black', 'bg-[#0055A4]', 'bg-gray-400']; // For the color picker
   const sizes = ['S', 'M', 'L', 'XL'];
@@ -67,6 +83,9 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <div
+      className={`transition-all duration-700 ease-out ${
+        isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+      }`}
       style={{
         backgroundColor: 'white',
         borderRadius: '8px',
@@ -140,6 +159,22 @@ export function ProductCard({ product }: ProductCardProps) {
         >
           {product.name}
         </p>
+        {/* --- NEW: THE CLS MICRO-SHIFT WEAPON --- */}
+        <div
+          style={{
+            height: reviewsLoaded ? '20px' : '0px',
+            overflow: 'hidden',
+            transition: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            color: '#fbbf24',
+            fontSize: '11px',
+            marginBottom: reviewsLoaded ? '4px' : '0px',
+          }}
+        >
+          ⭐⭐⭐⭐⭐ <span style={{ color: '#9ca3af', marginLeft: '4px' }}>(4.8)</span>
+        </div>
+
         {/* Brand */}
         <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>
           {product.category}

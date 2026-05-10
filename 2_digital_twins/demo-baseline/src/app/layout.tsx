@@ -23,8 +23,6 @@ export default function RootLayout({
       <body className="antialiased">
         {/* Our Sabotage Components listening to the router */}
         <CpuSpike />
-        <LayoutShiftBomb />
-
         <SwetrixTracker />
         <ChatWidget />
 

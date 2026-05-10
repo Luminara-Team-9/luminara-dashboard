@@ -6,6 +6,7 @@ import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
 import { ProductCard } from '@/entities/product/ui/ProductCard';
 import { runningProducts } from '@/page-components/main-landing/ui/mockData';
+import Link from 'next/link';
 
 const categoryNames: Record<string, string> = {
   'first-choice': 'FIRST CHOICE',
@@ -111,6 +112,13 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
       <main>
         <div className="bg-white border-b border-gray-200">
           <div className="max-w-[1200px] mx-auto px-4 py-6 flex flex-col justify-center">
+            <div className="text-sm text-gray-500 mb-3 flex items-center gap-2">
+              <a href="/" className="hover:underline">
+                홈 (HOME)
+              </a>
+              <span>{'>'}</span>
+              <span className="font-bold text-gray-900">{categoryName}</span>
+            </div>
             <h1 className="text-2xl font-black italic uppercase text-gray-900 mb-1">
               {categoryName}
             </h1>
@@ -272,15 +280,26 @@ export function CategoryPage({ categorySlug }: { categorySlug: string }) {
             ) : (
               /* Filtered Grid */
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    onClick={() => router.push(`/product/${product.id}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <ProductCard product={product} />
-                  </div>
-                ))}
+                {filteredProducts.map((product: any) => {
+                  // Adapter: Forces mock data to perfectly match what ProductCard expects!
+                  const safeProduct = {
+                    ...product,
+                    imageUrl: product.imageUrl || product.img || product.image, // Fixes broken images
+                    name: product.name || product.title, // Fixes missing names
+                  };
+                  return (
+                    <Link
+                      href={`/product/${product.id}`}
+                      key={product.id}
+                      className="h-full"
+                      style={{ textDecoration: 'none' }}
+                    >
+                      <div className="h-full pointer-events-auto">
+                        <ProductCard product={safeProduct} />
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             )}
 

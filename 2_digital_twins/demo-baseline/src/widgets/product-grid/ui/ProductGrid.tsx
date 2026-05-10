@@ -33,7 +33,6 @@ export function ProductGrid({ title, products, promoCard }: ProductGridProps) {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {products.map((product, index) => {
-            // Check if this is the exact spot we want to inject the banner
             const isPromoSpot = promoCard && index === promoCard.insertAt;
 
             return (
@@ -43,7 +42,7 @@ export function ProductGrid({ title, products, promoCard }: ProductGridProps) {
 
                 {/* Render the normal Product Card */}
                 <a href={`/product/${product.id}`} style={{ textDecoration: 'none' }}>
-                  <ProductCard product={product} />
+                  <ProductCard key={product.id} product={product} index={index} />;
                 </a>
               </React.Fragment>
             );
