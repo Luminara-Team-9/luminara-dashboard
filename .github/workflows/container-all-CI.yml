@@ -6,7 +6,8 @@ on:
     paths:
       - '**.def'
       - '!infrastructure/web.def'
-      # - '!infrastructure/digital_clone.def'
+      # - '!infrastructure/digital_base_clone.def'
+      # - '!infrastructure/digital_opt_clone.def'
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
