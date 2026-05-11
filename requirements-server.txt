@@ -12,11 +12,13 @@ langgraph-sdk>=0.3.13
 sentence-transformers>=5.4.1
 
 # STRICT PIN: Qwen 2.5 Support & vLLM 0.6.4 Parity (No training bloat)
-transformers==4.46.3
+transformers==4.45.2
+#transformers==4.45.2
 tokenizers==0.20.3
 
 # STRICT PIN: Server Hardware Constraint (Matched to Torch 2.5.1 / cu121)
-vllm==0.6.4
+vllm==0.6.5
+#vllm==0.6.5
 xformers==0.0.28.post3
 
 # =========================================

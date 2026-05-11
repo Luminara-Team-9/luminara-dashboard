@@ -1,0 +1,9 @@
+# STRICT PIN: Unsloth 2026.5.1 Demands
+transformers>=4.51.3
+tokenizers>=0.21.0
+trl>=0.18.2,<=0.24.0
+torchao>=0.13.0
+
+# Phase I SFT Tools
+bitsandbytes>=0.45.0
+peft>=0.14.0
