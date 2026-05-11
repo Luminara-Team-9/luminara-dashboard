@@ -82,8 +82,8 @@ fi
 # =================================================================
 echo -e "${BLUE}[..] Enforcing Version Constraints for vLLM & Unsloth parity...${NC}"
 
-# 1. Force the downgrade to fix the vLLM "all_special_tokens_extended" crash
-pip install transformers==4.44.2 tokenizers==0.19.1
+# 1. Force the matched pair to prevent the tokenizers crash
+pip install transformers==4.46.3 tokenizers==0.20.3
 
 # 2. Rip out the unstable torchao library that crashes Unsloth imports
 echo -e "[..] Purging unstable torchao library..."
