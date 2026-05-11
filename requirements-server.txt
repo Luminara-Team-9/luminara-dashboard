@@ -11,19 +11,11 @@ langgraph>=1.1.9
 langgraph-sdk>=0.3.13
 sentence-transformers>=5.4.1
 
-# STRICT PIN: Downgraded to fix the vLLM 0.6.4 'all_special_tokens_extended' crash.
-# Qwen 2.5 is fully supported on 4.44.2.
-# STRICT PIN: Matched pair required for vLLM 0.6.4 and Unsloth 2026.5.1 parity
-transformers>=4.51.3
-tokenizers>=0.21.0
+# STRICT PIN: Qwen 2.5 Support & vLLM 0.6.4 Parity (No training bloat)
+transformers==4.46.3
+tokenizers==0.20.3
 
-# ADDED: Phase I Training Stack
-bitsandbytes>=0.45.0
-peft>=0.14.0
-trl>=0.18.2,<=0.24.0
-torchao>=0.13.0
-
-# STRICT PIN: Server Hardware Constraint (NVIDIA Driver 525, Torch 2.5.1 / cu121))
+# STRICT PIN: Server Hardware Constraint (Matched to Torch 2.5.1 / cu121)
 vllm==0.6.4
 xformers==0.0.28.post3
 
