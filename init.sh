@@ -70,10 +70,26 @@ pip install -r requirements-server.txt
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] All Python dependencies synchronized.${NC}"
+    #echo -e "uninstalling torchao"
+    #pip uninstall torchao -y
 else
     echo -e "${RED}[!] Installation failed. Check requirements.txt syntax.${NC}"
     exit 1
 fi
+
+# =================================================================
+# NEW: DEPENDENCY ENFORCEMENT BLOCK
+# =================================================================
+echo -e "${BLUE}[..] Enforcing Version Constraints for vLLM & Unsloth parity...${NC}"
+
+# 1. Force the downgrade to fix the vLLM "all_special_tokens_extended" crash
+pip install transformers==4.44.2 tokenizers==0.19.1
+
+# 2. Rip out the unstable torchao library that crashes Unsloth imports
+echo -e "[..] Purging unstable torchao library..."
+pip uninstall torchao -y
+# =================================================================
+
 
 # 4. Node.js Packages (pnpm)
 echo -e "[..] Bridging Node 24 and pnpm from the Toolbox..."

@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - '2_digital_twins/active-staging/**'
-      - 'infrastructure/digital_clone.def' # Trigger rebuild if infrastructure changes
+      #- 'infrastructure/digital_opt_clone.def' # Trigger rebuild if infrastructure changes
 
 concurrency:
   # Ensures multiple pushes to the same PR cancel the older staging runs
@@ -34,7 +34,7 @@ jobs:
       - name: 🏗️ Build Immutable Web Clone
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/digital_clone.def" 
+          def_file_path: "infrastructure/digital_opt_clone.def" 
           cache_key_suffix: "pr_staging_clone"
           output_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
 

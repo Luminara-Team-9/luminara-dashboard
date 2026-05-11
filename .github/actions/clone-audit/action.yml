@@ -24,10 +24,10 @@ runs:
         # Pre-cleanup
         echo "Ensuring clean slate for Run ID: ${{ github.run_id }}"
         singularity instance stop clone_${{ github.run_id }} 2>/dev/null || true
-        singularity instance stop audit_${{ github.run_id }} 2>/dev/null || true
+        # singularity instance stop audit_${{ github.run_id }} 2>/dev/null || true
 
         FREE_PORT=$(comm -23 <(seq 3060 3200 | sort) <(ss -Htan | awk '{print $4}' | cut -d':' -f2 | sort -u) | shuf | head -n 1)
-        echo "TWIN_PORT=$FREE_PORT" >> $GITHUB_ENV
+        echo "TWIN_PORT=$FREE_PORT" >> $sGITHUB_ENV
         echo "TWIN_NAME=clone_${{ github.run_id }}" >> $GITHUB_ENV
         echo "Assigned Port: $FREE_PORT"
 
@@ -48,6 +48,12 @@ runs:
         until curl -s http://localhost:${{ env.TWIN_PORT }} > /dev/null; do
           if [ $ELAPSED -ge $TIMEOUT ]; then
             echo "❌ ERROR: Twin failed to boot within $TIMEOUT seconds."
+            echo "🔍 -------------------------------------------------"
+            echo "🔍 DUMPING INTERNAL CONTAINER LOGS FOR DEBUGGING:"
+            # This pulls the error output directly from Singularity's hidden instance logs!
+            cat ~/.singularity/instances/logs/$(hostname)/${{ env.TWIN_NAME }}/*.err || echo "Could not locate error logs."
+            cat ~/.singularity/instances/logs/$(hostname)/${{ env.TWIN_NAME }}/*.out || echo "Could not locate output logs."
+            echo "🔍 -------------------------------------------------"
             exit 1
           fi
           printf "."
@@ -69,13 +75,26 @@ runs:
         singularity exec \
           --bind ./${{ inputs.target_site }}:/workspace \
           --bind ./4_automation_tests/lighthouse-runner/lighthouserc.js:/workspace/lighthouserc.js \
-          ${{ inputs.image_dir }}/infrastructure_audit_ephemeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
 
     - name: 🛑 Mandatory Teardown
       if: always()
       shell: bash
       run: |
         echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
-        # Destroys ONLY the twin and audit containers tied to this specific PR execution
+        
+        # 1. Gracefully stop the Digital Twin daemon
+        echo "[..] Stopping Digital Twin Instance..."
         singularity instance stop ${{ env.TWIN_NAME }} 2>/dev/null || echo "Twin cleanly stopped."
-        singularity instance stop $AUDIT_NAME 2>/dev/null || echo "Audit already cleanly stopped."
+        
+        # 2. The SRE Fail-Safe: Stop the audit instance (if it was ever booted as one)
+        echo "[..] Sweeping for Audit Instances..."
+        singularity instance stop audit_${{ github.run_id }} 2>/dev/null || echo "No audit instance found."
+
+        # 3. The SRE Fail-Safe: Terminate rogue hanging processes
+        # If 'singularity exec' froze and became a zombie, we forcefully kill any process
+        # that contains the string "infrastructure_audit_ephemeral.sif" tied to this run.
+        echo "[..] Hunting for orphaned exec processes..."
+        pkill -f "infrastructure_audit_ephemeral.sif.*${{ github.run_id }}" || echo "No zombie processes detected."
+        
+        echo "✅ Teardown complete. Server environment is pristine."
