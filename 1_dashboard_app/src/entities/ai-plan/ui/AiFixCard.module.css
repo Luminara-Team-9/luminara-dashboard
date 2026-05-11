@@ -1,17 +1,21 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px;
+  gap: 12px;
+  min-height: 210px;
+  padding: 20px;
   border-radius: 14px;
   border: 1px solid #1e293b;
   background-color: #111827;
   border-left-width: 3px;
-  transition: box-shadow 0.15s ease;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .card:hover {
+  border-color: #334155;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  transform: translateY(-1px);
 }
 
 /* 우선순위별 왼쪽 border 색상 */
@@ -52,23 +56,46 @@
 
 /* ── 제목 ── */
 .title {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 900;
   color: #e2e8f0;
-  line-height: 1.4;
+  line-height: 1.3;
   margin: 0;
 }
 
 /* ── 설명 ── */
 .desc {
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.6;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
   margin: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.link_box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  background: #0b1120;
+}
+
+.link_box strong {
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.link_box p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 /* ── 연간 ROI 하이라이트 ── */
@@ -191,6 +218,152 @@
   margin: 0 0 10px;
 }
 
+.modal_close {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.modal_close:hover {
+  color: #cbd5e1;
+}
+
+.detail_modal {
+  width: min(720px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid #243247;
+  border-radius: 18px;
+  background: #0f172a;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+}
+
+.detail_head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.detail_title {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 26px;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.detail_grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.detail_section {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  background: #0b1120;
+}
+
+.detail_section:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.detail_section:last-child {
+  grid-column: 1 / -1;
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.section_label {
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.detail_section p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.detail_section em {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.code_panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.code_panel > strong {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.code_columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.code_columns > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.code_columns span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.code_columns pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #243247;
+  border-radius: 7px;
+  background: #111827;
+}
+
+.code_columns code {
+  color: #93c5fd;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.detail_actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .modal_title {
   font-size: 16px;
   font-weight: 700;
@@ -245,5 +418,19 @@
   padding: 9px 20px;
   cursor: pointer;
   transition: background 0.15s;
+}
+
+@media (max-width: 720px) {
+  .detail_grid {
+    grid-template-columns: 1fr;
+  }
+
+  .code_columns {
+    grid-template-columns: 1fr;
+  }
+
+  .detail_title {
+    font-size: 22px;
+  }
 }
 .btn_confirm:hover { background: #2563eb; }

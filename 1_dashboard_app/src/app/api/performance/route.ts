@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { PerformanceApiResponse } from '@/shared/lib/types';
-import mockData from '@/shared/api/performance-mock.json';
+import { getPerformanceData } from '@/shared/api/performanceData';
 
 export async function GET(): Promise<NextResponse<PerformanceApiResponse>> {
-  return NextResponse.json(mockData as PerformanceApiResponse);
+  const data = await getPerformanceData();
+  return NextResponse.json(data);
 }

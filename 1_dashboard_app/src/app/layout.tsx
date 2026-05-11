@@ -3,8 +3,8 @@ import { PerformanceDataProvider } from './providers/PerformanceDataProvider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: '웹 성능 모니터링 대시보드',
-  description: '데카트론 vs 경쟁사 Lighthouse 성능 지표 비교',
+  title: '데카트론 웹 품질 대시보드',
+  description: '공개 URL 기반 웹 성능, 기술 SEO, 최적화 우선순위 대시보드',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

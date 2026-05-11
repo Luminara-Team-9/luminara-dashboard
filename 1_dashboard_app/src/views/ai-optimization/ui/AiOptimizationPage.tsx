@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
 import { RoiMatrix } from '@/widgets/roi-matrix';
@@ -8,22 +8,35 @@ import { Skeleton } from '@/shared/ui';
 import type { AiFixPlan, FixPriority } from '@/shared/lib/types';
 import styles from './AiOptimizationPage.module.css';
 
-// ── 상수 ─────────────────────────────────────────────────────────
 const PRIORITY_META: Record<FixPriority, { label: string; color: string }> = {
-  critical: { label: 'P0 Critical', color: '#ef4444' },
-  high:     { label: 'P1 High',     color: '#f97316' },
-  medium:   { label: 'P2 Medium',   color: '#f59e0b' },
-  low:      { label: 'P3 Low',      color: '#10b981' },
+  critical: { label: 'P0 긴급', color: '#ef4444' },
+  high: { label: 'P1 높음', color: '#f97316' },
+  medium: { label: 'P2 중간', color: '#f59e0b' },
+  low: { label: 'P3 낮음', color: '#10b981' },
 };
 
 const EFFORT_LABEL = { low: '낮음', medium: '중간', high: '높음' } as const;
 
 const METRIC_LABEL: Record<string, string> = {
-  lcp: 'LCP', cls: 'CLS', inp: 'INP', tbt: 'TBT',
-  fcp: 'FCP', speedIndex: 'Speed Index', assetSize: 'Asset Size',
+  lcp: '첫 화면 표시(LCP)',
+  cls: '화면 안정성(CLS)',
+  inp: '클릭 반응(INP)',
+  tbt: '스크립트 부담(TBT)',
+  fcp: '첫 콘텐츠 표시(FCP)',
+  speedIndex: '화면 완성 속도(Speed Index)',
+  assetSize: '리소스 크기(Asset Size)',
 };
 
-// ── 요약 숫자 카드 ────────────────────────────────────────────────
+const DECISION_AREA: Record<string, string> = {
+  lcp: '이탈 위험',
+  fcp: '이탈 위험',
+  speedIndex: '체감 속도',
+  inp: '탐색 반응성',
+  tbt: '반응 속도 개선 필요',
+  cls: '화면 안정성',
+  assetSize: '비용 절감',
+};
+
 function StatCard({ value, label, color }: { value: number; label: string; color?: string }) {
   return (
     <div className={styles.stat_card}>
@@ -33,7 +46,6 @@ function StatCard({ value, label, color }: { value: number; label: string; color
   );
 }
 
-// ── 확장된 AI 플랜 카드 ───────────────────────────────────────────
 function PlanCard({ plan }: { plan: AiFixPlan }) {
   const { label: priorityLabel, color: priorityColor } = PRIORITY_META[plan.priority];
   return (
@@ -52,6 +64,13 @@ function PlanCard({ plan }: { plan: AiFixPlan }) {
       <p className={styles.plan_desc}>{plan.description}</p>
 
       <div className={styles.plan_bottom}>
+        <span className={styles.plan_impact}>
+          {METRIC_LABEL[plan.metricKey] ?? plan.metricKey}{' → '}{DECISION_AREA[plan.metricKey] ?? '사용자 경험'}
+        </span>
+        <span className={styles.plan_brand}>판단 연결</span>
+      </div>
+
+      <div className={styles.plan_bottom}>
         <span className={styles.plan_impact}>{plan.estimatedImpact}</span>
         <span className={styles.plan_brand}>{plan.brand}</span>
       </div>
@@ -59,7 +78,6 @@ function PlanCard({ plan }: { plan: AiFixPlan }) {
   );
 }
 
-// ── 로딩 스켈레톤 ─────────────────────────────────────────────────
 function LoadingSkeleton() {
   return (
     <div className={styles.skeleton_wrap}>
@@ -73,8 +91,8 @@ function LoadingSkeleton() {
       </div>
       <div className={styles.grid}>
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} style={{ background: '#111827', border: '1px solid #1e293b', borderLeft: '3px solid #1e293b', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key={i} className={styles.skeleton_card}>
+            <div className={styles.skeleton_card_top}>
               <Skeleton width="80px" height="22px" radius="5px" />
               <Skeleton width="60px" height="22px" radius="5px" />
             </div>
@@ -83,7 +101,7 @@ function LoadingSkeleton() {
             <Skeleton width="95%" height="13px" />
             <Skeleton width="80%" height="13px" />
             <Skeleton width="60%" height="13px" />
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid #1e293b' }}>
+            <div className={styles.skeleton_card_footer}>
               <Skeleton width="80px" height="16px" />
               <Skeleton width="60px" height="16px" />
             </div>
@@ -94,7 +112,6 @@ function LoadingSkeleton() {
   );
 }
 
-// ── 메인 페이지 컴포넌트 ──────────────────────────────────────────
 export function AiOptimizationPage() {
   const { data, loading, error } = usePerformanceData();
   const [priorityFilter, setPriorityFilter] = useState<FixPriority | 'all'>('all');
@@ -127,7 +144,6 @@ export function AiOptimizationPage() {
 
   return (
     <div className={styles.page}>
-      {/* ── 페이지 헤더 ── */}
       <div className={styles.page_header}>
         <Link href="/" className={styles.back_link}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -137,7 +153,7 @@ export function AiOptimizationPage() {
         </Link>
         <div className={styles.page_title_wrap}>
           <h1 className={styles.page_title}>AI 최적화 액션 플랜</h1>
-          <p className={styles.page_subtitle}>Qwen 분석 결과 — 전체 개선 항목</p>
+          <p className={styles.page_subtitle}>성능 병목과 쇼핑 여정 중요도를 기준으로 정렬한 개선 항목</p>
         </div>
       </div>
 
@@ -147,7 +163,6 @@ export function AiOptimizationPage() {
         <LoadingSkeleton />
       ) : (
         <div className={styles.content}>
-          {/* ── 요약 통계 ── */}
           <div className={styles.stat_row}>
             <StatCard value={plans.length} label="전체 항목" />
             <StatCard value={counts.critical} label="P0 Critical" color="#ef4444" />
@@ -156,7 +171,6 @@ export function AiOptimizationPage() {
             <StatCard value={counts.low}      label="P3 Low"      color="#10b981" />
           </div>
 
-          {/* ── 필터 바 ── */}
           <div className={styles.filter_bar}>
             <div className={styles.filter_group}>
               <span className={styles.filter_label}>우선순위</span>
@@ -196,17 +210,14 @@ export function AiOptimizationPage() {
             </div>
           </div>
 
-          {/* ── 결과 수 ── */}
           <p className={styles.result_count}>
             {filtered.length}개 항목
           </p>
 
-          {/* ── ROI 매트릭스 ── */}
           <div className={styles.roi_wrap}>
             <RoiMatrix />
           </div>
 
-          {/* ── 카드 그리드 ── */}
           {filtered.length > 0 ? (
             <div className={styles.grid}>
               {filtered.map((plan) => (
