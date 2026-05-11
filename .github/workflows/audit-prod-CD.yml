@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - '2_digital_twins/active-staging/**'
-      - 'infrastructure/digital_clone.def'
+      #- 'infrastructure/digital_opt_clone.def'
 
 concurrency:
   # Crucial: If two PRs merge within seconds of each other, 
@@ -22,8 +22,8 @@ jobs:
     env:
       IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
       KEY_DIR: /abr/coss41/Luminara_App/secure_keys
-      ARTIFACT_NAME: infrastructure_digital_clone.sif
-      BACKUP_NAME: infrastructure_digital_clone.bak.sif
+      ARTIFACT_NAME: infrastructure_digital_opt_clone.sif
+      BACKUP_NAME: infrastructure_digital_opt_clone.bak.sif
 
     steps:
       - name: 📥 Checkout Code
@@ -44,7 +44,7 @@ jobs:
       - name: 🏗️ Build Fresh Release Artifact
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/digital_clone.def" 
+          def_file_path: "infrastructure/digital_opt_clone.def" 
           cache_key_suffix: "prod_optimized_clone"
           output_path: "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
 

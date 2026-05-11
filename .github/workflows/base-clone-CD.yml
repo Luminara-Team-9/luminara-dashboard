@@ -7,7 +7,7 @@ on:
     paths:
       - '2_digital_twins/baseline-site/**'
       # Rebuilds the baseline if the core infrastructure definition changes
-      - 'infrastructure/digital_clone.def'
+      - 'infrastructure/digital_base_clone.def'
 
 concurrency:
   # Protects against temporal race conditions if multiple baseline changes merge rapidly
@@ -44,7 +44,7 @@ jobs:
       - name: 🏗️ Build Fresh Release Artifact
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/digital_clone.def" 
+          def_file_path: "infrastructure/digital_base_clone.def" 
           cache_key_suffix: "prod_baseline_clone"
           output_path: "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
 

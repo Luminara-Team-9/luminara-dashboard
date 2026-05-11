@@ -189,7 +189,10 @@ def run_auto():
             FROM lighthouse_runs lr
             JOIN lighthouse_raw_reports lrr
                 ON lr.test_id = lrr.test_id
-            WHERE lr.lcp_ms IS NULL
+            WHERE NOT EXISTS (
+                SELECT 1 FROM lighthouse_opportunities lo
+                WHERE lo.test_id = lr.test_id
+            )
             ORDER BY lr.timestamp ASC
         """)
 
@@ -224,15 +227,7 @@ def run_auto():
                 # ETL fills NULL metric columns
                 cursor.execute("""
                     UPDATE lighthouse_runs SET
-                        lcp_ms               = %s,
-                        tbt_ms               = %s,
-                        cls_score            = %s,
-                        fcp_ms               = %s,
-                        si_ms                = %s,
-                        tti_ms               = %s,
-                        ttfb_ms              = %s,
                         inp_ms               = %s,
-                        performance_score    = %s,
                         accessibility_score  = %s,
                         best_practices_score = %s,
                         seo_score            = %s,
@@ -243,15 +238,7 @@ def run_auto():
                         image_size_kb        = %s
                     WHERE test_id = %s
                 """, (
-                    transformed['lcp_ms'],
-                    transformed['tbt_ms'],
-                    transformed['cls_score'],
-                    transformed['fcp_ms'],
-                    transformed['si_ms'],
-                    transformed['tti_ms'],
-                    transformed['ttfb_ms'],
                     transformed['inp_ms'],
-                    transformed['performance_score'],
                     transformed['accessibility_score'],
                     transformed['best_practices_score'],
                     transformed['seo_score'],

@@ -8,7 +8,7 @@ on:
       - '2_digital_twins/baseline-site/**'
       # Note: We track the .def file here too, so if you update the infrastructure, 
       # BOTH the staging and baseline artifacts get rebuilt!
-      - 'infrastructure/digital_clone.def' 
+      - 'infrastructure/digital_base_clone.def' 
 
 concurrency:
   group: baseline-pr-${{ github.event.pull_request.number }}
@@ -33,7 +33,7 @@ jobs:
       - name: 🏗️ Build Immutable Web Clone (Baseline)
         uses: ./.github/actions/build-sif-images
         with:
-          def_file_path: "infrastructure/digital_clone.def" 
+          def_file_path: "infrastructure/digital_base_clone.def" 
           cache_key_suffix: "pr_baseline_clone"
           output_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
 
