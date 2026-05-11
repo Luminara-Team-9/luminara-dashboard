@@ -6,6 +6,11 @@ From: node:22-slim
     Project Luminara-Target-Clone
     Role Audit-Target
 
+# 🚨 SRE FIX 1: You MUST copy the code into the container to make it immutable!
+# Assuming your build action runs from the repo root, this copies the Next.js app.
+%files
+    2_digital_twins/active-staging /workspace
+
 %environment
     export PORT=${PORT:-3000}
     export NODE_ENV=production
@@ -31,13 +36,8 @@ From: node:22-slim
     npm install -g pnpm@latest
     npm cache clean --force
 
-%startscript
+    # 🚨 SRE FIX 2: You must CD into the workspace before building!
     cd /workspace
-    
-    echo "------------------------------------------------"
-    echo "🎯 TARGET ACQUIRED: Next.js Skeleton App"
-    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
-    echo "------------------------------------------------"
 
     # SRE FIX: The container installs and builds the code dynamically 
     # to ensure the Digital Twin is an exact representation of the mounted branch.
@@ -46,6 +46,15 @@ From: node:22-slim
     
     echo "[..] Building the Digital Twin..."
     pnpm run build
+
+%startscript
+    cd /workspace
+    
+    echo "------------------------------------------------"
+    echo "🎯 TARGET ACQUIRED: Next.js Skeleton App"
+    echo "🌐 Mode: $NODE_ENV | Port: $PORT"
+    echo "------------------------------------------------"
     
     echo "[..] Launching Production Server..."
+    cd /workspace
     exec pnpm start --port $PORT --hostname 0.0.0.0
