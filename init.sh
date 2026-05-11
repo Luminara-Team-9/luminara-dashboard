@@ -53,42 +53,20 @@ fi
 echo -e "[..] Upgrading pip..."
 pip install --upgrade pip > /dev/null
 
-
 echo -e "[..] Installing PyTorch 2.5.1 (Foundation for vLLM & Unsloth)..."
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
-# 2. Install pre-compiled Flash Attention explicitly
-# Note: Ensure the wheel matches Torch 2.6.0, CUDA 12.4, and Python 3.12 (cp312)
-#pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl
-
-echo -e "[..] Installing Unsloth Training Engine..."
-pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-
-# 3. Then run the requirements (Ensure flash-attn is REMOVED from requirements-server.txt)
+# Then run the requirements (Ensure flash-attn is REMOVED from requirements-server.txt)
 echo -e "[..] Synchronizing requirements-server.txt..."
 pip install -r requirements-server.txt
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}[OK] All Python dependencies synchronized.${NC}"
-    #echo -e "uninstalling torchao"
-    #pip uninstall torchao -y
+
 else
     echo -e "${RED}[!] Installation failed. Check requirements.txt syntax.${NC}"
     exit 1
 fi
-
-# =================================================================
-# NEW: DEPENDENCY ENFORCEMENT BLOCK
-# =================================================================
-#echo -e "${BLUE}[..] Enforcing Version Constraints for vLLM & Unsloth parity...${NC}"
-
-# 1. Force the matched pair to prevent the tokenizers crash
-#pip install transformers==4.46.3 tokenizers==0.20.3
-
-# 2. Rip out the unstable torchao library that crashes Unsloth imports
-# echo -e "[..] Purging unstable torchao library..."
-# pip uninstall torchao -y
-# =================================================================
 
 
 # 4. Node.js Packages (pnpm)
