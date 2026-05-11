@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - '2_digital_twins/active-staging/**'
-      #- 'infrastructure/digital_opt_clone.def'
+      - 'infrastructure/digital_opt_clone.def'
 
 concurrency:
   # Crucial: If two PRs merge within seconds of each other, 

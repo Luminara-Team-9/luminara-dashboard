@@ -1,0 +1,12 @@
+# STRICT PIN: Qwen 2.5 / DeepSeek Parity
+transformers==4.45.2
+tokenizers==0.20.3
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+
+# STRICT PIN: RTX A6000 Hardware Match
+vllm==0.6.5
+xformers==0.0.28.post3
+
+# Tools for your data generation script
+openai>=1.65.0
+tqdm>=4.67.3
