@@ -1,33 +1,33 @@
-name: "Ephemeral Clone Audit"
-description: "Boots an immutable Next.js twin, runs LHCI against performance budgets, and gracefully tears down."
+name: 'Ephemeral Clone Audit'
+description: 'Boots an immutable Next.js twin, runs LHCI against performance budgets, and gracefully tears down.'
 
 inputs:
   twin_image_path:
-    description: "The absolute path to the baked .sif artifact (e.g., pr_123.sif)"
+    description: 'The absolute path to the baked .sif artifact (e.g., pr_123.sif)'
     required: true
   lhci_token:
-    description: "Token for the LHCI Server"
+    description: 'Token for the LHCI Server'
     required: true
   audit_image_dir:
-    description: "Path to the production Singularity images (for the auditor)"
+    description: 'Path to the production Singularity images (for the auditor)'
     required: true
   target_site:
-    description: "Path to the codebase (still needed for the Agent trigger)"
+    description: 'Path to the codebase (still needed for the Agent trigger)'
     required: true
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: 🎲 Stage 1 - Allocate Dynamic Port & Init
       shell: bash
-      run: |        
+      run: |
         # Pre-cleanup
         echo "Ensuring clean slate for Run ID: ${{ github.run_id }}"
         singularity instance stop clone_${{ github.run_id }} 2>/dev/null || true
         # singularity instance stop audit_${{ github.run_id }} 2>/dev/null || true
 
         FREE_PORT=$(comm -23 <(seq 3060 3200 | sort) <(ss -Htan | awk '{print $4}' | cut -d':' -f2 | sort -u) | shuf | head -n 1)
-        echo "TWIN_PORT=$FREE_PORT" >> $sGITHUB_ENV
+        echo "TWIN_PORT=$FREE_PORT" >> $GITHUB_ENV
         echo "TWIN_NAME=clone_${{ github.run_id }}" >> $GITHUB_ENV
         echo "Assigned Port: $FREE_PORT"
 
@@ -35,7 +35,7 @@ runs:
       shell: bash
       run: |
         echo "Booting instance: ${{ inputs.twin_image_path }} on port ${{ env.TWIN_PORT }}"
-        
+
         # 🚨 SRE FIX: Notice there is NO --bind flag for the workspace here!
         # The container is 100% self-contained and baked.
         singularity instance start \
@@ -82,11 +82,11 @@ runs:
       shell: bash
       run: |
         echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
-        
+
         # 1. Gracefully stop the Digital Twin daemon
         echo "[..] Stopping Digital Twin Instance..."
         singularity instance stop ${{ env.TWIN_NAME }} 2>/dev/null || echo "Twin cleanly stopped."
-        
+
         # 2. The SRE Fail-Safe: Stop the audit instance (if it was ever booted as one)
         echo "[..] Sweeping for Audit Instances..."
         singularity instance stop audit_${{ github.run_id }} 2>/dev/null || echo "No audit instance found."
@@ -96,5 +96,5 @@ runs:
         # that contains the string "infrastructure_audit_ephemeral.sif" tied to this run.
         echo "[..] Hunting for orphaned exec processes..."
         pkill -f "infrastructure_audit_ephemeral.sif.*${{ github.run_id }}" || echo "No zombie processes detected."
-        
+
         echo "✅ Teardown complete. Server environment is pristine."
