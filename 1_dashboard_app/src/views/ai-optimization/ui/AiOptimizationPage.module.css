@@ -61,6 +61,28 @@
   gap: 20px;
 }
 
+.skeleton_card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-left: 3px solid #1e293b;
+  border-radius: 14px;
+}
+
+.skeleton_card_top,
+.skeleton_card_footer {
+  display: flex;
+  justify-content: space-between;
+}
+
+.skeleton_card_footer {
+  padding-top: 8px;
+  border-top: 1px solid #1e293b;
+}
+
 /* ── 요약 통계 ── */
 .stat_row {
   display: flex;

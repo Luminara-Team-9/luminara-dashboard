@@ -4,7 +4,7 @@
   "executiveSummary": {
     "globalScore": 72,
     "status": "needs-improvement",
-    "baselineAnnualRevenue": 300000000000,
+    "baselineAnnualRevenue": 30000000000,
     "seoHealth": {
       "rankPercentile": 34,
       "estimatedChange": 12
@@ -12,6 +12,60 @@
     "carbonFootprint": {
       "gramsPerPageView": 1.84,
       "savedGrams": 0.72
+    }
+  },
+
+  "businessMetrics": {
+    "trafficSessions": {
+      "sessions": 118420,
+      "visitors": 93480,
+      "changeRate": 6.8,
+      "engagementRate": 54.6,
+      "bounceRate": 36.2,
+      "pagesPerSession": 2.8,
+      "averageOrderValue": 55000,
+      "source": "클론 GA4 이벤트 Mock / 내부 로그 수신 가정",
+      "period": "월간",
+      "confidence": "mock"
+    },
+    "acquisitionChannels": [
+      { "channel": "Organic Search", "sessions": 47280, "purchases": 2860, "revenue": 157300000, "conversionRate": 6.0, "bounceRate": 32.4, "averageOrderValue": 55000 },
+      { "channel": "Direct", "sessions": 26140, "purchases": 1780, "revenue": 97900000, "conversionRate": 6.8, "bounceRate": 28.9, "averageOrderValue": 55000 },
+      { "channel": "Paid Search", "sessions": 18360, "purchases": 820, "revenue": 45100000, "conversionRate": 4.5, "bounceRate": 41.8, "averageOrderValue": 55000 },
+      { "channel": "Referral", "sessions": 10920, "purchases": 590, "revenue": 32450000, "conversionRate": 5.4, "bounceRate": 35.6, "averageOrderValue": 55000 },
+      { "channel": "Social", "sessions": 9840, "purchases": 420, "revenue": 23100000, "conversionRate": 4.3, "bounceRate": 46.5, "averageOrderValue": 55000 },
+      { "channel": "Email / Campaign", "sessions": 5880, "purchases": 370, "revenue": 20350000, "conversionRate": 6.3, "bounceRate": 30.2, "averageOrderValue": 55000 }
+    ],
+    "deviceSegments": [
+      { "device": "Mobile", "sessions": 84240, "purchases": 4220, "revenue": 232100000, "conversionRate": 5.0, "bounceRate": 39.4, "averageOrderValue": 55000 },
+      { "device": "Desktop", "sessions": 34180, "purchases": 2620, "revenue": 144100000, "conversionRate": 7.7, "bounceRate": 26.4, "averageOrderValue": 55000 }
+    ],
+    "competitiveSignals": [
+      { "brand": "Decathlon", "group": "sports-brand", "productCount": 1284, "source": "sitemap/category crawler Mock", "period": "월간", "confidence": "mock" },
+      { "brand": "Nike Korea", "group": "sports-brand", "productCount": 920, "source": "sitemap/category crawler Mock", "period": "월간", "confidence": "mock" },
+      { "brand": "Under Armour", "group": "sports-brand", "productCount": 760, "source": "sitemap/category crawler Mock", "period": "월간", "confidence": "mock" },
+      { "brand": "Fila Korea", "group": "sports-brand", "productCount": 690, "source": "sitemap/category crawler Mock", "period": "월간", "confidence": "mock" },
+      { "brand": "Coupang", "group": "commerce-platform", "productCount": 5800, "source": "sitemap/category crawler Mock", "period": "월간", "confidence": "mock" }
+    ],
+    "conversionRate": {
+      "value": 5.8,
+      "target": 6.4,
+      "source": "구매 완료 세션 / 전체 세션",
+      "period": "월간",
+      "isProxy": true
+    },
+    "availableProducts": {
+      "count": 1284,
+      "source": "클론 사이트 상품 카탈로그 기준",
+      "period": "현재"
+    },
+    "searchVisibility": {
+      "relativeRankPercentile": 34,
+      "seoScore": 68,
+      "keywordSet": "러닝화, 등산화, 운동복",
+      "competitorsAhead": 2,
+      "source": "Lighthouse SEO / Mock keyword set",
+      "period": "월간"
     }
   },
 
@@ -45,7 +99,7 @@
       }
     },
     {
-      "brand": "SSG.com",
+      "brand": "Fila Korea",
       "isTarget": false,
       "scores": { "lighthouse": 61, "seo": 71, "target_lighthouse": 90 },
       "metrics": {
@@ -59,7 +113,7 @@
       }
     },
     {
-      "brand": "Naver Shopping",
+      "brand": "Under Armour",
       "isTarget": false,
       "scores": { "lighthouse": 79, "seo": 91, "target_lighthouse": 90 },
       "metrics": {
@@ -168,7 +222,7 @@
       }
     },
     {
-      "brand": "Naver Shopping", "page": "main",
+      "brand": "Under Armour", "page": "main",
       "scores": { "lighthouse": 83, "seo": 94, "target_lighthouse": 90 },
       "metrics": {
         "lcp":        { "value": 2.4,  "unit": "s",    "target": 2.5, "label": "LCP" },
@@ -181,7 +235,7 @@
       }
     },
     {
-      "brand": "Naver Shopping", "page": "product",
+      "brand": "Under Armour", "page": "product",
       "scores": { "lighthouse": 77, "seo": 90, "target_lighthouse": 90 },
       "metrics": {
         "lcp":        { "value": 3.0,  "unit": "s",    "target": 2.5, "label": "LCP" },
@@ -194,7 +248,7 @@
       }
     },
     {
-      "brand": "Naver Shopping", "page": "checkout",
+      "brand": "Under Armour", "page": "checkout",
       "scores": { "lighthouse": 76, "seo": 88, "target_lighthouse": 90 },
       "metrics": {
         "lcp":        { "value": 3.1,  "unit": "s",    "target": 2.5, "label": "LCP" },
@@ -207,7 +261,7 @@
       }
     },
 
-    { "brand": "SSG.com", "page": "main",
+    { "brand": "Fila Korea", "page": "main",
       "scores": { "lighthouse": 64, "seo": 73, "target_lighthouse": 90 },
       "metrics": {
         "lcp":        { "value": 4.1,  "unit": "s",    "target": 2.5, "label": "LCP" },
@@ -219,7 +273,7 @@
         "assetSize":  { "value": 580,  "unit": "KB",   "target": 200, "label": "Asset Size" }
       }
     },
-    { "brand": "SSG.com", "page": "product",
+    { "brand": "Fila Korea", "page": "product",
       "scores": { "lighthouse": 59, "seo": 70, "target_lighthouse": 90 },
       "metrics": {
         "lcp":        { "value": 4.8,  "unit": "s",    "target": 2.5, "label": "LCP" },
@@ -231,7 +285,7 @@
         "assetSize":  { "value": 670,  "unit": "KB",   "target": 200, "label": "Asset Size" }
       }
     },
-    { "brand": "SSG.com", "page": "checkout",
+    { "brand": "Fila Korea", "page": "checkout",
       "scores": { "lighthouse": 60, "seo": 69, "target_lighthouse": 90 },
       "metrics": {
         "lcp":        { "value": 5.0,  "unit": "s",    "target": 2.5, "label": "LCP" },
@@ -284,30 +338,38 @@
 
   "trends": {
     "labels": [
-      "2026-03-01", "2026-03-08", "2026-03-15", "2026-03-22",
-      "2026-03-29", "2026-04-05", "2026-04-12", "2026-04-19", "2026-04-26"
+      "2026-03-01", "2026-03-08", "2026-03-22", "2026-03-29", "2026-04-12", "2026-04-26"
     ],
     "datasets": [
-      { "brand": "Decathlon",      "metricKey": "lighthouse", "values": [61, 62, 63, 65, 66, 68, 69, 71, 72] },
-      { "brand": "Coupang",        "metricKey": "lighthouse", "values": [55, 55, 56, 57, 57, 58, 57, 58, 58] },
-      { "brand": "Naver Shopping", "metricKey": "lighthouse", "values": [76, 77, 77, 78, 78, 78, 79, 79, 79] },
+      { "brand": "Decathlon",      "metricKey": "lighthouse", "values": [61, 63, 60, 66, 63, 72] },
+      { "brand": "Coupang",        "metricKey": "lighthouse", "values": [55, 55, 57, 58, 57, 58] },
+      { "brand": "Under Armour", "metricKey": "lighthouse", "values": [76, 77, 78, 78, 79, 79] },
 
-      { "brand": "Decathlon",      "metricKey": "lcp", "values": [5.2, 5.0, 4.9, 4.7, 4.5, 4.3, 4.1, 3.9, 3.8] },
-      { "brand": "Coupang",        "metricKey": "lcp", "values": [5.3, 5.3, 5.2, 5.2, 5.1, 5.1, 5.1, 5.1, 5.1] },
-      { "brand": "Naver Shopping", "metricKey": "lcp", "values": [2.9, 2.9, 2.9, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8] },
+      { "brand": "Decathlon",      "metricKey": "lcp", "values": [5.2, 4.8, 5.4, 5.1, 4.9, 3.8] },
+      { "brand": "Coupang",        "metricKey": "lcp", "values": [5.3, 5.3, 5.2, 5.1, 5.1, 5.1] },
+      { "brand": "Under Armour", "metricKey": "lcp", "values": [2.9, 2.9, 2.8, 2.8, 2.8, 2.8] },
 
-      { "brand": "Decathlon",      "metricKey": "tbt", "values": [480, 472, 465, 458, 450, 442, 435, 428, 420] },
-      { "brand": "Coupang",        "metricKey": "tbt", "values": [910, 905, 900, 898, 895, 892, 891, 890, 890] },
-      { "brand": "Naver Shopping", "metricKey": "tbt", "values": [320, 318, 316, 314, 312, 311, 311, 310, 310] },
+      { "brand": "Decathlon",      "metricKey": "tbt", "values": [480, 445, 560, 455, 610, 420] },
+      { "brand": "Coupang",        "metricKey": "tbt", "values": [910, 905, 898, 892, 891, 890] },
+      { "brand": "Under Armour", "metricKey": "tbt", "values": [320, 318, 314, 311, 311, 310] },
 
-      { "brand": "Decathlon",      "metricKey": "inp", "values": [330, 322, 318, 312, 305, 298, 292, 288, 285] },
-      { "brand": "Coupang",        "metricKey": "inp", "values": [175, 173, 172, 170, 170, 169, 169, 168, 168] },
-      { "brand": "Naver Shopping", "metricKey": "inp", "values": [150, 148, 147, 145, 144, 143, 143, 142, 142] }
+      { "brand": "Decathlon",      "metricKey": "inp", "values": [330, 310, 352, 336, 365, 285] },
+      { "brand": "Coupang",        "metricKey": "inp", "values": [175, 173, 170, 169, 169, 168] },
+      { "brand": "Under Armour", "metricKey": "inp", "values": [150, 148, 145, 143, 143, 142] }
     ],
     "releases": [
       {
+        "date": "2026-03-01",
+        "version": "기준 측정",
+        "description": "사이트 변경 전 기준 성능 측정",
+        "changeLog": [
+          "메인, 상품 상세, 결제 페이지 기준 성능 측정",
+          "이후 변경 사항의 영향 비교를 위한 baseline으로 사용"
+        ]
+      },
+      {
         "date": "2026-03-08",
-        "version": "v2.1.0",
+        "version": "이미지 최적화",
         "description": "히어로 이미지 WebP 전환",
         "changeLog": [
           "히어로 배너 JPEG → WebP 전환 (파일 크기 62% 절감)",
@@ -316,8 +378,18 @@
         ]
       },
       {
+        "date": "2026-03-22",
+        "version": "기획전 오픈",
+        "description": "봄 캠핑 기획전과 대형 상품 이미지가 추가되며 첫 화면 표시 속도가 일시적으로 하락",
+        "changeLog": [
+          "메인 상단에 캠핑 기획전 배너 3종 추가",
+          "상품 카드에 고해상도 이미지와 프로모션 배지 추가",
+          "마케팅 추적 스크립트 2개 추가로 JavaScript 실행 시간이 증가"
+        ]
+      },
+      {
         "date": "2026-03-29",
-        "version": "v2.2.0",
+        "version": "스크립트 정리",
         "description": "서드파티 스크립트 defer 처리",
         "changeLog": [
           "Google Analytics · Hotjar 스크립트 async/defer 적용",
@@ -327,8 +399,18 @@
       },
       {
         "date": "2026-04-12",
-        "version": "v2.3.0",
-        "description": "JS 코드 스플리팅 적용",
+        "version": "리뷰 모듈",
+        "description": "신상품 상세 페이지에 리뷰·추천 상품 모듈이 추가되며 클릭 반응성이 일시적으로 악화",
+        "changeLog": [
+          "상품 상세에 리뷰 요약, 추천 상품, 사이즈 추천 모듈 추가",
+          "초기 로딩 시 리뷰 위젯 JavaScript가 함께 실행됨",
+          "상품 상세와 결제 전환 구간에서 INP/TBT가 일시적으로 상승"
+        ]
+      },
+      {
+        "date": "2026-04-26",
+        "version": "추가 최적화",
+        "description": "JS 코드 스플리팅 및 이미지 로딩 정책 정리",
         "changeLog": [
           "Route-level dynamic import 도입 (Next.js 자동 스플리팅)",
           "상품 필터·리뷰 컴포넌트 지연 로드 처리",
@@ -340,65 +422,151 @@
 
   "rum": {
     "regionalData": [
-      { "region": "서울", "isp": "SK",  "avgLatency": 210, "status": "good" },
-      { "region": "서울", "isp": "KT",  "avgLatency": 195, "status": "good" },
-      { "region": "서울", "isp": "LG",  "avgLatency": 230, "status": "good" },
-      { "region": "경기", "isp": "SK",  "avgLatency": 260, "status": "good" },
-      { "region": "경기", "isp": "KT",  "avgLatency": 245, "status": "good" },
-      { "region": "경기", "isp": "LG",  "avgLatency": 275, "status": "good" },
-      { "region": "부산", "isp": "SK",  "avgLatency": 340, "status": "warning" },
-      { "region": "부산", "isp": "KT",  "avgLatency": 310, "status": "warning" },
-      { "region": "부산", "isp": "LG",  "avgLatency": 360, "status": "warning" },
-      { "region": "대구", "isp": "SK",  "avgLatency": 390, "status": "warning" },
-      { "region": "대구", "isp": "KT",  "avgLatency": 375, "status": "warning" },
-      { "region": "대구", "isp": "LG",  "avgLatency": 420, "status": "poor" },
-      { "region": "인천", "isp": "SK",  "avgLatency": 225, "status": "good" },
-      { "region": "인천", "isp": "KT",  "avgLatency": 210, "status": "good" },
-      { "region": "인천", "isp": "LG",  "avgLatency": 248, "status": "good" },
-      { "region": "광주", "isp": "SK",  "avgLatency": 445, "status": "poor" },
-      { "region": "광주", "isp": "KT",  "avgLatency": 420, "status": "poor" },
-      { "region": "광주", "isp": "LG",  "avgLatency": 480, "status": "poor" },
-      { "region": "대전", "isp": "SK",  "avgLatency": 320, "status": "warning" },
-      { "region": "대전", "isp": "KT",  "avgLatency": 298, "status": "warning" },
-      { "region": "대전", "isp": "LG",  "avgLatency": 345, "status": "warning" },
-      { "region": "울산", "isp": "SK",  "avgLatency": 358, "status": "warning" },
-      { "region": "울산", "isp": "KT",  "avgLatency": 338, "status": "warning" },
-      { "region": "울산", "isp": "LG",  "avgLatency": 392, "status": "warning" },
-      { "region": "강원", "isp": "SK",  "avgLatency": 352, "status": "warning" },
-      { "region": "강원", "isp": "KT",  "avgLatency": 328, "status": "warning" },
-      { "region": "강원", "isp": "LG",  "avgLatency": 378, "status": "warning" },
-      { "region": "충북", "isp": "SK",  "avgLatency": 305, "status": "warning" },
-      { "region": "충북", "isp": "KT",  "avgLatency": 283, "status": "good"    },
-      { "region": "충북", "isp": "LG",  "avgLatency": 327, "status": "warning" },
-      { "region": "충남", "isp": "SK",  "avgLatency": 318, "status": "warning" },
-      { "region": "충남", "isp": "KT",  "avgLatency": 294, "status": "good"    },
-      { "region": "충남", "isp": "LG",  "avgLatency": 340, "status": "warning" },
-      { "region": "전북", "isp": "SK",  "avgLatency": 418, "status": "poor"    },
-      { "region": "전북", "isp": "KT",  "avgLatency": 398, "status": "warning" },
-      { "region": "전북", "isp": "LG",  "avgLatency": 452, "status": "poor"    },
-      { "region": "전남", "isp": "SK",  "avgLatency": 462, "status": "poor"    },
-      { "region": "전남", "isp": "KT",  "avgLatency": 435, "status": "poor"    },
-      { "region": "전남", "isp": "LG",  "avgLatency": 488, "status": "poor"    },
-      { "region": "경북", "isp": "SK",  "avgLatency": 408, "status": "poor"    },
-      { "region": "경북", "isp": "KT",  "avgLatency": 385, "status": "warning" },
-      { "region": "경북", "isp": "LG",  "avgLatency": 436, "status": "poor"    },
-      { "region": "경남", "isp": "SK",  "avgLatency": 348, "status": "warning" },
-      { "region": "경남", "isp": "KT",  "avgLatency": 322, "status": "warning" },
-      { "region": "경남", "isp": "LG",  "avgLatency": 372, "status": "warning" },
-      { "region": "제주", "isp": "SK",  "avgLatency": 518, "status": "poor"    },
-      { "region": "제주", "isp": "KT",  "avgLatency": 492, "status": "poor"    },
-      { "region": "제주", "isp": "LG",  "avgLatency": 545, "status": "poor"    },
-      { "region": "세종", "isp": "SK",  "avgLatency": 292, "status": "good"    },
-      { "region": "세종", "isp": "KT",  "avgLatency": 270, "status": "good"    },
-      { "region": "세종", "isp": "LG",  "avgLatency": 312, "status": "warning" }
+      { "region": "서울", "isp": "SK",  "sessions": 12400, "avgLatency": 210, "status": "good" },
+      { "region": "서울", "isp": "KT",  "sessions": 13200, "avgLatency": 195, "status": "good" },
+      { "region": "서울", "isp": "LG",  "sessions": 8600,  "avgLatency": 230, "status": "good" },
+      { "region": "경기", "isp": "SK",  "sessions": 10500, "avgLatency": 260, "status": "good" },
+      { "region": "경기", "isp": "KT",  "sessions": 11200, "avgLatency": 245, "status": "good" },
+      { "region": "경기", "isp": "LG",  "sessions": 8100,  "avgLatency": 275, "status": "good" },
+      { "region": "부산", "isp": "SK",  "sessions": 2700,  "avgLatency": 340, "status": "warning" },
+      { "region": "부산", "isp": "KT",  "sessions": 3000,  "avgLatency": 310, "status": "warning" },
+      { "region": "부산", "isp": "LG",  "sessions": 1900,  "avgLatency": 360, "status": "warning" },
+      { "region": "대구", "isp": "SK",  "sessions": 1900,  "avgLatency": 390, "status": "warning" },
+      { "region": "대구", "isp": "KT",  "sessions": 2100,  "avgLatency": 375, "status": "warning" },
+      { "region": "대구", "isp": "LG",  "sessions": 1400,  "avgLatency": 420, "status": "poor" },
+      { "region": "인천", "isp": "SK",  "sessions": 3200,  "avgLatency": 225, "status": "good" },
+      { "region": "인천", "isp": "KT",  "sessions": 3400,  "avgLatency": 210, "status": "good" },
+      { "region": "인천", "isp": "LG",  "sessions": 2100,  "avgLatency": 248, "status": "good" },
+      { "region": "광주", "isp": "SK",  "sessions": 1300,  "avgLatency": 445, "status": "poor" },
+      { "region": "광주", "isp": "KT",  "sessions": 1400,  "avgLatency": 420, "status": "poor" },
+      { "region": "광주", "isp": "LG",  "sessions": 900,   "avgLatency": 480, "status": "poor" },
+      { "region": "대전", "isp": "SK",  "sessions": 1600,  "avgLatency": 320, "status": "warning" },
+      { "region": "대전", "isp": "KT",  "sessions": 1700,  "avgLatency": 298, "status": "warning" },
+      { "region": "대전", "isp": "LG",  "sessions": 1000,  "avgLatency": 345, "status": "warning" },
+      { "region": "울산", "isp": "SK",  "sessions": 1100,  "avgLatency": 358, "status": "warning" },
+      { "region": "울산", "isp": "KT",  "sessions": 1200,  "avgLatency": 338, "status": "warning" },
+      { "region": "울산", "isp": "LG",  "sessions": 700,   "avgLatency": 392, "status": "warning" },
+      { "region": "강원", "isp": "SK",  "sessions": 1000,  "avgLatency": 352, "status": "warning" },
+      { "region": "강원", "isp": "KT",  "sessions": 1100,  "avgLatency": 328, "status": "warning" },
+      { "region": "강원", "isp": "LG",  "sessions": 700,   "avgLatency": 378, "status": "warning" },
+      { "region": "충북", "isp": "SK",  "sessions": 950,   "avgLatency": 305, "status": "warning" },
+      { "region": "충북", "isp": "KT",  "sessions": 1000,  "avgLatency": 283, "status": "good"    },
+      { "region": "충북", "isp": "LG",  "sessions": 650,   "avgLatency": 327, "status": "warning" },
+      { "region": "충남", "isp": "SK",  "sessions": 1200,  "avgLatency": 318, "status": "warning" },
+      { "region": "충남", "isp": "KT",  "sessions": 1300,  "avgLatency": 294, "status": "good"    },
+      { "region": "충남", "isp": "LG",  "sessions": 800,   "avgLatency": 340, "status": "warning" },
+      { "region": "전북", "isp": "SK",  "sessions": 1050,  "avgLatency": 418, "status": "poor"    },
+      { "region": "전북", "isp": "KT",  "sessions": 1100,  "avgLatency": 398, "status": "warning" },
+      { "region": "전북", "isp": "LG",  "sessions": 750,   "avgLatency": 452, "status": "poor"    },
+      { "region": "전남", "isp": "SK",  "sessions": 850,   "avgLatency": 462, "status": "poor"    },
+      { "region": "전남", "isp": "KT",  "sessions": 950,   "avgLatency": 435, "status": "poor"    },
+      { "region": "전남", "isp": "LG",  "sessions": 600,   "avgLatency": 488, "status": "poor"    },
+      { "region": "경북", "isp": "SK",  "sessions": 1300,  "avgLatency": 408, "status": "poor"    },
+      { "region": "경북", "isp": "KT",  "sessions": 1400,  "avgLatency": 385, "status": "warning" },
+      { "region": "경북", "isp": "LG",  "sessions": 800,   "avgLatency": 436, "status": "poor"    },
+      { "region": "경남", "isp": "SK",  "sessions": 1700,  "avgLatency": 348, "status": "warning" },
+      { "region": "경남", "isp": "KT",  "sessions": 1850,  "avgLatency": 322, "status": "warning" },
+      { "region": "경남", "isp": "LG",  "sessions": 1150,  "avgLatency": 372, "status": "warning" },
+      { "region": "제주", "isp": "SK",  "sessions": 650,   "avgLatency": 518, "status": "poor"    },
+      { "region": "제주", "isp": "KT",  "sessions": 700,   "avgLatency": 492, "status": "poor"    },
+      { "region": "제주", "isp": "LG",  "sessions": 450,   "avgLatency": 545, "status": "poor"    },
+      { "region": "세종", "isp": "SK",  "sessions": 800,   "avgLatency": 292, "status": "good"    },
+      { "region": "세종", "isp": "KT",  "sessions": 850,   "avgLatency": 270, "status": "good"    },
+      { "region": "세종", "isp": "LG",  "sessions": 550,   "avgLatency": 312, "status": "warning" }
     ],
     "userJourney": [
-      { "step": "메인",      "sessions": 100000, "dropoffRate": 0,    "avgTime": 3.2, "pageType": "main" },
-      { "step": "검색",      "sessions": 68000,  "dropoffRate": 32.0, "avgTime": 5.8, "pageType": "main" },
-      { "step": "상품 상세", "sessions": 41000,  "dropoffRate": 39.7, "avgTime": 12.4, "pageType": "product" },
-      { "step": "장바구니",  "sessions": 18000,  "dropoffRate": 56.1, "avgTime": 4.1, "pageType": "product" },
-      { "step": "결제",      "sessions": 9200,   "dropoffRate": 48.9, "avgTime": 8.7, "pageType": "checkout" },
-      { "step": "완료",      "sessions": 6100,   "dropoffRate": 33.7, "avgTime": 0,   "pageType": "checkout" }
+      { "step": "메인",      "sessions": 118420, "dropoffRate": 0,    "avgTime": 3.1, "pageType": "main" },
+      { "step": "검색",      "sessions": 84300,  "dropoffRate": 28.8, "avgTime": 6.2, "pageType": "main" },
+      { "step": "상품 상세", "sessions": 52400,  "dropoffRate": 37.8, "avgTime": 13.8, "pageType": "product" },
+      { "step": "장바구니",  "sessions": 22100,  "dropoffRate": 57.8, "avgTime": 4.6, "pageType": "product" },
+      { "step": "결제",      "sessions": 11850,  "dropoffRate": 46.4, "avgTime": 9.4, "pageType": "checkout" },
+      { "step": "완료",      "sessions": 6840,   "dropoffRate": 42.3, "avgTime": 0,   "pageType": "checkout" }
+    ],
+    "sessionPaths": [
+      {
+        "id": "path-search-checkout-dropoff",
+        "name": "검색 유입 후 결제 이탈",
+        "source": "검색 유입",
+        "device": "Mobile",
+        "sessions": 18420,
+        "share": 15.6,
+        "outcome": "dropoff",
+        "lastStep": "결제 단계 이탈",
+        "path": [
+          { "step": "검색 결과 유입", "detail": "러닝화 키워드", "event": "session_start", "pageType": "main" },
+          { "step": "상품 검색", "detail": "러닝화", "event": "search", "pageType": "main" },
+          { "step": "상품 상세 비교", "detail": "상품 2개 이상 조회", "event": "view_item", "pageType": "product" },
+          { "step": "사이즈 선택", "detail": "270 / 275 확인", "event": "select_item_option", "pageType": "product" },
+          { "step": "장바구니 담기", "detail": "1개 상품", "event": "add_to_cart", "pageType": "product" },
+          { "step": "결제 진입", "detail": "배송비 확인 후 종료", "event": "begin_checkout", "pageType": "checkout" }
+        ]
+      },
+      {
+        "id": "path-paid-product-dropoff",
+        "name": "광고 유입 후 상품 상세 이탈",
+        "source": "검색 광고",
+        "device": "Mobile",
+        "sessions": 12680,
+        "share": 10.7,
+        "outcome": "dropoff",
+        "lastStep": "상품 상세 이탈",
+        "path": [
+          { "step": "검색 광고 유입", "detail": "운동화 프로모션", "event": "session_start", "pageType": "main" },
+          { "step": "프로모션 랜딩", "detail": "기획전 페이지", "event": "page_view", "pageType": "main" },
+          { "step": "상품 상세 진입", "detail": "대표 상품 조회", "event": "view_item", "pageType": "product" },
+          { "step": "가격 확인", "detail": "구매 행동 없음", "event": "view_item", "pageType": "product" },
+          { "step": "사이트 종료", "detail": "장바구니 미진입", "event": "exit", "pageType": "product" }
+        ]
+      },
+      {
+        "id": "path-direct-purchase",
+        "name": "직접 방문 후 구매 완료",
+        "source": "직접 방문",
+        "device": "Desktop",
+        "sessions": 6120,
+        "share": 5.2,
+        "outcome": "purchase",
+        "lastStep": "구매 완료",
+        "path": [
+          { "step": "직접 방문", "detail": "즐겨찾기 / 주소 입력", "event": "session_start", "pageType": "main" },
+          { "step": "카테고리 진입", "detail": "등산화", "event": "view_item_list", "pageType": "main" },
+          { "step": "상품 확인", "detail": "상세 이미지 확인", "event": "view_item", "pageType": "product" },
+          { "step": "장바구니 담기", "detail": "옵션 선택 완료", "event": "add_to_cart", "pageType": "product" },
+          { "step": "결제 완료", "detail": "카드 결제", "event": "purchase", "pageType": "checkout" }
+        ]
+      },
+      {
+        "id": "path-social-list-dropoff",
+        "name": "소셜 유입 후 목록 탐색 이탈",
+        "source": "소셜",
+        "device": "Mobile",
+        "sessions": 9840,
+        "share": 8.3,
+        "outcome": "dropoff",
+        "lastStep": "상품 목록 이탈",
+        "path": [
+          { "step": "소셜 유입", "detail": "캠핑 콘텐츠", "event": "session_start", "pageType": "main" },
+          { "step": "기획전 확인", "detail": "캠핑용품", "event": "page_view", "pageType": "main" },
+          { "step": "상품 목록 스크롤", "detail": "필터 사용 없음", "event": "view_item_list", "pageType": "main" },
+          { "step": "사이트 종료", "detail": "상품 상세 미진입", "event": "exit", "pageType": "main" }
+        ]
+      },
+      {
+        "id": "path-campaign-purchase",
+        "name": "캠페인 유입 후 장바구니 구매",
+        "source": "캠페인",
+        "device": "Mobile",
+        "sessions": 3860,
+        "share": 3.3,
+        "outcome": "purchase",
+        "lastStep": "구매 완료",
+        "path": [
+          { "step": "캠페인 링크 유입", "detail": "쿠폰 메일", "event": "session_start", "pageType": "main" },
+          { "step": "상품 상세 진입", "detail": "프로모션 상품", "event": "view_item", "pageType": "product" },
+          { "step": "장바구니 담기", "detail": "쿠폰 적용", "event": "add_to_cart", "pageType": "product" },
+          { "step": "결제 완료", "detail": "쿠폰 사용 구매", "event": "purchase", "pageType": "checkout" }
+        ]
+      }
     ]
   },
 

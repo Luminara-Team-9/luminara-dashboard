@@ -1,6 +1,7 @@
 // ─── AI Fix Plan ──────────────────────────────────────────────
 export type FixPriority = 'critical' | 'high' | 'medium' | 'low';
 export type FixEffort   = 'low' | 'medium' | 'high';
+export type DataConfidence = 'measured' | 'estimated' | 'proxy' | 'mock';
 
 export interface AiFixPlan {
   id: string;
@@ -20,8 +21,8 @@ export type GlobalStatus = 'optimal' | 'needs-improvement' | 'critical';
 export interface ExecutiveSummary {
   globalScore: number;
   status: GlobalStatus;
-  /** CVR/매출은 cvr.ts calcCvrLift()로 동적 계산 — baselineRevenue만 저장 */
-  baselineAnnualRevenue: number;  // 연 매출 기준값 (원), CVR 계산 입력
+  /** 내부 매출 연동 전에는 mock 기준값으로만 사용 */
+  baselineAnnualRevenue: number;  // 연 매출 기준값 (원), 확정 매출 예측이 아님
   seoHealth: {
     rankPercentile: number;       // 상위 N%
     estimatedChange: number;      // 목표 달성 시 예상 변동 포인트
@@ -29,6 +30,80 @@ export interface ExecutiveSummary {
   carbonFootprint: {
     gramsPerPageView: number;     // 현재 페이지뷰당 탄소 (g)
     savedGrams: number;           // 목표 달성 시 절감량 (g)
+  };
+}
+
+export interface BusinessMetrics {
+  trafficSessions?: {
+    sessions: number;
+    visitors?: number;
+    changeRate?: number;
+    engagementRate?: number;
+    bounceRate?: number;
+    pagesPerSession?: number;
+    averageOrderValue?: number;
+    competitorTraffic?: {
+      brand: string;
+      sessions: number;
+      categoryRank?: number;
+      seoVisibilityPercentile?: number;
+      pagesPerSession?: number;
+      bounceRate?: number;
+      averageVisitDuration?: string;
+      primaryTrafficSource?: string;
+      group: 'sports-brand' | 'commerce-platform';
+      source?: string;
+      confidence?: DataConfidence;
+    }[];
+    source?: string;
+    period?: string;
+    confidence?: DataConfidence;
+  };
+  acquisitionChannels?: {
+    channel: string;
+    sessions: number;
+    purchases: number;
+    revenue: number;
+    conversionRate: number;
+    bounceRate: number;
+    averageOrderValue: number;
+  }[];
+  deviceSegments?: {
+    device: 'Mobile' | 'Desktop' | 'Tablet';
+    sessions: number;
+    purchases: number;
+    revenue: number;
+    conversionRate: number;
+    bounceRate: number;
+    averageOrderValue: number;
+  }[];
+  competitiveSignals?: {
+    brand: string;
+    group: 'sports-brand' | 'commerce-platform';
+    productCount?: number;
+    source?: string;
+    period?: string;
+    confidence?: DataConfidence;
+  }[];
+  conversionRate?: {
+    value: number;
+    target?: number;
+    source?: string;
+    period?: string;
+    isProxy?: boolean;
+  };
+  availableProducts?: {
+    count: number;
+    source?: string;
+    period?: string;
+  };
+  searchVisibility?: {
+    relativeRankPercentile: number;
+    seoScore?: number;
+    keywordSet?: string;
+    competitorsAhead?: number;
+    source?: string;
+    period?: string;
   };
 }
 
@@ -60,6 +135,7 @@ export interface RegionalData {
   isp: string;
   avgLatency: number; // ms
   status: LatencyStatus;
+  sessions?: number;
 }
 
 export interface UserJourneyStep {
@@ -70,9 +146,27 @@ export interface UserJourneyStep {
   pageType: PageType;  // 해당 단계가 속한 페이지 유형 (latency 연계용)
 }
 
+export interface SessionPathPattern {
+  id: string;
+  name: string;
+  source: string;
+  device: 'Mobile' | 'Desktop' | 'Tablet';
+  sessions: number;
+  share: number;
+  outcome: 'purchase' | 'dropoff';
+  lastStep: string;
+  path: {
+    step: string;
+    detail?: string;
+    event: string;
+    pageType: PageType;
+  }[];
+}
+
 export interface RUM {
   regionalData: RegionalData[];
   userJourney: UserJourneyStep[];
+  sessionPaths?: SessionPathPattern[];
 }
 
 // ─── 벤치마크 지표 키 (entities/metric과 공유) ────────────────
@@ -85,11 +179,58 @@ export interface MetricItem {
   label: string;
 }
 
+export interface ResourceEfficiency {
+  totalWeightKb?: number;
+  jsKb?: number;
+  cssKb?: number;
+  imageKb?: number;
+  requestCount?: number;
+  thirdPartyRequestCount?: number;
+  renderBlockingCount?: number;
+  unusedJsKb?: number;
+  unusedCssKb?: number;
+  imageOptimizationKb?: number;
+  modernImageFormatReady?: boolean;
+}
+
+export interface TechnicalSeoChecks {
+  title?: boolean;
+  metaDescription?: boolean;
+  canonical?: boolean;
+  robotsTxt?: boolean;
+  sitemap?: boolean;
+  structuredData?: boolean;
+  h1?: boolean;
+  imageAltRatio?: number;
+  mobileViewport?: boolean;
+  crawlableLinks?: boolean;
+}
+
+export interface CruxFieldData {
+  availability: 'available' | 'unavailable';
+  source: 'CrUX API' | 'PageSpeed CrUX' | 'none';
+  formFactor?: 'mobile' | 'desktop';
+  lcp?: number;
+  inp?: number;
+  cls?: number;
+  collectedAt?: string;
+}
+
+export interface DomainPopularity {
+  trancoRank?: number;
+  cloudflareRank?: number;
+  collectedAt?: string;
+}
+
 export interface BenchmarkEntry {
   brand: string;
   isTarget: boolean;
   scores: { lighthouse: number; seo: number; target_lighthouse: number };
   metrics: Record<MetricKey, MetricItem>;
+  resource?: ResourceEfficiency;
+  technicalSeo?: TechnicalSeoChecks;
+  fieldData?: CruxFieldData;
+  domainPopularity?: DomainPopularity;
 }
 
 // ─── 페이지별 벤치마크 (메인 / 상품 / 결제) ──────────────────
@@ -100,12 +241,17 @@ export interface PageBenchmarkEntry {
   page: PageType;
   scores: { lighthouse: number; seo: number; target_lighthouse: number };
   metrics: Record<MetricKey, MetricItem>;
+  resource?: ResourceEfficiency;
+  technicalSeo?: TechnicalSeoChecks;
+  fieldData?: CruxFieldData;
+  domainPopularity?: DomainPopularity;
 }
 
 // ─── 최종 API 응답 (route.ts 반환 타입) ───────────────────────
 export interface PerformanceApiResponse {
   timestamp: string;
   executiveSummary: ExecutiveSummary;
+  businessMetrics?: BusinessMetrics;
   benchmarks: BenchmarkEntry[];
   pageMetrics: PageBenchmarkEntry[];
   trends: Trends;
