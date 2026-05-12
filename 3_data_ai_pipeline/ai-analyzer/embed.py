@@ -306,7 +306,7 @@ def embed_cwv_guides(cursor, model):
             cursor=cursor,
             title=doc["title"],
             content=doc["content"],
-            source="cwv_guides",
+            source=f"cwv_guide_{doc['title'].lower().replace(' ', '_').replace(':', '')}",
             doc_type=doc["doc_type"],
             embedding=embedding,
         )
