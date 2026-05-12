@@ -54,24 +54,21 @@ def embed_text(model, text):
 def insert_document(cursor, title, content, source,
                     doc_type, embedding, metadata=None):
     """
-    Insert one document into rag_documents.
-    Skips if same title + source already exists.
+    Upsert document — update if exists, insert if not.
+    Always keeps latest data.
     """
-    cursor.execute("""
-        SELECT id FROM rag_documents
-        WHERE title = %s AND source = %s
-        LIMIT 1
-    """, (title, source))
-
-    if cursor.fetchone():
-        return False
-
     cursor.execute("""
         INSERT INTO rag_documents (
             title, content, embedding,
             source, doc_type, metadata,
             updated_at
         ) VALUES (%s, %s, %s::vector, %s, %s, %s, NOW())
+        ON CONFLICT (source)
+        DO UPDATE SET
+            content    = EXCLUDED.content,
+            embedding  = EXCLUDED.embedding,
+            metadata   = EXCLUDED.metadata,
+            updated_at = NOW()
     """, (
         title,
         content,
@@ -80,7 +77,7 @@ def insert_document(cursor, title, content, source,
         doc_type,
         Json(metadata) if metadata else None,
     ))
-    return True
+    return cursor.rowcount == 1
 
 
 # ── Source 1: Hardcoded CWV Guides ───────────────────────────────────────────
@@ -395,30 +392,6 @@ def embed_opportunities(cursor, model):
     return inserted
 
 
-def upsert_document(cursor, title, content, source,
-                    doc_type, embedding, metadata=None):
-    """
-    Upsert document — update if exists, insert if not.
-    Used for benchmarks (always latest data needed).
-    """
-    cursor.execute("""
-        INSERT INTO rag_documents (
-            title, content, embedding,
-            source, doc_type, metadata, updated_at
-        ) VALUES (%s, %s, %s::vector, %s, %s, %s, NOW())
-        ON CONFLICT (source)
-        DO UPDATE SET
-            content    = EXCLUDED.content,
-            embedding  = EXCLUDED.embedding,
-            metadata   = EXCLUDED.metadata,
-            updated_at = NOW()
-    """, (
-        title, content, str(embedding),
-        source, doc_type,
-        Json(metadata) if metadata else None,
-    ))
-    return True
-
 # ── Source 3: Competitor Benchmarks ──────────────────────────────────────────
 
 def embed_competitor_benchmarks(cursor, model):
@@ -489,7 +462,7 @@ def embed_competitor_benchmarks(cursor, model):
             source = f"benchmark_decathlon_vs_{comp_name}_{dec_page}_{dec_device}"
 
             embedding = embed_text(model, content)
-            ok = upsert_document(
+            ok = insert_document(
                 cursor=cursor,
                 title=title,
                 content=content,
