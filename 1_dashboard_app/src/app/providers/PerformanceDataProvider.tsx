@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { PerformanceApiResponse } from '@/shared/lib/types';
 
 interface PerformanceDataContextValue {
@@ -12,7 +13,7 @@ interface PerformanceDataContextValue {
 
 const PerformanceDataContext = createContext<PerformanceDataContextValue | null>(null);
 
-export function PerformanceDataProvider({ children }: { children: React.ReactNode }) {
+export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<PerformanceApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

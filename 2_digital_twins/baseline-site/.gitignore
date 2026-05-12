@@ -1,0 +1,3 @@
+# Scraper output (large files, not needed in Git)
+scripts/scraper/scraped/
+scripts/scraper/node_modules/

@@ -59,9 +59,9 @@ jobs:
           singularity instance stop luminara_base_clone 2>/dev/null || true
           
           # 2. Boot the freshly baked Showroom container
-          # Note: Anchored to your BASE_DIR where the .env.baseline lives
+          # Note: Anchored to your BASE_DIR where the .env.base_clone.prod lives
           singularity instance start \
-            --env-file "${{ env.BASE_DIR }}/.env.baseline" \
+            --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
             ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_base_clone
             
           echo "⏱️ Waiting 10 seconds for Next.js to boot..."
@@ -82,7 +82,7 @@ jobs:
             
             # Reboot the stable backup
             singularity instance start \
-              --env-file "${{ env.BASE_DIR }}/.env.baseline" \
+              --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
               ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_base_clone
               
             echo "🚨 Rollback complete. Production Baseline is back online, but this deployment failed."

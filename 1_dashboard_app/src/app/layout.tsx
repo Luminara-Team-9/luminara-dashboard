@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: '공개 URL 기반 웹 성능, 기술 SEO, 최적화 우선순위 대시보드',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: any }) {
   return (
     <html lang="ko">
       <body>
