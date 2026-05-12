@@ -1,0 +1,12 @@
+{
+  "name": "decathlon-scraper",
+  "version": "1.0.0",
+  "description": "Dev tool for scraping Decathlon pages to build the digital clone",
+  "private": true,
+  "scripts": {
+    "scrape": "node scrape.js"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}
