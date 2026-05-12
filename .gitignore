@@ -31,6 +31,7 @@ venv/
 env/
 .venv/
 .ipynb_checkpoints/
+.venv-serve/
 
 # AI Model Weights & Caches
 *.pt
@@ -38,6 +39,9 @@ env/
 *.onnx
 *.safetensors
 .huggingface/
+
+# Unsloth compiled kernels
+unsloth_compiled_cache/
 
 # =========================================
 # 4. LIGHTHOUSE CI & EPHEMERAL AUDITS
