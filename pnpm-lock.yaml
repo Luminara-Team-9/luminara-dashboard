@@ -83,7 +83,7 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
-  2_digital_twins/demo-baseline:
+  2_digital_twins/baseline-site:
     dependencies:
       next:
         specifier: ^15.0.0

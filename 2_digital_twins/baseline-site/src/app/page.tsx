@@ -13,7 +13,7 @@ export default async function Page() {
 
   // 3. Only apply the massive SRE sabotage if it is NOT a health check
   if (!isHealthCheck) {
-    // await new Promise((resolve) => setTimeout(resolve, 9100)); // The 9.1s Delay
+    // await new Promise((resolve) => setTimeout(resolve, 9100)); // for pushing
   }
   return <HomePage />;
 }
