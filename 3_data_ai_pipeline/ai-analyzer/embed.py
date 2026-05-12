@@ -326,36 +326,44 @@ def embed_cwv_guides(cursor, model):
 def embed_opportunities(cursor, model):
     """
     Embed lighthouse_opportunities from DB.
-    Skips already embedded opportunities.
+    Uses average savings_ms across all runs.
+     unique opportunities only.
     """
     print("\n[Source 2] Embedding lighthouse opportunities...")
 
+    # FIX: average savings, 13 unique rows only
     cursor.execute("""
-        SELECT id, test_id, opportunity_id,
-               title, description, savings_ms,
-               severity, category
+        SELECT
+            opportunity_id,
+            title,
+            description,
+            AVG(savings_ms)::int as avg_savings,
+            severity,
+            category,
+            MIN(test_id) as test_id
         FROM lighthouse_opportunities
-        ORDER BY savings_ms DESC
+        GROUP BY opportunity_id, title, description,
+                 severity, category
+        ORDER BY avg_savings DESC
     """)
     rows = cursor.fetchall()
-    print(f"  Found {len(rows)} opportunities in DB")
+    print(f"  Found {len(rows)} unique opportunities")
 
     inserted = 0
     skipped = 0
 
     for row in rows:
-        (opp_id, test_id, opportunity_id,
-         title, description, savings_ms,
-         severity, category) = row
+        (opportunity_id, title, description,
+         avg_savings, severity, category, test_id) = row
 
         content = (
             f"Performance opportunity: {title}. "
             f"{description or ''} "
-            f"Estimated savings: {savings_ms}ms. "
+            f"Average estimated savings: {avg_savings}ms. "
             f"Severity: {severity}. "
             f"Category: {category}. "
             f"Fix this to improve {category} performance "
-            f"and reduce page load time by {savings_ms}ms."
+            f"and reduce page load time by {avg_savings}ms."
         )
 
         source = f"lighthouse_opportunity_{opportunity_id}"
@@ -371,20 +379,45 @@ def embed_opportunities(cursor, model):
             metadata={
                 "opportunity_id": opportunity_id,
                 "test_id": test_id,
-                "savings_ms": float(savings_ms) if savings_ms else None,
+                "savings_ms": float(avg_savings) if avg_savings else None,
                 "severity": severity,
                 "category": category,
             }
         )
         if ok:
             inserted += 1
-            print(f"  ✅ {title} ({savings_ms}ms)")
+            print(f"  ✅ {title} (avg {avg_savings}ms)")
         else:
             skipped += 1
+            print(f"  ⏭️  {title} (already exists)")
 
     print(f"  → inserted: {inserted} | skipped: {skipped}")
     return inserted
 
+
+def upsert_document(cursor, title, content, source,
+                    doc_type, embedding, metadata=None):
+    """
+    Upsert document — update if exists, insert if not.
+    Used for benchmarks (always latest data needed).
+    """
+    cursor.execute("""
+        INSERT INTO rag_documents (
+            title, content, embedding,
+            source, doc_type, metadata, updated_at
+        ) VALUES (%s, %s, %s::vector, %s, %s, %s, NOW())
+        ON CONFLICT (source)
+        DO UPDATE SET
+            content    = EXCLUDED.content,
+            embedding  = EXCLUDED.embedding,
+            metadata   = EXCLUDED.metadata,
+            updated_at = NOW()
+    """, (
+        title, content, str(embedding),
+        source, doc_type,
+        Json(metadata) if metadata else None,
+    ))
+    return True
 
 # ── Source 3: Competitor Benchmarks ──────────────────────────────────────────
 
@@ -456,7 +489,7 @@ def embed_competitor_benchmarks(cursor, model):
             source = f"benchmark_decathlon_vs_{comp_name}_{dec_page}_{dec_device}"
 
             embedding = embed_text(model, content)
-            ok = insert_document(
+            ok = upsert_document(
                 cursor=cursor,
                 title=title,
                 content=content,
