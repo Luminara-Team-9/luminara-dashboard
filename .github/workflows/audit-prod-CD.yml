@@ -62,16 +62,27 @@ jobs:
           singularity instance start \
             --env-file "${{ env.KEY_DIR }}/.env.opt_clone.prod" \
             ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_opt_clone
-            
-          echo "⏱️ Waiting 10 seconds for Next.js to boot..."
-          sleep 10
           
-          echo "🩺 Performing Health Check..."
-          if singularity instance list | grep -q "luminara_opt_clone"; then
-            echo "✅ Health Check Passed: Container is alive and routing traffic!"
-          else
-            echo "❌ CRITICAL FAILURE: Container died immediately after booting."
+          echo "⏱️ Waiting for Next.js to bind to port the "Address already in use" or "Missing .next folder" errors are hiding.
+            4.  **Verify Firewall**: If you are accessing this from a browser outside the university network, ensure the KNU firewall has port 3001 open for your IP. ${{ env.PORT }}..."
+          # Loop for 30 seconds, checking every 2 seconds
+          SUCCESS=0
+          for i in {1..15}; do
+            if curl -s -o /dev/null http://localhost:3003; then
+              echo "✅ Health Check Passed: Service is responding on 3003!"
+              SUCCESS=1
+              break
+            fi
+            echo "⏳ Waiting for service... ($i/15)"
+            sleep 2
+          done
+
+          if [ $SUCCESS -eq 0 ]; then
+            echo "❌ CRITICAL FAILURE: Service never responded on port 3003."
+            # ... (Trigger Rollback)
             echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
+            exit 1
+          fi
             
             # Tear down the broken deployment
             singularity instance stop luminara_opt_clone 2>/dev/null || true

@@ -22,8 +22,8 @@ jobs:
     env:
       IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
       BASE_DIR: /abr/coss41/Luminara_App
-      ARTIFACT_NAME: infrastructure_baseline_clone.sif
-      BACKUP_NAME: infrastructure_baseline_clone.bak.sif
+      ARTIFACT_NAME: infrastructure_digital_base_clone.sif
+      BACKUP_NAME: infrastructure_digital_base_clone.bak.sif
 
     steps:
       - name: 📥 Checkout Code
@@ -34,7 +34,7 @@ jobs:
       # ---------------------------------------------------------
       - name: 💾 Backup Stable Container
         run: |
-          echo "Backing up current baseline clone container..."
+          echo "Backing up current base clone container..."
           mkdir -p ${{ env.IMAGE_DIR }}
           cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
 
@@ -53,10 +53,11 @@ jobs:
       # ---------------------------------------------------------
       - name: 🚀 Hot-Swap, Verify & Automated Rollback
         run: |
-          echo "Rebooting live persistent Baseline Clone..."
+          echo "Rebooting live persistent Base Clone..."
           
-          # 1. Gracefully stop the current live baseline instance
-          singularity instance stop luminara_base_clone 2>/dev/null || true
+          # Force stop and wait a moment for the port to clear
+          singularity instance stop -f luminara_base_clone 2>/dev/null || true
+          sleep 2
           
           # 2. Boot the freshly baked Showroom container
           # Note: Anchored to your BASE_DIR where the .env.base_clone.prod lives
@@ -64,15 +65,26 @@ jobs:
             --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
             ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_base_clone
             
-          echo "⏱️ Waiting 10 seconds for Next.js to boot..."
-          sleep 10
-          
-          echo "🩺 Performing Health Check..."
-          if singularity instance list | grep -q "luminara_base_clone"; then
-            echo "✅ Health Check Passed: Container is alive and routing traffic!"
-          else
-            echo "❌ CRITICAL FAILURE: Container died immediately after booting."
+          echo "⏱️ Waiting for Next.js to bind to port the "Address already in use" or "Missing .next folder" errors are hiding.
+            4.  **Verify Firewall**: If you are accessing this from a browser outside the university network, ensure the KNU firewall has port 3001 open for your IP. ${{ env.PORT }}..."
+          # Loop for 30 seconds, checking every 2 seconds
+          SUCCESS=0
+          for i in {1..15}; do
+            if curl -s -o /dev/null http://localhost:3002; then
+              echo "✅ Health Check Passed: Service is responding on 3002!"
+              SUCCESS=1
+              break
+            fi
+            echo "⏳ Waiting for service... ($i/15)"
+            sleep 2
+          done
+
+          if [ $SUCCESS -eq 0 ]; then
+            echo "❌ CRITICAL FAILURE: Service never responded on port 3002."
+            # ... (Trigger Rollback)
             echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
+            exit 1
+          fi
             
             # Tear down the broken deployment
             singularity instance stop luminara_base_clone 2>/dev/null || true
@@ -85,7 +97,7 @@ jobs:
               --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
               ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_base_clone
               
-            echo "🚨 Rollback complete. Production Baseline is back online, but this deployment failed."
+            echo "🚨 Rollback complete. Production Base Clone is back online, but this deployment failed."
             exit 1
           fi
 
