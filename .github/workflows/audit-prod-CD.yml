@@ -77,27 +77,35 @@ jobs:
             sleep 2
           done
 
-          if [ $SUCCESS -eq 0 ]; then
-            echo "❌ CRITICAL FAILURE: Service never responded on port 3003."
-            # ... (Trigger Rollback)
-            echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
-            exit 1
+          # LOGIC FIX: If successful, clean up and EXIT 0 immediately
+          if [ $SUCCESS -eq 1 ]; then
+            echo "🚀 Deployment Successful! Cleaning up backup..."
+            rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
+            exit 0
           fi
-            
-            # Tear down the broken deployment
-            singularity instance stop luminara_opt_clone 2>/dev/null || true
-            
-            # Restore the backup artifact
-            mv ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}
+
+          # --- EVERYTHING BELOW THIS ONLY RUNS IF SUCCESS IS 0 ---
+          echo "❌ CRITICAL FAILURE: Service never responded on port 3003."
+          echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
+
+          # Tear down the broken deployment
+          singularity instance stop luminara_opt_clone 2>/dev/null || true
+
+          # Restore the backup artifact
+          if [ -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}" ]; then
+            mv "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}" "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
             
             # Reboot the stable backup
             singularity instance start \
               --env-file "${{ env.KEY_DIR }}/.env.opt_clone.prod" \
-              ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_opt_clone
-              
-            echo "🚨 Rollback complete. Production Showroom is back online, but this deployment failed."
-            exit 1
+              "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" \
+              luminara_opt_clone
+            echo "🚨 Rollback complete. Production Showroom is back online with previous version."
+          else
+            echo "⚠️ Rollback failed!"
           fi
+          
+          exit 1
 
       # ---------------------------------------------------------
       # PHASE 4: CLEANUP RAM DISK
