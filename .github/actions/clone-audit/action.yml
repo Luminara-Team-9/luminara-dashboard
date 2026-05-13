@@ -81,7 +81,7 @@ runs:
           --bind ./${{ inputs.target_site }}:/workspace \
           --bind ./4_automation_tests:/scripts \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          bash /scripts/run_all_audits.sh
+          bash /scripts/run_audit_pipeline.sh
 
     - name: 🛑 Mandatory Teardown
       if: always()

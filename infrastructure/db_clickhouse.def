@@ -11,9 +11,9 @@ From: clickhouse/clickhouse-server:24.3
     # SRE FIX: Restore dynamic port routing for the host machine
     export CLICKHOUSE_HTTP_PORT=${CLICKHOUSE_HTTP_PORT:-8123}
     export CLICKHOUSE_TCP_PORT=${CLICKHOUSE_TCP_PORT:-9000}
+    export CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml
 
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    export CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml
 
 %post
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -22,9 +22,10 @@ From: clickhouse/clickhouse-server:24.3
     # 🚦 GHA Infrastructure Anchors & Mount Points
     mkdir -p /data/clickhouse
     mkdir -p /workspace
-    mkdir -p /tmp/clickhouse_logs
-    mkdir -p /tmp/clickhouse_tmps
-    mkdir -p /tmp/clickhouse_user_files
+    mkdir -p /logs/clickhouse
+    mkdir -p /tmp/clickhouse
+    mkdir -p /data/clickhouse_user_files
+    mkdir -p /ch_socket
 
 %startscript
     echo "------------------------------------------------"
@@ -32,15 +33,16 @@ From: clickhouse/clickhouse-server:24.3
     echo "🌐 HTTP: $CLICKHOUSE_HTTP_PORT | Native: $CLICKHOUSE_TCP_PORT"
     echo "------------------------------------------------"
     
-    # SRE FIX: Override hardcoded paths AND bind the dynamic ports
+    # Executing with corrected paths matching the bound volumes
     exec clickhouse-server --config-file=$CLICKHOUSE_CONFIG \
         --http_port=$CLICKHOUSE_HTTP_PORT \
         --tcp_port=$CLICKHOUSE_TCP_PORT \
-        -- --path=/data/clickhouse/ \
-        --logger.log=/tmp/clickhouse_logs/clickhouse-server.log \
-        --logger.errorlog=/tmp/clickhouse_logs/clickhouse-server.err.log \
-        --tmp_path=/tmp/clickhouse_tmp/ \
-        --user_files_path=/tmp/clickhouse_user_files/
+        --path=/data/clickhouse/ \
+        --logger.log=/logs/clickhouse/clickhouse-server.log \
+        --logger.errorlog=/logs/clickhouse/clickhouse-server.err.log \
+        --tmp_path=/tmp/clickhouse/ \
+        --user_files_path=/data/clickhouse/user_files/ \
+        --pidfile=/tmp/clickhouse/clickhouse-server.pid
 
 %help
     Luminara Production ClickHouse (Swetrix Stack)
