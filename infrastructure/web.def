@@ -5,6 +5,7 @@ From: node:24-slim
     Maintainer Luminara-SRE
     Project Luminara-Dashboard
     Tier Production-Pure
+    Tested
 
 # ---------------------------------------------------------
 # 📦 INJECT SOURCE CODE

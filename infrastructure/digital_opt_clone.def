@@ -5,7 +5,8 @@ From: node:22-slim
     Maintainer Luminara-SRE
     Project Luminara-Target-Clone
     Role Audit-Target
-
+    Tested
+    
 # 🚨 SRE FIX 1: You MUST copy the code into the container to make it immutable!
 # Assuming your build action runs from the repo root, this copies the Next.js app.
 %files

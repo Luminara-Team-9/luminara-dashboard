@@ -78,29 +78,36 @@ jobs:
             sleep 2
           done
 
-          if [ $SUCCESS -eq 0 ]; then
-            echo "❌ CRITICAL FAILURE: Service never responded on port 3001."
-            # ... (Trigger Rollback)
-            echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
-            exit 1
+          if [ $SUCCESS -eq 1 ]; then
+            echo "🚀 Deployment Successful! Cleaning up..."
+            # Remove the backup if you're confident, or just exit successfully
+            rm -f "${PROD_SIF_PATH}/${BACKUP_NAME}"
+            exit 0
           fi
-            
-            
-            # Tear down the broken deployment
-            singularity instance stop luminara_web_live 2>/dev/null || true
-            
-            # Restore the backup artifact
-            mv ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}
-            
+
+          # --- EVERYTHING BELOW THIS ONLY RUNS IF SUCCESS IS 0 ---
+          echo "❌ CRITICAL FAILURE: Service never responded on port 3001."
+          echo "⏪ INITIATING AUTOMATED ROLLBACK..."
+
+          # Tear down the broken deployment
+          singularity instance stop luminara_web_live 2>/dev/null || true
+
+          # Restore the backup artifact
+          if [ -f "${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }}" ]; then
+            mv "${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }}" "${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}"
+
             # Reboot the stable backup
             singularity instance start \
-              --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
-              ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
+              --env-file "${KEY_DIR}/.env.web.prod" \
+              "${PROD_SIF_PATH}/${ARTIFACT_NAME}" \
               luminara_web_live
-              
-            echo "🚨 Rollback complete. Production is back online, but this deployment failed."
-            exit 1
+
+            echo "🚨 Rollback complete. Production is back online."
+          else
+            echo "⚠️ Rollback failed!"
           fi
+
+          exit 1
 
       # ---------------------------------------------------------
       # PHASE 4: FAIL-SAFE CLEANUP
