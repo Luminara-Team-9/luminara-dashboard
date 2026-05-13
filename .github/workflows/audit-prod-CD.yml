@@ -79,9 +79,16 @@ jobs:
 
           # LOGIC FIX: If successful, clean up and EXIT 0 immediately
           if [ $SUCCESS -eq 1 ]; then
-            echo "🚀 Deployment Successful! Cleaning up backup..."
-            rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
-            exit 0
+            echo "✅ Initial check passed. Waiting 10 seconds for stability test..."
+            sleep 10
+            if curl -s -o /dev/null http://localhost:3003; then
+              echo "🚀 Deployment Stable! Cleaning up backup..."
+              rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
+              exit 0
+            else
+              echo "❌ CRITICAL: Service crashed immediately after boot!"
+              SUCCESS=0 # Trigger rollback
+            fi
           fi
 
           # --- EVERYTHING BELOW THIS ONLY RUNS IF SUCCESS IS 0 ---
