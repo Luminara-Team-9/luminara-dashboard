@@ -47,14 +47,24 @@ QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen32b-int4")
 
 # ── DB Connection ─────────────────────────────────────────────────────────────
 
+# def get_db_connection():
+#     """Connect to core_db."""
+#     return psycopg2.connect(
+#         host=os.getenv('HOST_IP'),
+#         port=os.getenv('PGPORT', '5432'),
+#         dbname=os.getenv('POSTGRES_DB'),
+#         user=os.getenv('POSTGRES_USER'),
+#         password=os.getenv('POSTGRES_PASSWORD')
+#     )
+
 def get_db_connection():
-    """Connect to core_db."""
     return psycopg2.connect(
-        host=os.getenv('HOST_IP'),
-        port=os.getenv('PGPORT', '5432'),
-        dbname=os.getenv('POSTGRES_DB'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD')
+        # Matches your manual '-h /tmp'
+        host="/abr/coss41/Luminara_App/data/sockets/postgres/", 
+        port=5432,
+        user="lumin_admin",    # From your Step 5
+        password="lumin_postgres", # From your Step 5
+        database="core_db"     # From your Step 5 (\c core_db)
     )
 
 
