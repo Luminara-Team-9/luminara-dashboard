@@ -96,7 +96,8 @@ function getConfidenceLabel(confidence: string | undefined): string {
   if (confidence === 'measured') return '실측';
   if (confidence === 'estimated') return '외부 추정';
   if (confidence === 'proxy') return '대리지표';
-  return 'Mock';
+  if (confidence === 'mock') return 'Mock';
+  return '미연동';
 }
 
 function getTrendValue(
@@ -178,11 +179,12 @@ export function BusinessImpactMatrix() {
 
   const firstSessions = data.rum.userJourney[0]?.sessions ?? 0;
   const sessions = data.businessMetrics?.trafficSessions?.sessions ?? firstSessions;
-  const sessionConfidence = data.businessMetrics?.trafficSessions?.confidence ?? 'mock';
-  const sessionPeriod = data.businessMetrics?.trafficSessions?.period ?? '월간';
-  const sessionSource = data.businessMetrics?.trafficSessions?.source ?? 'Mock';
+  const sessionConfidence = data.businessMetrics?.trafficSessions?.confidence;
+  const sessionPeriod = data.businessMetrics?.trafficSessions?.period ?? (firstSessions > 0 ? 'RUM 여정 기준' : '세션 데이터 없음');
+  const sessionSource = data.businessMetrics?.trafficSessions?.source ?? (firstSessions > 0 ? '사용자 여정 단계 데이터' : '내부 세션 데이터 필요');
   const targetBrand = decathlon.brand;
-  const baselineConversionRate = data.businessMetrics?.conversionRate?.value ?? 5;
+  const hasConversionBaseline = data.businessMetrics?.conversionRate?.value != null;
+  const baselineConversionRate = data.businessMetrics?.conversionRate?.value ?? 0;
 
   const rows = METRICS.map((metric) => {
     const current = (decathlon.metrics as Record<string, { value: number; target: number }>)[metric.key];
@@ -198,12 +200,14 @@ export function BusinessImpactMatrix() {
       affectedSessions,
       totalSessions: sessions,
     });
-    const expectedEffect = estimateMetricBusinessEffect({
-      metricKey: metric.key,
-      current: current.value,
-      target: current.target,
-      baselineConversionRate,
-    }).label;
+    const expectedEffect = hasConversionBaseline
+      ? estimateMetricBusinessEffect({
+          metricKey: metric.key,
+          current: current.value,
+          target: current.target,
+          baselineConversionRate,
+        }).label
+      : '전환율 데이터 연결 후 계산';
 
     return {
       ...metric,

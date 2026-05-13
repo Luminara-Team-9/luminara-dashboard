@@ -51,6 +51,35 @@ Backend API는 DB 테이블을 그대로 노출하기보다, dashboard가 바로
 }
 ```
 
+## 자동 반영 원칙
+
+대시보드는 값을 직접 만들어 저장하지 않고, Backend API가 내려주는 최신 응답을 기준으로 다시 그린다. 관측 파이프라인이나 AI 분석 결과가 DB/API에 반영되면 다음 갱신 주기부터 화면도 자동으로 바뀌어야 한다.
+
+- 경쟁사 벤치마킹: `benchmarks`, `pageMetrics` 배열에 브랜드가 추가되면 브랜드 카드, 비교군 개수, 순위, 평균 대비 문구가 자동으로 재계산된다.
+- 사용자 여정: `rum.sessionPaths[].path` 배열의 길이만큼 경로 박스가 그대로 표시된다. 예를 들어 2단계 경로는 박스 2개, 5단계 경로는 박스 5개로 표시된다.
+- 구매 횟수와 전환 지표: `businessMetrics.acquisitionChannels[].purchases`, `deviceSegments[].purchases`, `rum.userJourney`의 구매 완료 세션이 바뀌면 화면 값이 자동 변경된다.
+- 성능 추세: `trends.labels`, `trends.datasets`, `trends.releases`가 바뀌면 그래프, 변경 이력, 변경 전후 성능 변화가 자동 변경된다.
+- 보조 분석: `rum.regionalData`가 바뀌면 지역/통신사 분포와 순위가 자동 변경된다.
+- AI 액션 플랜: `aiFixPlans` 배열이 바뀌면 카드가 추가/수정/삭제된다. AI가 생성한 상세 설명과 코드 수정안은 `aiFixPlans[].decision` 필드를 우선 사용한다.
+
+`aiFixPlans[].decision` 예시:
+
+```json
+{
+  "problem": "LLM이 측정 결과를 보고 생성한 문제 제목",
+  "area": "LLM이 분류한 영향 영역",
+  "reason": "사용자가 바로 이해할 수 있는 문제 설명",
+  "evidence": "Lighthouse, RUM, 로그, 리소스 분석에서 확인한 근거",
+  "fix": "적용할 해결 방법",
+  "codeTitle": "코드 수정안 제목",
+  "beforeCode": "수정 전 코드 또는 설정",
+  "afterCode": "수정 후 코드 또는 설정",
+  "conclusion": "적용 후 기대되는 사용자/운영 관점 결론",
+  "source": "LLM remediation pipeline",
+  "generatedAt": "2026-05-13T08:00:00.000Z"
+}
+```
+
 ## 1. Lighthouse Performance Audit
 
 대시보드 사용 위치:

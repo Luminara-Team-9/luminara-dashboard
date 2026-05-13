@@ -14,10 +14,10 @@ type Filter = (typeof FILTERS)[number];
 
 const FILTER_LABEL: Record<Filter, string> = {
   전체: '전체',
-  critical: 'P0 Critical',
-  high: 'P1 High',
-  medium: 'P2 Medium',
-  low: 'P3 Low',
+  critical: '긴급',
+  high: '높음',
+  medium: '중간',
+  low: '낮음',
 };
 
 export function AiFixPanel() {
@@ -44,8 +44,8 @@ export function AiFixPanel() {
             <div
               key={index}
               style={{
-                background: '#111827',
-                border: '1px solid #1e293b',
+                background: '#ffffff',
+                border: '1px solid #d7dee8',
                 borderRadius: 14,
                 padding: 18,
                 display: 'flex',

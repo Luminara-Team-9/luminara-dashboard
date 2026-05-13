@@ -19,8 +19,8 @@ const PRIORITY_LABEL: Record<FixPriority, string> = {
 
 const PRIORITY_COLOR: Record<FixPriority, string> = {
   critical: '#ef4444',
-  high: '#f97316',
-  medium: '#f59e0b',
+  high: '#c2410c',
+  medium: '#b45309',
   low: '#10b981',
 };
 

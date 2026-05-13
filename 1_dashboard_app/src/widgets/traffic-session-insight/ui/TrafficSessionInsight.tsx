@@ -52,61 +52,6 @@ function getChannelSourceNote(channel: string): string {
   return '유입 경로';
 }
 
-function buildMockChannels(sessions: number, purchases: number, averageOrderValue: number): AcquisitionChannel[] {
-  const channelMix = [
-    { channel: 'Organic Search', sessionRate: 0.4, purchaseRate: 0.42, bounceRate: 32.4 },
-    { channel: 'Direct', sessionRate: 0.22, purchaseRate: 0.26, bounceRate: 28.9 },
-    { channel: 'Paid Search', sessionRate: 0.16, purchaseRate: 0.12, bounceRate: 41.8 },
-    { channel: 'Referral', sessionRate: 0.09, purchaseRate: 0.09, bounceRate: 35.6 },
-    { channel: 'Social', sessionRate: 0.08, purchaseRate: 0.06, bounceRate: 46.5 },
-    { channel: 'Email / Campaign', sessionRate: 0.05, purchaseRate: 0.05, bounceRate: 30.2 },
-  ];
-
-  return channelMix.map((item) => {
-    const channelSessions = Math.round(sessions * item.sessionRate);
-    const channelPurchases = Math.round(purchases * item.purchaseRate);
-    const revenue = calcRevenue(channelPurchases, averageOrderValue);
-
-    return {
-      channel: item.channel,
-      sessions: channelSessions,
-      purchases: channelPurchases,
-      revenue,
-      conversionRate: calcConversionRatePercent(channelPurchases, channelSessions),
-      bounceRate: item.bounceRate,
-      averageOrderValue,
-    };
-  });
-}
-
-function buildMockDevices(sessions: number, purchases: number, averageOrderValue: number): DeviceSegment[] {
-  const deviceMix: Array<{
-    device: DeviceSegment['device'];
-    sessionRate: number;
-    purchaseRate: number;
-    bounceRate: number;
-  }> = [
-    { device: 'Mobile', sessionRate: 0.71, purchaseRate: 0.62, bounceRate: 39.4 },
-    { device: 'Desktop', sessionRate: 0.29, purchaseRate: 0.38, bounceRate: 26.4 },
-  ];
-
-  return deviceMix.map((item) => {
-    const deviceSessions = Math.round(sessions * item.sessionRate);
-    const devicePurchases = Math.round(purchases * item.purchaseRate);
-    const revenue = calcRevenue(devicePurchases, averageOrderValue);
-
-    return {
-      device: item.device,
-      sessions: deviceSessions,
-      purchases: devicePurchases,
-      revenue,
-      conversionRate: calcConversionRatePercent(devicePurchases, deviceSessions),
-      bounceRate: item.bounceRate,
-      averageOrderValue,
-    };
-  });
-}
-
 export function TrafficSessionInsight() {
   const { data, loading, error } = usePerformanceData();
 
@@ -127,25 +72,25 @@ export function TrafficSessionInsight() {
   const traffic = data.businessMetrics?.trafficSessions;
   const sessions = traffic?.sessions ?? data.rum.userJourney[0]?.sessions ?? 0;
   const visitors = traffic?.visitors;
-  const confidence = traffic?.confidence ?? 'mock';
-  const period = traffic?.period ?? '월간';
-  const source = traffic?.source ?? '내부 로그 Mock';
+  const confidence = traffic?.confidence;
+  const period = traffic?.period ?? '기간 미설정';
+  const source = traffic?.source ?? '내부 로그/주문 데이터 필요';
   const averageOrderValue = traffic?.averageOrderValue ?? 0;
   const basePurchaseSessions = data.rum.userJourney.at(-1)?.sessions ?? 0;
-  const channels =
-    data.businessMetrics?.acquisitionChannels?.length
-      ? data.businessMetrics.acquisitionChannels
-      : buildMockChannels(sessions, basePurchaseSessions, averageOrderValue);
-  const devices =
-    data.businessMetrics?.deviceSegments?.length
-      ? data.businessMetrics.deviceSegments.filter((device) => device.device !== 'Tablet')
-      : buildMockDevices(sessions, basePurchaseSessions, averageOrderValue);
-  const purchaseSessions =
-    channels.reduce((sum, channel) => sum + channel.purchases, 0) || basePurchaseSessions;
+  const channels = data.businessMetrics?.acquisitionChannels ?? [];
+  const devices = data.businessMetrics?.deviceSegments?.filter((device) => device.device !== 'Tablet') ?? [];
+  const channelPurchases = channels.reduce((sum, channel) => sum + channel.purchases, 0);
+  const devicePurchases = devices.reduce((sum, device) => sum + device.purchases, 0);
+  const purchaseSessions = channelPurchases || devicePurchases || basePurchaseSessions;
   const conversionRate = data.businessMetrics?.conversionRate?.value ?? calcConversionRatePercent(purchaseSessions, sessions);
-  const revenue = sumRevenue(channels) || calcRevenue(purchaseSessions, averageOrderValue);
+  const revenue = sumRevenue(channels) || sumRevenue(devices) || calcRevenue(purchaseSessions, averageOrderValue);
   const topChannel = getTopRevenueChannel(channels);
   const topDevice = getTopConversionDevice(devices);
+  const changeText =
+    traffic?.changeRate != null
+      ? `전월 대비 ${traffic.changeRate >= 0 ? '+' : ''}${traffic.changeRate}%`
+      : '전월 대비 데이터 없음';
+  const sourceLabel = confidence ? CONFIDENCE_LABEL[confidence] : '미연동';
 
   return (
     <section className={styles.wrapper}>
@@ -154,17 +99,17 @@ export function TrafficSessionInsight() {
           <h2>방문·세션 데이터</h2>
           <span>{period} 운영 성과</span>
         </div>
-        <em>{CONFIDENCE_LABEL[confidence]} · {source}</em>
+        <em>{sourceLabel} · {source}</em>
       </div>
 
       <div className={styles.top_grid}>
         <article className={styles.kpi_card}>
           <span className={styles.kpi_label}>방문 세션</span>
           <strong className={styles.kpi_value}>{formatCompactCount(sessions)}</strong>
-          <span className={styles.kpi_sub}>
-            전월 대비 {traffic?.changeRate != null && traffic.changeRate >= 0 ? '+' : ''}{traffic?.changeRate ?? 0}%
+          <span className={styles.kpi_sub}>{changeText}</span>
+          <span className={styles.kpi_note}>
+            1회 방문 = 보통 1세션 · {visitors != null ? `순방문자 ${formatCompactCount(visitors)}` : '순방문자 데이터 없음'}
           </span>
-          <span className={styles.kpi_note}>1회 방문 = 보통 1세션 · 순방문자 {formatCompactCount(visitors)}</span>
         </article>
 
         <article className={styles.kpi_card}>
@@ -183,7 +128,7 @@ export function TrafficSessionInsight() {
 
         <article className={styles.kpi_card}>
           <span className={styles.kpi_label}>최고 매출 유입 경로</span>
-          <strong className={styles.kpi_value}>{topChannel?.channel ?? '-'}</strong>
+          <strong className={styles.kpi_value}>{topChannel?.channel ?? '데이터 없음'}</strong>
           <span className={styles.kpi_sub}>{topChannel ? formatKrw(topChannel.revenue) : '-'}</span>
           <span className={styles.kpi_note}>최고 전환 디바이스 {topDevice ? DEVICE_LABEL[topDevice.device] : '-'}</span>
         </article>
@@ -213,21 +158,29 @@ export function TrafficSessionInsight() {
                 </tr>
               </thead>
               <tbody>
-                {channels.map((channel) => (
-                  <tr key={channel.channel}>
-                    <td>
-                      <strong>{channel.channel}</strong>
-                      <span>{getChannelSourceNote(channel.channel)}</span>
+                {channels.length > 0 ? (
+                  channels.map((channel) => (
+                    <tr key={channel.channel}>
+                      <td>
+                        <strong>{channel.channel}</strong>
+                        <span>{getChannelSourceNote(channel.channel)}</span>
+                      </td>
+                      <td>{formatCompactCount(channel.sessions)}</td>
+                      <td>{formatCompactCount(channel.purchases)}</td>
+                      <td>{formatPercent(channel.conversionRate)}</td>
+                      <td className={styles.revenue_value}>{formatKrw(channel.revenue)}</td>
+                      <td>{formatInteger(channel.averageOrderValue)}원</td>
+                      <td>{formatPercent(channel.bounceRate)}</td>
+                      <td><em>{getChannelRole(channel)}</em></td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className={styles.empty_cell}>
+                      유입 경로별 성과 데이터가 아직 연결되지 않았습니다.
                     </td>
-                    <td>{formatCompactCount(channel.sessions)}</td>
-                    <td>{formatCompactCount(channel.purchases)}</td>
-                    <td>{formatPercent(channel.conversionRate)}</td>
-                    <td className={styles.revenue_value}>{formatKrw(channel.revenue)}</td>
-                    <td>{formatInteger(channel.averageOrderValue)}원</td>
-                    <td>{formatPercent(channel.bounceRate)}</td>
-                    <td><em>{getChannelRole(channel)}</em></td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -242,32 +195,36 @@ export function TrafficSessionInsight() {
           </div>
 
           <div className={styles.segment_list}>
-            {devices.map((device) => (
-              <article key={device.device} className={styles.segment_card}>
-                <div>
-                  <span>{DEVICE_LABEL[device.device]}</span>
-                  <strong>{formatKrw(device.revenue)}</strong>
-                  <em>{formatCompactCount(device.sessions)} 세션</em>
-                </div>
-                <div className={styles.segment_metrics}>
-                  <span>구매 전환율(CVR) <strong>{formatPercent(device.conversionRate)}</strong></span>
-                  <span>구매 횟수 <strong>{formatCompactCount(device.purchases)}</strong></span>
-                  <span>초기 이탈률 <strong>{formatPercent(device.bounceRate)}</strong></span>
-                </div>
-              </article>
-            ))}
+            {devices.length > 0 ? (
+              devices.map((device) => (
+                <article key={device.device} className={styles.segment_card}>
+                  <div>
+                    <span>{DEVICE_LABEL[device.device]}</span>
+                    <strong>{formatKrw(device.revenue)}</strong>
+                    <em>{formatCompactCount(device.sessions)} 세션</em>
+                  </div>
+                  <div className={styles.segment_metrics}>
+                    <span>구매 전환율(CVR) <strong>{formatPercent(device.conversionRate)}</strong></span>
+                    <span>구매 횟수 <strong>{formatCompactCount(device.purchases)}</strong></span>
+                    <span>초기 이탈률 <strong>{formatPercent(device.bounceRate)}</strong></span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className={styles.empty_state}>디바이스별 성과 데이터가 아직 연결되지 않았습니다.</div>
+            )}
           </div>
 
           <div className={styles.data_source_box}>
             <span>데이터 기준</span>
-            <strong>{CONFIDENCE_LABEL[confidence]} · {period}</strong>
+            <strong>{sourceLabel} · {period}</strong>
             <em>{source}</em>
           </div>
         </section>
       </div>
 
       <p className={styles.footnote}>
-        데이터 기준: Mock · 연동 대상: GA4, Swetrix, 서버 로그, 주문 데이터
+        채널·디바이스 성과는 내부 로그와 주문 데이터가 연결된 경우에만 표시합니다.
       </p>
     </section>
   );

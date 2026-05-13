@@ -72,7 +72,7 @@ export const ESTIMATION_FORMULAS: Record<string, FormulaMeta> = {
     formula: 'priority = metricGapRatio * affectedSessionShare * 100',
     confidence: 'internal_model',
     references: ['webVitals', 'webDevBusinessImpact'],
-    caution: '세션 비중은 내부 로그나 Mock 경로 데이터가 연결되어야 실제 우선순위로 쓸 수 있습니다.',
+    caution: '세션 비중은 내부 로그나 사용자 여정 경로 데이터가 연결되어야 실제 우선순위로 쓸 수 있습니다.',
   },
   cvrLiftReference: {
     id: 'cvrLiftReference',
