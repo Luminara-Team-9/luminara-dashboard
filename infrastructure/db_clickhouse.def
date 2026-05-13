@@ -34,7 +34,7 @@ From: clickhouse/clickhouse-server:24.3
     echo "------------------------------------------------"
     
     # Executing with corrected paths matching the bound volumes
-    exec clickhouse-server --config-file=$CLICKHOUSE_CONFIG \
+    exec clickhouse-server --config-file=$CLICKHOUSE_CONFIG -- \
         --http_port=$CLICKHOUSE_HTTP_PORT \
         --tcp_port=$CLICKHOUSE_TCP_PORT \
         --path=/data/clickhouse/ \
