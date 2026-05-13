@@ -77,6 +77,12 @@ runs:
           --bind ./4_automation_tests/lighthouse-runner/lighthouserc.js:/workspace/lighthouserc.js \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
 
+        singularity exec \
+          --bind ./${{ inputs.target_site }}:/workspace \
+          --bind ./4_automation_tests:/scripts \
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+          bash /scripts/run_all_audits.sh
+
     - name: 🛑 Mandatory Teardown
       if: always()
       shell: bash

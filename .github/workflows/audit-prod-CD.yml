@@ -49,25 +49,23 @@ jobs:
           output_path: "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
 
       # ---------------------------------------------------------
-      # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
+      # PHASE 3: SYSTEMD-MANAGED HOT-SWAP & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
-      - name: 🚀 Hot-Swap, Verify & Automated Rollback
+      - name: 🚀 Systemd-Managed Hot-Swap, Verify & Automated Rollback
         run: |
-          echo "Rebooting live persistent Optimized Clone..."
+          echo "🔄 Handing off control to systemd for Optimized Clone..."
           
-          # 1. FORCE STOP and verify the port is clear
-          singularity instance stop -f luminara_opt_clone 2>/dev/null || true
+          # 1. Update the artifact (The systemd unit points to this file)
+          # We move the 'baked' image into the production slot
+          mv "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" "${{ env.IMAGE_DIR }}/infrastructure_digital_opt_clone.sif"
+
+          # 2. Tell systemd to restart the service
+          # This handles the graceful stop and start automatically
+          systemctl --user restart luminara_opt_clone.service
           
-          # ⏳ SRE FIX: Wait and verify the port is actually released
-          echo "Waiting for port 3003 to clear..."
-          for i in {1..30}; do
-            if ! curl -s -o /dev/null http://localhost:3003; then
-              echo "✅ Port 3003 is vacant."
-              break
-            fi
-            echo "⏳ Port still active, waiting... ($i/30)"
-            sleep 3
-          done
+          # 3. Stability check (Wait for Next.js to fully boot)
+          echo "⏱️ Waiting 15 seconds for systemd to stabilize the container..."
+          sleep 15
 
           # 2. Boot the freshly baked Showroom container
           singularity instance start \
