@@ -34,7 +34,7 @@ jobs:
       # ---------------------------------------------------------
       - name: 💾 Backup Stable Container
         run: |
-          eecho "🔍 Preparing directories..."
+          echo "🔍 Preparing directories..."
           mkdir -p ${{ env.IMAGE_DIR }} ${{ env.STAGING_DIR }}
           
           if [ -f "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" ]; then
