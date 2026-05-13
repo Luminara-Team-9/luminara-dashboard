@@ -10,11 +10,13 @@ From: node:22-slim
 # 🚨 SRE FIX 1: You MUST copy the code into the container to make it immutable!
 # Assuming your build action runs from the repo root, this copies the Next.js app.
 %files
-    2_digital_twins/baseline-site /workspace
+    # 🚨 SRE FIX 1: Copy contents directly to the target app path to ensure manifest alignment
+    2_digital_twins/baseline-site /app/digital_twin
 
 %environment
     export PORT=${PORT:-3002}
     export NODE_ENV=production
+    export NEXT_TELEMETRY_DISABLED=1
     export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -22,10 +24,14 @@ From: node:22-slim
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     export DEBIAN_FRONTEND=noninteractive
 
+    # For container infra parity
     mkdir -p /data
     mkdir -p /workspace
+
+    # Actual hosting folder
     mkdir -p /app/digital_twin
     chmod 777 /app/digital_twin
+    cd /app/digital_twin
 
     apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         libvips-dev \
@@ -33,12 +39,8 @@ From: node:22-slim
         ca-certificates \
         git \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
-
+    
     npm install -g pnpm@latest
-    npm cache clean --force
-
-    # 🚨 SRE FIX 2: You must CD into the workspace before building!
-    cd /workspace
 
     # SRE FIX: The container installs and builds the code dynamically 
     # to ensure the Digital Twin is an exact representation of the mounted branch.
@@ -48,14 +50,34 @@ From: node:22-slim
     echo "[..] Building the Digital Twin..."
     pnpm run build
 
+    # 🚨 SRE FIX 2: Manually copy assets into the standalone folder
+    # Next.js standalone mode does not copy 'public' and 'static' by default.
+    # 🚨 SRE FIX: Conditional asset copying to prevent build crashes
+    # Only copy 'public' and 'static' if they exist in the source/build
+    echo "[..] Finalizing standalone assets..."
+    if [ -d "public" ]; then
+        cp -r public .next/standalone/public
+    else
+        echo "ℹ️ Skipping 'public' folder: Not found in source."
+    fi
+
+    if [ -d ".next/static" ]; then
+        cp -r .next/static .next/standalone/.next/static
+    else
+        echo "ℹ️ Skipping '.next/static': Not found in build output."
+    fi
+
+    # Clean up build-time garbage to keep SIF small
+    npm cache clean --force
+
 %startscript
-    cd /workspace
-    
     echo "------------------------------------------------"
     echo "🎯 TARGET ACQUIRED: Next.js Skeleton App"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
     
+    # 🚨 SRE FIX 3: Launch from the standalone directory using node directly.
+    # This bypasses pnpm's attempt to check manifests or write lockfiles at runtime.
     echo "[..] Launching Production Server..."
-    cd /workspace
-    exec pnpm start --port ${PORT} --hostname 0.0.0.0
+    cd /app/digital_twin/.next/standalone
+    exec node server.js --port ${PORT} --hostname 0.0.0.0

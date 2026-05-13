@@ -64,7 +64,7 @@ jobs:
           singularity instance start \
             --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
             ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_base_clone
-            
+
           echo "⏱️ Waiting for Next.js to bind to port the "Address already in use" or "Missing .next folder" errors are hiding.
             4.  **Verify Firewall**: If you are accessing this from a browser outside the university network, ensure the KNU firewall has port 3001 open for your IP. ${{ env.PORT }}..."
           # Loop for 30 seconds, checking every 2 seconds
@@ -80,9 +80,16 @@ jobs:
           done
 
           if [ $SUCCESS -eq 1 ]; then
-            echo "🚀 Deployment Successful! Cleaning up backup..."
-            rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
-            exit 0
+            echo "✅ Initial check passed. Waiting 10 seconds for stability test..."
+            sleep 10
+            if curl -s -o /dev/null http://localhost:3002; then
+              echo "🚀 Deployment Stable! Cleaning up backup..."
+              rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
+              exit 0
+            else
+              echo "❌ CRITICAL: Service crashed immediately after boot!"
+              SUCCESS=0 # Trigger rollback
+            fi
           fi
 
           # --- EVERYTHING BELOW THIS ONLY RUNS IF SUCCESS IS 0 ---
