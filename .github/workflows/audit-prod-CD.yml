@@ -59,64 +59,15 @@ jobs:
       # ---------------------------------------------------------
       # PHASE 3: SYSTEMD-MANAGED HOT-SWAP & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
-      - name: 🚀 Systemd Hot-Swap & Health Check
-        run: |
-          echo "🔄 Swapping staging artifact to production..."
-          
-          # 1. Prepare the artifact
-          # We move the 'baked' image into the production slot that the script expects
-          mv "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}" "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
-
-          # 2. Tell systemd to restart the specific template instance
-          # This triggers ExecStop (old version) and ExecStart (new version) via your script
-          echo "⚡ Restarting systemd service: ${{ env.SERVICE_NAME }}"
-          systemctl --user restart ${{ env.SERVICE_NAME }}
-          
-          # 3. Stability check (Wait for Next.js to fully boot)
-          echo "⏱️ Waiting 15 seconds for systemd to stabilize the container..."
-          sleep 15
-
-          SUCCESS=0
-          if systemctl --user is-active --quiet ${{ env.SERVICE_NAME }}; then
-            echo "✅ systemd reports service is ACTIVE."
-            
-            # 4. Deep Health Check (Network Response)
-            for i in {1..15}; do
-              if curl -s -o /dev/null ${{ env.HEALTH_URL }}; then
-                echo "✅ Health Check Passed: Service is responding!"
-                SUCCESS=1
-                break
-              fi
-              echo "⏳ Waiting for service to respond... ($i/15)"
-              sleep 2
-            done
-          else
-            echo "❌ systemd reports service FAILED to start."
-          fi
-
-          # LOGIC FIX: If successful, clean up and EXIT 0 immediately
-          if [ $SUCCESS -eq 1 ]; then
-            echo "✅ Initial check passed. Waiting 10 seconds for stability test..."
-            sleep 10
-            if ! curl -s -o /dev/null ${{ env.HEALTH_URL }}; then
-              echo "❌ CRITICAL: Service crashed after initial boot!"
-              SUCCESS=0
-            fi
-          fi
-
-          if [ $SUCCESS -eq 0 ]; then
-            echo "❌ DEPLOYMENT FAILED. Initiating Rollback..."
-            if [ -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}" ]; then
-              mv "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}" "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
-              systemctl --user restart ${{ env.SERVICE_NAME }}
-              echo "🚨 Rollback complete. Previous stable version restored."
-            else
-              echo "⚠️ Rollback failed: No backup available!"
-            fi
-            exit 1
-          fi
-
-          echo "🚀 Deployment successful and stable."
+      - name: 🚀 Hot-Swap & Verify
+        uses: ./.github/actions/systemd-hot-swap
+        with:
+          image_dir: ${{ env.IMAGE_DIR }}
+          staging_dir: ${{ env.STAGING_DIR }}
+          artifact_name: ${{ env.ARTIFACT_NAME }}
+          backup_name: ${{ env.BACKUP_NAME }}
+          service_name: ${{ env.SERVICE_NAME }}
+          health_url: ${{ env.HEALTH_URL }}
       # ---------------------------------------------------------
       # PHASE 4: CLEANUP RAM DISK
       # ---------------------------------------------------------

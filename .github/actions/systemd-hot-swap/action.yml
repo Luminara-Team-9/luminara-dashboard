@@ -1,0 +1,74 @@
+name: "Systemd Hot-Swap & Rollback"
+description: "Swaps SIF artifacts, restarts systemd service, and performs health checks with automated rollback."
+
+inputs:
+  image_dir:
+    description: "Production image directory"
+    required: true
+  staging_dir:
+    description: "Staging image directory"
+    required: true
+  artifact_name:
+    description: "Name of the SIF file"
+    required: true
+  backup_name:
+    description: "Name of the backup SIF file"
+    required: true
+  service_name:
+    description: "Systemd service name (e.g., luminara-prod@web.service)"
+    required: true
+  health_url:
+    description: "Local URL for health check"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: 🚀 Execute Hot-Swap & Verify
+      shell: bash
+      run: |
+        echo "🔄 Swapping staging artifact to production..."
+        mv "${{ inputs.staging_dir }}/${{ inputs.artifact_name }}" "${{ inputs.image_dir }}/${{ inputs.artifact_name }}"
+
+        echo "⚡ Restarting systemd service: ${{ inputs.service_name }}"
+        systemctl --user restart ${{ inputs.service_name }}
+        
+        echo "⏱️ Waiting 15s for initialization..."
+        sleep 15
+
+        SUCCESS=0
+        if systemctl --user is-active --quiet ${{ inputs.service_name }}; then
+          echo "✅ systemd reports service is ACTIVE."
+          
+          for i in {1..15}; do
+            if curl -s -o /dev/null ${{ inputs.health_url }}; then
+              echo "✅ Health Check Passed: Service responding!"
+              SUCCESS=1
+              break
+            fi
+            echo "⏳ Waiting for response... ($i/15)"
+            sleep 2
+          done
+        fi
+
+        if [ $SUCCESS -eq 1 ]; then
+          echo "✅ Initial check passed. Performing 10s stability soak..."
+          sleep 10
+          if ! curl -s -o /dev/null ${{ inputs.health_url }}; then
+            echo "❌ CRITICAL: Service crashed after initial boot!"
+            SUCCESS=0
+          fi
+        fi
+
+        if [ $SUCCESS -eq 0 ]; then
+          echo "❌ DEPLOYMENT FAILED. Initiating Rollback..."
+          if [ -f "${{ inputs.image_dir }}/${{ inputs.backup_name }}" ]; then
+            mv "${{ inputs.image_dir }}/${{ inputs.backup_name }}" "${{ inputs.image_dir }}/${{ inputs.artifact_name }}"
+            systemctl --user restart ${{ inputs.service_name }}
+            echo "🚨 Rollback complete. Previous version restored."
+          else
+            echo "⚠️ Rollback failed: No backup available!"
+          fi
+          exit 1
+        fi
+        echo "🚀 Deployment successful and stable."

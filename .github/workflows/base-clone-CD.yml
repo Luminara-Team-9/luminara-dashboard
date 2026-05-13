@@ -21,9 +21,11 @@ jobs:
     
     env:
       IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
-      BASE_DIR: /abr/coss41/Luminara_App
+      STAGING_DIR: /abr/coss41/Luminara_App/images-staging
       ARTIFACT_NAME: infrastructure_digital_base_clone.sif
       BACKUP_NAME: infrastructure_digital_base_clone.bak.sif
+      SERVICE_NAME: luminara-prod@base_clone.service
+      HEALTH_URL: http://localhost:3002
 
     steps:
       - name: 📥 Checkout Code
@@ -34,9 +36,15 @@ jobs:
       # ---------------------------------------------------------
       - name: 💾 Backup Stable Container
         run: |
-          echo "Backing up current base clone container..."
-          mkdir -p ${{ env.IMAGE_DIR }}
-          cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
+          echo "🔍 Preparing directories..."
+          mkdir -p ${{ env.IMAGE_DIR }} ${{ env.STAGING_DIR }}
+          
+          if [ -f "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" ]; then
+            echo "💾 Backing up current production container..."
+            cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}
+          else
+            echo "ℹ️ No existing production SIF found. Skipping backup."
+          fi
 
       # ---------------------------------------------------------
       # PHASE 2: BAKE THE RELEASE ARTIFACT (Directly from Main!)
@@ -46,74 +54,20 @@ jobs:
         with:
           def_file_path: "infrastructure/digital_base_clone.def" 
           cache_key_suffix: "prod_baseline_clone"
-          output_path: "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
+          output_path: "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}"
 
       # ---------------------------------------------------------
       # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
-      - name: 🚀 Hot-Swap, Verify & Automated Rollback
-        run: |
-          echo "Rebooting live persistent Base Clone..."
-          
-          # Force stop and wait a moment for the port to clear
-          singularity instance stop -f luminara_base_clone 2>/dev/null || true
-          sleep 2
-          
-          # 2. Boot the freshly baked Showroom container
-          # Note: Anchored to your BASE_DIR where the .env.base_clone.prod lives
-          singularity instance start \
-            --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
-            ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_base_clone
-
-          echo "⏱️ Waiting for Next.js to bind to port the "Address already in use" or "Missing .next folder" errors are hiding.
-            4.  **Verify Firewall**: If you are accessing this from a browser outside the university network, ensure the KNU firewall has port 3001 open for your IP. ${{ env.PORT }}..."
-          # Loop for 30 seconds, checking every 2 seconds
-          SUCCESS=0
-          for i in {1..15}; do
-            if curl -s -o /dev/null http://localhost:3002; then
-              echo "✅ Health Check Passed: Service is responding on 3002!"
-              SUCCESS=1
-              break
-            fi
-            echo "⏳ Waiting for service... ($i/15)"
-            sleep 2
-          done
-
-          if [ $SUCCESS -eq 1 ]; then
-            echo "✅ Initial check passed. Waiting 10 seconds for stability test..."
-            sleep 10
-            if curl -s -o /dev/null http://localhost:3002; then
-              echo "🚀 Deployment Stable! Cleaning up backup..."
-              rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
-              exit 0
-            else
-              echo "❌ CRITICAL: Service crashed immediately after boot!"
-              SUCCESS=0 # Trigger rollback
-            fi
-          fi
-
-          # --- EVERYTHING BELOW THIS ONLY RUNS IF SUCCESS IS 0 ---
-          echo "❌ CRITICAL FAILURE: Service never responded on port 3002."
-          echo "⏪ INITIATING AUTOMATED ROLLBACK..."
-
-          # Tear down the broken deployment
-          singularity instance stop luminara_base_clone 2>/dev/null || true
-
-          # Restore the backup artifact
-          if [ -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}" ]; then
-            mv "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}" "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
-            
-            # Reboot the stable backup
-            singularity instance start \
-              --env-file "${{ env.BASE_DIR }}/secure_keys/.env.base_clone.prod" \
-              "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" \
-              luminara_base_clone
-            echo "🚨 Rollback complete. Production Base Clone is back online."
-          else
-            echo "⚠️ Rollback failed!"
-          fi
-          
-          exit 1
+      - name: 🚀 Hot-Swap & Verify
+        uses: ./.github/actions/systemd-hot-swap
+        with:
+          image_dir: ${{ env.IMAGE_DIR }}
+          staging_dir: ${{ env.STAGING_DIR }}
+          artifact_name: ${{ env.ARTIFACT_NAME }}
+          backup_name: ${{ env.BACKUP_NAME }}
+          service_name: ${{ env.SERVICE_NAME }}
+          health_url: ${{ env.HEALTH_URL }}
 
       # ---------------------------------------------------------
       # PHASE 4: CLEANUP RAM DISK
@@ -121,6 +75,16 @@ jobs:
       - name: 🧹 Garbage Collection
         if: always()
         run: |
+          echo "🧹 Cleaning up temporary artifacts..."
+          
+          # 1. Clear staging (In case build finished but move failed)
+          rm -f "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}"
+          
+          # 2. Clear backup (If success, it's old; if rollback, it's already moved)
+          rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
+
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
           chmod -R u+rwX /dev/shm/sing_build_*_prod_baseline_clone 2>/dev/null || true
           rm -rf /dev/shm/sing_build_*_prod_baseline_clone || true
+
+          echo "✨ Environment is now clean."
