@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import uuid
 import argparse
@@ -7,18 +8,21 @@ from psycopg2.extras import Json
 from dotenv import load_dotenv
 from openai import OpenAI
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Any
 from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
-# vLLM / Qwen client
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="dummy"
-)
+# ── Config ───────────────────────────────────────────────────────────────────
 
 QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen32b-int4")
+QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "http://localhost:8000/v1")
+MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "5"))
+
+client = OpenAI(
+    base_url=QWEN_BASE_URL,
+    api_key=os.getenv("QWEN_API_KEY", "dummy"),
+)
 
 
 def get_db_connection():
@@ -48,6 +52,7 @@ class AgentState(TypedDict):
     page_type: str
     device_type: str
     dry_run: bool
+    max_opportunities: int
 
     metrics: dict
     opportunities: list
@@ -67,18 +72,164 @@ class AgentState(TypedDict):
     should_end: bool
 
 
-# N1
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def normalize_title(title: str) -> str:
+    title = title or ""
+    title = re.sub(r"\s+", " ", title.strip().lower())
+    return title
+
+
+def normalize_severity(severity: Optional[str]) -> str:
+    severity = (severity or "").lower()
+    if severity in {"high", "medium", "low"}:
+        return severity
+    return "medium"
+
+
+def severity_rank(severity: Optional[str]) -> int:
+    severity = normalize_severity(severity)
+    return {"low": 1, "medium": 2, "high": 3}.get(severity, 2)
+
+
+def priority_from_savings(avg_savings_ms: int, severity: Optional[str]) -> str:
+    sev = normalize_severity(severity)
+
+    if sev == "high" or avg_savings_ms >= 500:
+        return "high"
+    if sev == "medium" or avg_savings_ms >= 150:
+        return "medium"
+    return "low"
+
+
+def infer_affected_metric(title: str, category: str) -> str:
+    text = f"{title} {category}".lower()
+
+    if "lcp" in text or "largest contentful paint" in text or "image" in text:
+        return "LCP"
+    if "tbt" in text or "javascript" in text or "js" in text or "main thread" in text:
+        return "TBT"
+    if "cls" in text or "layout shift" in text:
+        return "CLS"
+    if "fcp" in text or "render-blocking" in text or "css" in text:
+        return "FCP"
+    if "ttfb" in text or "server response" in text:
+        return "TTFB"
+    return "Performance"
+
+
+def build_patch_template(title: str, category: str) -> dict:
+    text = f"{title} {category}".lower()
+
+    if "server response" in text or "ttfb" in text:
+        return {
+            "summary": "Improve server response time using caching and backend optimization.",
+            "target_file": "server/cache-config or backend route handler",
+            "change_type": "server_config",
+            "before": "No explicit cache policy or slow backend response path.",
+            "after": "Add CDN/server caching, optimize backend query, and reduce TTFB for HTML document.",
+        }
+
+    if "unused javascript" in text or "legacy javascript" in text or "js" in text or "javascript" in text:
+        return {
+            "summary": "Reduce JavaScript payload using code splitting and modern bundle output.",
+            "target_file": "next.config.js / package build config / page component imports",
+            "change_type": "javascript_optimization",
+            "before": "Large JavaScript bundle loaded for initial route.",
+            "after": "Split non-critical modules with dynamic import and avoid unnecessary legacy transpilation.",
+        }
+
+    if "css" in text or "render-blocking" in text:
+        return {
+            "summary": "Reduce render-blocking CSS and remove unused styles.",
+            "target_file": "global CSS / component CSS / build CSS pipeline",
+            "change_type": "css_optimization",
+            "before": "Large CSS loaded before first render.",
+            "after": "Inline critical CSS, defer non-critical CSS, and remove unused CSS rules.",
+        }
+
+    if "image" in text or "next-gen" in text or "properly size" in text or "offscreen" in text:
+        return {
+            "summary": "Optimize images using responsive sizes, lazy loading, and WebP/AVIF.",
+            "target_file": "image component / product card / hero section",
+            "change_type": "image_optimization",
+            "before": "<img src=\"hero.jpg\" />",
+            "after": "<img src=\"hero.webp\" loading=\"eager\" fetchpriority=\"high\" width=\"...\" height=\"...\" />",
+        }
+
+    if "compression" in text:
+        return {
+            "summary": "Enable Brotli/Gzip compression for text assets.",
+            "target_file": "web server config / CDN config",
+            "change_type": "network_optimization",
+            "before": "Text resources served without compression.",
+            "after": "Enable br/gzip compression for JS, CSS, HTML, JSON, and SVG resources.",
+        }
+
+    return {
+        "summary": "Apply Lighthouse recommended performance optimization.",
+        "target_file": "target source/config file",
+        "change_type": "performance_optimization",
+        "before": None,
+        "after": "Apply the recommended optimization and verify with Lighthouse rerun.",
+    }
+
+
+def get_existing_columns(cursor, table_name: str) -> set:
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %s
+        """,
+        (table_name,),
+    )
+    return {row[0] for row in cursor.fetchall()}
+
+
+def db_value(value: Any):
+    if isinstance(value, (dict, list)):
+        return Json(value)
+    return value
+
+
+def safe_insert(cursor, table_name: str, data: dict, returning: str = "id"):
+    existing_cols = get_existing_columns(cursor, table_name)
+    filtered = {k: v for k, v in data.items() if k in existing_cols}
+
+    if not filtered:
+        raise ValueError(f"No matching columns found for table {table_name}")
+
+    columns = list(filtered.keys())
+    placeholders = ["%s"] * len(columns)
+    values = [db_value(filtered[col]) for col in columns]
+
+    sql = f"""
+        INSERT INTO {table_name} ({", ".join(columns)})
+        VALUES ({", ".join(placeholders)})
+        RETURNING {returning}
+    """
+
+    cursor.execute(sql, values)
+    return cursor.fetchone()[0]
+
+
+# ── N1: Get metrics + top unique opportunities ───────────────────────────────
+
 def get_metrics(state: AgentState) -> AgentState:
     print("\n[N1] Getting metrics...")
 
     url = state["url"]
     page_type = state["page_type"]
     device_type = state["device_type"]
+    max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT
             test_id,
             lcp_ms,
@@ -91,7 +242,9 @@ def get_metrics(state: AgentState) -> AgentState:
           AND device_type = %s
         ORDER BY created_at DESC
         LIMIT 3
-    """, (url, page_type, device_type))
+        """,
+        (url, page_type, device_type),
+    )
 
     runs = cursor.fetchall()
 
@@ -134,47 +287,82 @@ def get_metrics(state: AgentState) -> AgentState:
     print(f"  ✅ Score: {metrics['avg_performance']}")
     print(f"  ✅ Confidence: {confidence}")
 
-    cursor.execute("""
+    # Important:
+    # Do NOT group by lo.id. That creates duplicate dashboard cards.
+    # Group by opportunity_id/title/category and keep the highest-impact row.
+    cursor.execute(
+        """
+        WITH ranked AS (
+            SELECT
+                lo.id,
+                lo.opportunity_id,
+                lo.title,
+                lo.description,
+                lo.savings_ms,
+                lo.severity,
+                lo.category,
+                ROW_NUMBER() OVER (
+                    PARTITION BY LOWER(TRIM(lo.title)), COALESCE(lo.category, '')
+                    ORDER BY lo.savings_ms DESC NULLS LAST, lo.id ASC
+                ) AS rn
+            FROM lighthouse_opportunities lo
+            JOIN lighthouse_runs lr
+              ON lo.test_id = lr.test_id
+            WHERE lr.url = %s
+              AND lr.page_type = %s
+              AND lr.device_type = %s
+              AND COALESCE(lo.savings_ms, 0) > 0
+        )
         SELECT
-            lo.id,
-            lo.opportunity_id,
-            lo.title,
-            lo.description,
-            AVG(lo.savings_ms)::int AS avg_savings,
-            lo.severity,
-            lo.category
-        FROM lighthouse_opportunities lo
-        JOIN lighthouse_runs lr
-          ON lo.test_id = lr.test_id
-        WHERE lr.url = %s
-          AND lr.page_type = %s
-          AND lr.device_type = %s
+            MIN(id) AS id,
+            MIN(opportunity_id) AS opportunity_id,
+            title,
+            MAX(description) AS description,
+            AVG(savings_ms)::int AS avg_savings,
+            MAX(severity) AS severity,
+            category
+        FROM ranked
+        WHERE rn = 1
         GROUP BY
-            lo.id,
-            lo.opportunity_id,
-            lo.title,
-            lo.description,
-            lo.severity,
-            lo.category
+            LOWER(TRIM(title)),
+            title,
+            category
         ORDER BY avg_savings DESC
-    """, (url, page_type, device_type))
+        LIMIT %s
+        """,
+        (url, page_type, device_type, max_opportunities),
+    )
 
     rows = cursor.fetchall()
     conn.close()
 
     opportunities = []
-    for row in rows:
-        opportunities.append({
-            "id": row[0],
-            "opportunity_id": row[1],
-            "title": row[2],
-            "description": row[3],
-            "avg_savings_ms": row[4],
-            "severity": row[5],
-            "category": row[6],
-        })
+    seen_titles = set()
 
-    print(f"  ✅ Opportunities: {len(opportunities)}")
+    for row in rows:
+        title_key = normalize_title(row[2])
+        if title_key in seen_titles:
+            continue
+        seen_titles.add(title_key)
+
+        avg_savings = int(row[4] or 0)
+        severity = normalize_severity(row[5])
+        category = row[6] or "performance"
+
+        opportunities.append(
+            {
+                "id": row[0],
+                "opportunity_id": row[1],
+                "title": row[2],
+                "description": row[3],
+                "avg_savings_ms": avg_savings,
+                "severity": severity,
+                "category": category,
+                "affected_metric": infer_affected_metric(row[2], category),
+            }
+        )
+
+    print(f"  ✅ Unique top opportunities: {len(opportunities)}")
 
     return {
         **state,
@@ -186,7 +374,8 @@ def get_metrics(state: AgentState) -> AgentState:
     }
 
 
-# N2
+# ── N2 ───────────────────────────────────────────────────────────────────────
+
 def sort_opportunities(state: AgentState) -> AgentState:
     print("\n[N2] Picking opportunity...")
 
@@ -202,13 +391,15 @@ def sort_opportunities(state: AgentState) -> AgentState:
     print(
         f"  ✅ [{opp_index + 1}/{len(opportunities)}] "
         f"{current_opp['title']} "
-        f"({current_opp['avg_savings_ms']}ms)"
+        f"({current_opp['avg_savings_ms']}ms, "
+        f"{current_opp['affected_metric']})"
     )
 
     return {**state, "current_opp": current_opp}
 
 
-# N3
+# ── N3 ───────────────────────────────────────────────────────────────────────
+
 def search_rag(state: AgentState) -> AgentState:
     print("\n[N3] Searching RAG...")
 
@@ -221,7 +412,8 @@ def search_rag(state: AgentState) -> AgentState:
     def search(query, top_k=3):
         vec = model.encode(query, normalize_embeddings=True).tolist()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 title,
                 content,
@@ -230,7 +422,9 @@ def search_rag(state: AgentState) -> AgentState:
             FROM rag_documents
             ORDER BY embedding <=> %s::vector
             LIMIT %s
-        """, (str(vec), str(vec), top_k))
+            """,
+            (str(vec), str(vec), top_k),
+        )
 
         return cursor.fetchall()
 
@@ -239,6 +433,7 @@ def search_rag(state: AgentState) -> AgentState:
         f"{opp['title']} "
         f"{state['page_type']} page "
         f"{state['device_type']} "
+        f"{opp['affected_metric']} "
         f"Korean e-commerce optimization"
     )
 
@@ -265,28 +460,30 @@ def search_rag(state: AgentState) -> AgentState:
     return {**state, "rag_context": rag_context}
 
 
-# N4
+# ── N4 ───────────────────────────────────────────────────────────────────────
+
 def assess_risk(state: AgentState) -> AgentState:
     print("\n[N4] Assessing risk...")
 
     opp = state["current_opp"]
 
+    title = (opp.get("title") or "").lower()
     category = (opp.get("category") or "").lower()
-    severity = (opp.get("severity") or "").lower()
+    severity = normalize_severity(opp.get("severity"))
 
     risk_score = 0
     risk_details = {}
 
-    if "server" in category:
+    if "server" in category or "server response" in title:
         risk_score += 4
         risk_details["category"] = "server config (+4)"
-    elif "js" in category or "javascript" in category:
+    elif "js" in category or "javascript" in category or "javascript" in title:
         risk_score += 2
         risk_details["category"] = "javascript change (+2)"
-    elif "css" in category:
+    elif "css" in category or "css" in title:
         risk_score += 1
         risk_details["category"] = "css change (+1)"
-    elif "image" in category:
+    elif "image" in category or "image" in title:
         risk_score += 1
         risk_details["category"] = "image change (+1)"
     else:
@@ -303,6 +500,7 @@ def assess_risk(state: AgentState) -> AgentState:
     risk_score = min(risk_score, 10)
 
     print(f"  ✅ Risk score: {risk_score}/10")
+    print(f"  ✅ Risk details: {risk_details}")
 
     return {
         **state,
@@ -311,13 +509,15 @@ def assess_risk(state: AgentState) -> AgentState:
     }
 
 
-# N5
+# ── N5 ───────────────────────────────────────────────────────────────────────
+
 def generate_fix(state: AgentState) -> AgentState:
     print("\n[N5] Generating fix...")
 
     opp = state["current_opp"]
     metrics = state["metrics"]
     rag_context = state["rag_context"]
+    patch_template = build_patch_template(opp["title"], opp["category"])
 
     prompt = f"""
 You are a web performance expert for Korean e-commerce.
@@ -338,24 +538,30 @@ Issue:
 - Avg savings: {opp['avg_savings_ms']}ms
 - Category: {opp['category']}
 - Severity: {opp['severity']}
+- Affected metric: {opp['affected_metric']}
 
 RAG Context:
 {rag_context}
 
-Respond ONLY with valid JSON:
+Return ONLY valid JSON:
 {{
-  "action": "one sentence exact fix action",
-  "reasoning": "why this fixes the problem",
-  "patch_code": null,
-  "problem_summary": "brief problem description",
-  "impact_if_not_fixed": "consequence if not fixed",
+  "action": "specific one-sentence fix action",
+  "reasoning": "why this fix improves the metric",
+  "patch_code": {{
+    "summary": "short patch summary",
+    "before": "before example or null",
+    "after": "after example or null"
+  }},
+  "problem_summary": "short dashboard-friendly problem summary",
+  "impact_if_not_fixed": "what happens if ignored",
   "impact_if_fixed": "expected improvement",
   "ux_improvement": "user experience benefit",
-  "seo_impact": "SEO benefit",
+  "seo_impact": "SEO/Core Web Vitals benefit",
   "priority_level": "high/medium/low",
   "estimated_improvement": {opp['avg_savings_ms']},
-  "target_file": null,
-  "change_type": "modification"
+  "affected_metric": "{opp['affected_metric']}",
+  "target_file": "likely file/config area",
+  "change_type": "server_config/javascript_optimization/css_optimization/image_optimization/network_optimization/performance_optimization"
 }}
 """
 
@@ -376,32 +582,54 @@ Respond ONLY with valid JSON:
             raw = raw.strip()
 
         fix_rec = json.loads(raw)
-
         print(f"  ✅ Fix generated: {fix_rec.get('action', '')[:80]}")
 
     except Exception as e:
         print(f"  ⚠️ Qwen failed: {e}")
-        print("  → Using fallback fix plan")
+        print("  → Using dashboard-ready fallback fix plan")
+
+        priority = priority_from_savings(opp["avg_savings_ms"], opp["severity"])
 
         fix_rec = {
-            "action": f"Fix: {opp['title']}",
-            "reasoning": opp.get("description", ""),
-            "patch_code": None,
+            "action": f"Fix {opp['title']} to improve {opp['affected_metric']}",
+            "reasoning": opp.get("description") or (
+                f"This recommendation targets {opp['affected_metric']} "
+                f"and is estimated to save about {opp['avg_savings_ms']}ms."
+            ),
+            "patch_code": {
+                "summary": patch_template["summary"],
+                "before": patch_template["before"],
+                "after": patch_template["after"],
+            },
             "problem_summary": opp["title"],
-            "impact_if_not_fixed": "Performance remains poor.",
-            "impact_if_fixed": f"Expected to save about {opp['avg_savings_ms']}ms.",
-            "ux_improvement": "Faster page loading and better responsiveness.",
-            "seo_impact": "Better Core Web Vitals and Lighthouse score.",
-            "priority_level": opp.get("severity") or "medium",
+            "impact_if_not_fixed": (
+                f"{opp['affected_metric']} may remain poor, causing slower page load "
+                "and weaker Lighthouse/Core Web Vitals performance."
+            ),
+            "impact_if_fixed": f"Expected improvement: about {opp['avg_savings_ms']}ms saved.",
+            "ux_improvement": "Users can see and interact with the page faster.",
+            "seo_impact": "Improves Lighthouse/Core Web Vitals signals that can support SEO quality.",
+            "priority_level": priority,
             "estimated_improvement": opp["avg_savings_ms"],
-            "target_file": None,
-            "change_type": "modification",
+            "affected_metric": opp["affected_metric"],
+            "target_file": patch_template["target_file"],
+            "change_type": patch_template["change_type"],
         }
+
+    # Safety defaults if Qwen returns incomplete JSON
+    fix_rec.setdefault("patch_code", patch_template)
+    fix_rec.setdefault("problem_summary", opp["title"])
+    fix_rec.setdefault("priority_level", priority_from_savings(opp["avg_savings_ms"], opp["severity"]))
+    fix_rec.setdefault("estimated_improvement", opp["avg_savings_ms"])
+    fix_rec.setdefault("affected_metric", opp["affected_metric"])
+    fix_rec.setdefault("target_file", patch_template["target_file"])
+    fix_rec.setdefault("change_type", patch_template["change_type"])
 
     return {**state, "fix_recommendation": fix_rec}
 
 
-# N6
+# ── N6 ───────────────────────────────────────────────────────────────────────
+
 def save_fix_plan(state: AgentState) -> AgentState:
     print("\n[N6] Saving fix plan...")
 
@@ -409,7 +637,9 @@ def save_fix_plan(state: AgentState) -> AgentState:
     opp = state["current_opp"]
     metrics = state["metrics"]
 
-    patch_status = "pending" if state["risk_score"] >= 7 else "approved"
+    # Phase 1: always wait for human review.
+    # Actual patch application is Phase 2.
+    patch_status = "pending_review"
 
     fix_plan_data = {
         "thread_id": str(uuid.uuid4()),
@@ -432,6 +662,9 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "patch_status": patch_status,
         "attempt_count": 0,
         "attempt_history": [],
+        "affected_metric": fix_rec.get("affected_metric", opp.get("affected_metric")),
+        "target_file": fix_rec.get("target_file"),
+        "change_type": fix_rec.get("change_type", "modification"),
     }
 
     if state.get("dry_run"):
@@ -447,57 +680,12 @@ def save_fix_plan(state: AgentState) -> AgentState:
     cursor = conn.cursor()
 
     try:
-        cursor.execute("""
-            INSERT INTO fix_plans (
-                thread_id,
-                test_id,
-                opportunity_id,
-                action,
-                reasoning,
-                patch_code,
-                problem_summary,
-                impact_if_not_fixed,
-                impact_if_fixed,
-                ux_improvement,
-                seo_impact,
-                priority_level,
-                estimated_improvement,
-                old_score,
-                total_risk_score,
-                risk_details,
-                confidence_level,
-                patch_status,
-                attempt_count,
-                attempt_history
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            RETURNING id
-        """, (
-            fix_plan_data["thread_id"],
-            fix_plan_data["test_id"],
-            fix_plan_data["opportunity_id"],
-            fix_plan_data["action"],
-            fix_plan_data["reasoning"],
-            fix_plan_data["patch_code"],
-            fix_plan_data["problem_summary"],
-            fix_plan_data["impact_if_not_fixed"],
-            fix_plan_data["impact_if_fixed"],
-            fix_plan_data["ux_improvement"],
-            fix_plan_data["seo_impact"],
-            fix_plan_data["priority_level"],
-            fix_plan_data["estimated_improvement"],
-            fix_plan_data["old_score"],
-            fix_plan_data["total_risk_score"],
-            Json(fix_plan_data["risk_details"]),
-            fix_plan_data["confidence_level"],
-            fix_plan_data["patch_status"],
-            fix_plan_data["attempt_count"],
-            Json(fix_plan_data["attempt_history"]),
-        ))
-
-        fix_plan_id = cursor.fetchone()[0]
+        fix_plan_id = safe_insert(
+            cursor=cursor,
+            table_name="fix_plans",
+            data=fix_plan_data,
+            returning="id",
+        )
         conn.commit()
 
         print(f"  ✅ Saved fix_plan id={fix_plan_id}")
@@ -516,6 +704,8 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "opp_index": state["opp_index"] + 1,
     }
 
+
+# ── Routing ──────────────────────────────────────────────────────────────────
 
 def route_after_n1(state: AgentState) -> str:
     if state.get("should_end"):
@@ -581,6 +771,8 @@ def build_agent():
     return graph.compile()
 
 
+# ── Main ─────────────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser(
         description="Luminara Remediation Agent — Phase 1"
@@ -597,6 +789,12 @@ def main():
         default="desktop",
         choices=["mobile", "desktop"],
     )
+    parser.add_argument(
+        "--max-opportunities",
+        type=int,
+        default=MAX_OPPORTUNITIES,
+        help="Max unique fix plans to generate. Default: 5",
+    )
     parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
@@ -605,7 +803,7 @@ def main():
         print("Usage:")
         print(
             'python3 agent.py --url "https://www.decathlon.co.kr/" '
-            "--page-type main --device-type desktop --dry-run"
+            "--page-type main --device-type desktop --max-opportunities 5 --dry-run"
         )
         return
 
@@ -617,18 +815,22 @@ def main():
     print(f"URL:    {args.url}")
     print(f"Page:   {args.page_type}")
     print(f"Device: {args.device_type}")
+    print(f"Max:    {args.max_opportunities} unique opportunities")
     if args.dry_run:
         print("MODE:   DRY RUN")
     print("=" * 55)
 
-    result = agent.invoke({
-        "url": args.url,
-        "page_type": args.page_type,
-        "device_type": args.device_type,
-        "dry_run": args.dry_run,
-        "should_end": False,
-        "opp_index": 0,
-    })
+    result = agent.invoke(
+        {
+            "url": args.url,
+            "page_type": args.page_type,
+            "device_type": args.device_type,
+            "dry_run": args.dry_run,
+            "max_opportunities": args.max_opportunities,
+            "should_end": False,
+            "opp_index": 0,
+        }
+    )
 
     print("=" * 55)
     print("✅ Done")
