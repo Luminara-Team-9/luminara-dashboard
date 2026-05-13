@@ -18,6 +18,7 @@ env:
   KEY_DIR: "/abr/coss41/Luminara_App/secure_keys"
   ARTIFACT_NAME: "infrastructure_web.sif"
   BACKUP_NAME: "infrastructure_web.bak.sif"
+  
 
 jobs:
   deploy-to-prod:
@@ -79,10 +80,16 @@ jobs:
           done
 
           if [ $SUCCESS -eq 1 ]; then
-            echo "🚀 Deployment Successful! Cleaning up..."
-            # Remove the backup if you're confident, or just exit successfully
-            rm -f "${PROD_SIF_PATH}/${BACKUP_NAME}"
-            exit 0
+            echo "✅ Initial check passed. Waiting 10 seconds for stability test..."
+            sleep 10
+            if curl -s -o /dev/null http://localhost:3001; then
+              echo "🚀 Deployment Stable! Cleaning up backup..."
+              rm -f "${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }}"
+              exit 0
+            else
+              echo "❌ CRITICAL: Service crashed immediately after boot!"
+              SUCCESS=0 # Trigger rollback
+            fi
           fi
 
           # --- EVERYTHING BELOW THIS ONLY RUNS IF SUCCESS IS 0 ---

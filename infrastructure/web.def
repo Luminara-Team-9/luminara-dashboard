@@ -17,6 +17,7 @@ From: node:24-slim
     ./0_shared_packages /workspace/0_shared_packages
     ./pnpm-workspace.yaml /workspace/pnpm-workspace.yaml
     ./package.json /workspace/package.json
+    ./pnpm-lock.yaml /workspace/pnpm-lock.yaml
 
     # SRE FIX: Inject the lockfile so frozen-lockfile has a blueprint to read
     ./pnpm-lock.yaml /workspace/pnpm-lock.yaml
@@ -41,20 +42,37 @@ From: node:24-slim
         && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     # 2. Install Global JS Tools
-    npm install -g pnpm@latest pm2
+    npm install -g pnpm@latest
     
     # 3. Build the Application INSIDE the Container
     cd /workspace
     echo "📦 Installing Dependencies Internally..."
     pnpm install --frozen-lockfile
-    
+
     echo "🏗️ Building Next.js Internally..."
     pnpm --filter ./1_dashboard_app build
     
-    # Optional SRE Cleanup: Remove node_modules and reinstall ONLY production 
-    # dependencies to make the final .sif file smaller
-    rm -rf node_modules
-    pnpm install --prod --frozen-lockfile
+    # 🚨 SRE FIX: Finalizing Standalone Assets
+    # In a pnpm workspace, the standalone folder is usually at:
+    # /workspace/1_dashboard_app/.next/standalone
+
+    echo "🎯 Finalizing standalone assets..."
+    cd /workspace/1_dashboard_app
+    
+    if [ -d "public" ]; then
+        cp -r public .next/standalone/1_dashboard_app/public
+    else
+        echo "ℹ️ Skipping 'public': Not found."
+    fi
+
+    if [ -d ".next/static" ]; then
+        cp -r .next/static .next/standalone/1_dashboard_app/.next/static
+    else
+        echo "ℹ️ Skipping '.next/static': Not found."
+    fi
+
+    # Optional: Clean up workspace to reduce .sif size
+    # The standalone folder contains everything needed to run.
     npm cache clean --force
 
 # ---------------------------------------------------------
@@ -62,12 +80,15 @@ From: node:24-slim
 # This happens every time you start the container.
 # ---------------------------------------------------------
 %startscript
-    cd /workspace/1_dashboard_app
-    
     echo "------------------------------------------------"
     echo "🚀 Luminara PURE PRODUCTION Dashboard Starting"
     echo "🌐 Mode: $NODE_ENV | Port: $PORT"
     echo "------------------------------------------------"
 
-    # It will never fail this check now, because it was baked in during %post
-    exec pm2-runtime start npm --name "luminara-dashboard-prod" -- run start -- -p $PORT
+    # 🚨 SRE FIX: Launch using node directly from the standalone entry point.
+    # Note: In a workspace, the server.js expects to be run from the root 
+    # of the standalone folder to find its node_modules.
+    cd /workspace/1_dashboard_app/.next/standalone
+    
+    echo "[..] Target: 1_dashboard_app/server.js"
+    exec node 1_dashboard_app/server.js --port ${PORT} --hostname 0.0.0.0
