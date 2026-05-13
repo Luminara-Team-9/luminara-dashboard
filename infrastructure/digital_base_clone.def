@@ -52,8 +52,20 @@ From: node:22-slim
 
     # 🚨 SRE FIX 2: Manually copy assets into the standalone folder
     # Next.js standalone mode does not copy 'public' and 'static' by default.
-    cp -r public .next/standalone/public
-    cp -r .next/static .next/standalone/.next/static
+    # 🚨 SRE FIX: Conditional asset copying to prevent build crashes
+    # Only copy 'public' and 'static' if they exist in the source/build
+    echo "[..] Finalizing standalone assets..."
+    if [ -d "public" ]; then
+        cp -r public .next/standalone/public
+    else
+        echo "ℹ️ Skipping 'public' folder: Not found in source."
+    fi
+
+    if [ -d ".next/static" ]; then
+        cp -r .next/static .next/standalone/.next/static
+    else
+        echo "ℹ️ Skipping '.next/static': Not found in build output."
+    fi
 
     # Clean up build-time garbage to keep SIF small
     npm cache clean --force
