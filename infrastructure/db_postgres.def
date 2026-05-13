@@ -13,7 +13,7 @@ From: postgres:15.6-bookworm
     # SRE RULE: All data MUST be in a persistent bound folder
     export PGDATA=/data/postgres
     # SRE FIX: Bypasses read-only /var/run for socket locks
-    export PGSOCKETS=/tmp
+    export PGSOCKETS=/pg_socket
     export PATH="/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
@@ -43,6 +43,7 @@ From: postgres:15.6-bookworm
     # SRE FIX: Align the mount point with PGDATA and create the GHA anchors
     mkdir -p /data/postgres
     mkdir -p /workspace
+    mkdir -p /pg_socket
 
     echo "Luminara-SRE: Postgres Dev Hardening Complete ✅"
 
@@ -66,7 +67,7 @@ From: postgres:15.6-bookworm
         rm /tmp/pg_pw.txt
 
         # Start a temporary background process to create the DBs
-        pg_ctl -D "$PGDATA" -o "-k /tmp" start
+        pg_ctl -D "$PGDATA" -o "-k $PGSOCKETS" start
 
         echo "🛠️ Creating Luminara Sub-Databases..."
         # This allows the script to safely run even if the DBs already exist
@@ -83,7 +84,7 @@ From: postgres:15.6-bookworm
 
     # 2. Execution (Hardened for Singularity/No-Sudo environments)
     # -k points the Unix Socket to /tmp to avoid read-only /var/run crashes
-    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p $PGPORT
+    exec postgres -D "$PGDATA" -k "$PGSOCKETS" -p "$PGPORT"
 
 %help
     Luminara Production PostgreSQL
