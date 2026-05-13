@@ -50,7 +50,7 @@ From: postgres:15.6-bookworm
     # ------------------------------------------------------------------
     # PRODUCTION BOOTSTRAP PROTOCOL
     # ------------------------------------------------------------------
-    DB_USER=${POSTGRES_USER:-coss41}
+    DB_USER=${POSTGRES_USER:-lumin_admin}
     
     # 1. Automatic Initialization (Runs only if /data is empty)
     if [ ! -f "$PGDATA/PG_VERSION" ]; then
@@ -64,6 +64,16 @@ From: postgres:15.6-bookworm
         # Add the -U flag here!
         initdb -D "$PGDATA" -U "$DB_USER" --auth=md5 --pwfile=/tmp/pg_pw.txt
         rm /tmp/pg_pw.txt
+
+        # Start a temporary background process to create the DBs
+        pg_ctl -D "$PGDATA" -o "-k /tmp" start
+
+        echo "🛠️ Creating Luminara Sub-Databases..."
+        # This allows the script to safely run even if the DBs already exist
+        psql -h /tmp -U "$DB_USER" -d postgres -c "CREATE DATABASE core_db;" 2>/dev/null || echo "ℹ️ core_db already exists."
+        psql -h /tmp -U "$DB_USER" -d postgres -c "CREATE DATABASE lhci_db;" 2>/dev/null || echo "ℹ️ lhci_db already exists."
+
+        pg_ctl -D "$PGDATA" stop
     fi
 
     echo "------------------------------------------------"
