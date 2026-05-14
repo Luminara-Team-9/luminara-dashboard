@@ -54,7 +54,7 @@ runs:
         echo "⏳ Waiting for Next.js to finish building and start routing..."
         TIMEOUT=180
         ELAPSED=0
-        until curl -s http://localhost:${{ env.TWIN_PORT }} > /dev/null; do
+        until curl -s http://localhost:${{ env.TWIN_PORT }} | grep -q "__next"; do
           if [ $ELAPSED -ge $TIMEOUT ]; then
             echo "❌ ERROR: Twin failed to boot within $TIMEOUT seconds."
             echo "🔍 -------------------------------------------------"
@@ -69,6 +69,7 @@ runs:
           sleep 3
           ELAPSED=$((ELAPSED+3))
         done
+        sleep 10
         echo -e "\n✅ Digital Twin is online and ready for audit!"
 
     - name: ⚡ Stage 3 - Execute Ephemeral Audit
@@ -85,6 +86,7 @@ runs:
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
+        export SINGULARITYENV_LHCI_COLLECT_URL="http://localhost:${{ env.TWIN_PORT }}/"
         
         # 4. Credentials
         export SINGULARITYENV_LHCI_BUILD_TOKEN="${{ inputs.lhci_token }}"
@@ -95,8 +97,13 @@ runs:
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
 
-        echo "🚀 Firing LHCI metrics against port ${{ env.TWIN_PORT }}..."
+        echo "🔍 DEBUG: Auditor Container's view of the Twin:"
+        singularity exec \
+          --bind ${{ inputs.audit_image_dir }}:/audit \
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+          curl -v http://localhost:${{ env.TWIN_PORT }} | head -n 50
 
+        echo "🚀 Firing LHCI metrics against port ${{ env.TWIN_PORT }}..."
         singularity exec \
           --bind ${{ github.workspace }}/${{ inputs.target_site }}:/data \
           --bind ${{ github.workspace }}/4_automation_tests:/workspace \
@@ -106,6 +113,23 @@ runs:
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
 
+    - name: 📸 Emergency Screenshot
+      if: failure()
+      shell: bash
+      run: |
+        singularity exec \
+          --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+          python3 -c "
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page()
+    page.goto('http://localhost:${{ env.TWIN_PORT }}')
+    page.screenshot(path='debug_view.png')
+    print('HTML Content:', page.content()[:500])
+    browser.close()
+"
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
       shell: bash
@@ -115,6 +139,9 @@ runs:
         echo "------------------------------------------------"
         
         find "$HOME/.singularity/instances/logs" -name "${{ env.TWIN_NAME }}.*" -exec echo "--- File: {} ---" \; -exec cat {} \; || echo "No instance logs found."
+
+        # Check the .err file for the Twin instance
+        cat ~/.singularity/instances/logs/$(hostname)/$USER/${{ env.TWIN_NAME }}.err
 
         echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
 
