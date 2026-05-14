@@ -33,14 +33,6 @@ def run_pipeline(
     print("=" * 50)
     print("ETL PIPELINE — MANUAL MODE")
     print("=" * 50)
-    print(f"→ File:       {filepath}")
-    print(f"→ Site:       {site_type}")
-    print(f"→ Page:       {page_type}")
-    print(f"→ Device:     {device_type}")
-    print(f"→ Run:        {run_number}")
-
-    if competitor_name:
-        print(f"→ Competitor: {competitor_name}")
 
     run_type = (
         "competitor_scan"
@@ -53,14 +45,9 @@ def run_pipeline(
 
     print("\n[1/3] Extracting...")
     extracted = extract_metrics(raw_json)
-    print(f"✅ URL:           {extracted.get('url')}")
-    print(f"✅ Opportunities: {len(extracted['opportunities'])}")
 
     print("\n[2/3] Transforming...")
     transformed = transform(extracted)
-    print(f"✅ Performance:   {transformed['performance_score']}")
-    print(f"✅ LCP:           {transformed['lcp_ms']}ms")
-    print(f"✅ TBT:           {transformed['tbt_ms']}ms")
 
     metadata = {
         "run_type": run_type,
@@ -81,26 +68,10 @@ def run_pipeline(
         playwright_run_id=playwright_run_id,
     )
 
-    print(f"\n{'=' * 50}")
-    if result["success"]:
-        print("✅ Pipeline completed!")
-        print(f"   playwright_run_id: {result['playwright_run_id']}")
-        print(f"   test_id:           {result['test_id']}")
-    else:
-        print(f"❌ Pipeline failed: {result.get('error')}")
-    print("=" * 50)
-
     return result
 
 
 def run_auto():
-    """
-    AUTO mode.
-
-    Processes:
-    1. new raw reports with no opportunities yet
-    2. old incomplete rows where key Lighthouse metrics are NULL
-    """
     print("=" * 50)
     print("ETL PIPELINE — AUTO MODE")
     print("=" * 50)
@@ -172,9 +143,13 @@ def run_auto():
             try:
                 print(f"\n→ Processing test_id: {test_id}")
 
+                # 1. Extract
                 extracted = extract_metrics(raw_json)
+
+                # 2. Transform
                 transformed = transform(extracted)
 
+                # 3. Update existing lighthouse_runs row
                 cursor.execute("""
                     UPDATE lighthouse_runs SET
                         timestamp            = COALESCE(%s, timestamp),
@@ -218,16 +193,33 @@ def run_auto():
                     test_id,
                 ))
 
-                # Important:
-                # Reprocessing same test_id should replace old opportunities,
-                # not append duplicates.
-                delete_opportunities_for_test(conn, test_id)
+                # 4. Refresh opportunities safely
+                # If fix_plans already reference existing opportunities,
+                # do NOT delete them, because that breaks FK references.
+                cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM fix_plans fp
+                    JOIN lighthouse_opportunities lo
+                      ON fp.opportunity_id = lo.id
+                    WHERE lo.test_id = %s
+                """, (test_id,))
 
-                insert_opportunities(
-                    conn,
-                    test_id,
-                    transformed["opportunities"],
-                )
+                referenced_count = cursor.fetchone()[0]
+
+                if referenced_count == 0:
+                    delete_opportunities_for_test(conn, test_id)
+
+                    insert_opportunities(
+                        conn,
+                        test_id,
+                        transformed["opportunities"],
+                    )
+                    print("   opportunities refreshed")
+                else:
+                    print(
+                        "   opportunities kept "
+                        f"({referenced_count} referenced by fix_plans)"
+                    )
 
                 conn.commit()
                 success_count += 1
@@ -277,40 +269,14 @@ if __name__ == "__main__":
         description="Luminara ETL Pipeline"
     )
 
-    parser.add_argument(
-        "--auto",
-        action="store_true",
-        help="Auto mode: process unprocessed or incomplete rows from DB",
-    )
-
-    parser.add_argument("--file", help="Path to Lighthouse JSON file")
-    parser.add_argument(
-        "--site_type",
-        choices=["decathlon", "competitor"],
-        help="decathlon or competitor",
-    )
-    parser.add_argument("--page_type", help="main, product, cart etc.")
-    parser.add_argument(
-        "--device_type",
-        choices=["mobile", "desktop"],
-        help="mobile or desktop",
-    )
-    parser.add_argument(
-        "--run_number",
-        type=int,
-        default=1,
-        help="Run number 1, 2, or 3",
-    )
-    parser.add_argument(
-        "--competitor_name",
-        default=None,
-        help="nike, adidas etc.",
-    )
-    parser.add_argument(
-        "--network_profile",
-        default=None,
-        help="WiFi, 4G etc.",
-    )
+    parser.add_argument("--auto", action="store_true")
+    parser.add_argument("--file")
+    parser.add_argument("--site_type", choices=["decathlon", "competitor"])
+    parser.add_argument("--page_type")
+    parser.add_argument("--device_type", choices=["mobile", "desktop"])
+    parser.add_argument("--run_number", type=int, default=1)
+    parser.add_argument("--competitor_name", default=None)
+    parser.add_argument("--network_profile", default=None)
 
     args = parser.parse_args()
 
@@ -319,8 +285,7 @@ if __name__ == "__main__":
 
     elif args.file:
         if not all([args.site_type, args.page_type, args.device_type]):
-            print("❌ Manual mode requires:")
-            print("   --site_type, --page_type, --device_type")
+            print("❌ Manual mode requires --site_type, --page_type, --device_type")
         else:
             run_pipeline(
                 filepath=args.file,
