@@ -70,25 +70,34 @@ runs:
 
     - name: ⚡ Stage 3 - Execute Ephemeral Audit
       shell: bash
-      env:
-        LHCI_BUILD_TOKEN: ${{ inputs.lhci_token }}
-        LHCI_USER: ${{ inputs.lhci_user }} # Add these to your secrets
-        LHCI_PASS: ${{ inputs.lhci_password }}
-        LHCI_COLLECT_URL: http://localhost:${{ env.TWIN_PORT }}/
       run: |
+        # 1. Manually map GitHub Metadata to LHCI expected variables
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}"
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
+        
+        # 2. Add this to fix the "Ancestor Hash" warning (for PR comparisons)
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
+
+        # 2. Map Credentials & URL (CRITICAL: These must be SINGULARITYENV_ prefixed too!)
+        export SINGULARITYENV_LHCI_BUILD_TOKEN="${{ inputs.lhci_token }}"
+        export SINGULARITYENV_LHCI_USER="${{ inputs.lhci_user }}"
+        export SINGULARITYENV_LHCI_PASS="${{ inputs.lhci_password }}"
+        export SINGULARITYENV_LHCI_COLLECT_URL="http://localhost:${{ env.TWIN_PORT }}/"
+
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
 
         echo "🚀 Firing LHCI metrics against port ${{ env.TWIN_PORT }}..."
 
-        # SRE FIX: Direct LHCI execution avoids "script not found" errors
         singularity exec \
           --bind ${{ github.workspace }}/${{ inputs.target_site }}:/data \
           --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
-          --collect.url=$LHCI_COLLECT_URL \
+          --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
