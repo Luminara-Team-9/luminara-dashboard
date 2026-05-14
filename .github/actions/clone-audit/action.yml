@@ -121,15 +121,15 @@ runs:
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           python3 -c "
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    browser = p.chromium.launch()
-    page = browser.new_page()
-    page.goto('http://localhost:${{ env.TWIN_PORT }}')
-    page.screenshot(path='debug_view.png')
-    print('HTML Content:', page.content()[:500])
-    browser.close()
-"
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page()
+              page.goto('http://localhost:${{ env.TWIN_PORT }}')
+              page.screenshot(path='debug_view.png')
+              print('HTML Content:', page.content()[:500])
+              browser.close()"
+
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
       shell: bash
