@@ -71,11 +71,11 @@ runs:
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
 
-        echo "🚀 Firing LHCI metrics against the Digital Twin on port ${{ env.TWIN_PORT }}..."
+        echo "🚀 Firing LHCI metrics against port ${{ env.TWIN_PORT }}..."
 
-        # We pass the URL explicitly to ensure it overrides any hardcoded config
+        # SRE FIX: Changed all binds to absolute workspace paths
         singularity exec \
-          --bind ./${{ inputs.target_site }}:/data \
+          --bind ${{ github.workspace }}/${{ inputs.target_site }}:/data \
           --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
@@ -91,12 +91,12 @@ runs:
       run: |
         echo "📝 Generating Performance Summary..."
         
-        # SRE FIX: Updated path to 4_automation_tests/.lighthouseci/manifest.json
+        # SRE FIX: Use absolute path for manifest lookup
         node -e "
         const fs = require('fs');
-        const path = '4_automation_tests/.lighthouseci/manifest.json';
+        const path = '${{ github.workspace }}/4_automation_tests/.lighthouseci/manifest.json';
         try {
-          if (!fs.existsSync(path)) throw new Error('Manifest not found');
+          if (!fs.existsSync(path)) throw new Error('LHCI Manifest not found at ' + path);
           const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
           let table = '### ⚡ Lighthouse Performance Audit\n\n';
           table += '| URL | Performance | Accessibility | Best Practices | SEO |\n';
@@ -111,12 +111,11 @@ runs:
           
           fs.writeFileSync('lhci_summary.md', table);
         } catch (e) {
-          console.log(e.message);
+          console.error('❌ Summary Error:', e.message);
           fs.writeFileSync('lhci_summary.md', '⚠️ **Lighthouse Audit Failed:** Could not generate summary table. Check logs for boot errors.');
         }
         "
 
-        # Only post comment if in a Pull Request context
         if [ -f "lhci_summary.md" ] && [ "${{ github.event.pull_request.number }}" != "" ]; then
           gh pr comment ${{ github.event.pull_request.number }} --body-file=lhci_summary.md
         fi
