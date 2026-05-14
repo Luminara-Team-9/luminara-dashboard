@@ -16,7 +16,11 @@ module.exports = {
     assert: {
       assertions: {
         'categories:performance': ['error', { minScore: 0.9 }],
-        'resource-summary:mainthread-work-breakdown:count': ['warn', { maxNumericValue: 20 }]
+        'resource-summary:mainthread-work-breakdown:count': ['warn', { maxNumericValue: 20 }],
+
+        // 2. ADD THIS: Force the audit to fail if the page is empty
+        'dom-size': ['error', { minNumericValue: 10 }], 
+        'network-requests': ['error', { minNumericValue: 5 }]
       },
     },
     upload: {

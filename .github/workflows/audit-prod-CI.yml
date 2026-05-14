@@ -51,6 +51,7 @@ jobs:
           lhci_token: ${{ secrets.LHCI_BUILD_TOKEN }}
           lhci_user: ${{ secrets.LHCI_SERVER_USER }}
           lhci_password: ${{ secrets.LHCI_SERVER_PASS }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       # ---------------------------------------------------------
       # PHASE 3: AGENT TRIGGER OR SUCCESS HANDOFF

@@ -20,6 +20,9 @@ inputs:
   lhci_password:
     description: 'Password for LHCI Basic Auth'
     required: true
+  github_token:
+    description: 'The GITHUB_TOKEN to enable LHCI to post status checks'
+    required: true
 
 runs:
   using: 'composite'
@@ -71,20 +74,23 @@ runs:
     - name: ⚡ Stage 3 - Execute Ephemeral Audit
       shell: bash
       run: |
-        # 1. Manually map GitHub Metadata to LHCI expected variables
+        # 1. Capture the message on the HOST (where Git exists)
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+        
+        # 2. Inject it into the container
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
+        
+        # 3. Existing metadata injections
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}"
-        export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
-        
-        # 2. Add this to fix the "Ancestor Hash" warning (for PR comparisons)
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
-
-        # 2. Map Credentials & URL (CRITICAL: These must be SINGULARITYENV_ prefixed too!)
+        
+        # 4. Credentials
         export SINGULARITYENV_LHCI_BUILD_TOKEN="${{ inputs.lhci_token }}"
         export SINGULARITYENV_LHCI_USER="${{ inputs.lhci_user }}"
         export SINGULARITYENV_LHCI_PASS="${{ inputs.lhci_password }}"
-        export SINGULARITYENV_LHCI_COLLECT_URL="http://localhost:${{ env.TWIN_PORT }}/"
+        export SINGULARITYENV_LHCI_GITHUB_TOKEN="${{ inputs.github_token }}"
 
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
