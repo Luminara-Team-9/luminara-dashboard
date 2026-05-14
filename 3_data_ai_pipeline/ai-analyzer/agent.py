@@ -340,6 +340,24 @@ def get_metrics(state: AgentState) -> AgentState:
     avg_cls = sum(cls_values) / len(cls_values) if cls_values else 0
     avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
 
+    failed_metrics = []
+
+    if avg_perf < 90:
+        failed_metrics.append("performance_score")
+
+    if avg_lcp > 2500:
+        failed_metrics.append("LCP")
+
+    if avg_tbt > 200:
+        failed_metrics.append("TBT")
+
+    if avg_cls > 0.1:
+        failed_metrics.append("CLS")
+
+    if not failed_metrics:
+        print("✅ No failed metrics. Agent does not need to run.")
+        return {**state, "should_end": True}
+
     # Confidence based on repeated LCP failure.
     # If LCP fails in all 3 runs, confidence is high.
     failed_lcp_runs = [v for v in lcp_values if v > 2500]
@@ -356,9 +374,18 @@ def get_metrics(state: AgentState) -> AgentState:
         "avg_tbt_ms": round(avg_tbt, 2),
         "avg_cls_score": round(avg_cls, 4),
         "avg_performance": round(avg_perf, 1),
+
+        "failed_metrics": failed_metrics,
+
         "test_ids": test_ids,
         "run_count": len(runs),
     }
+
+
+    if not failed_metrics:
+        print("  ✅ No failed metrics detected")
+        conn.close()
+        return {**state, "should_end": True}
 
     print(f"  ✅ Selected test_ids: {test_ids}")
     print(f"  ✅ LCP avg: {metrics['avg_lcp_ms']}ms")
