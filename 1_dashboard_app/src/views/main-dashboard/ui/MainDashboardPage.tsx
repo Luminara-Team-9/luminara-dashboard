@@ -15,13 +15,13 @@ import styles from './MainDashboardPage.module.css';
 type DashboardView = 'ai' | 'traffic' | 'impact' | 'competitors' | 'journey' | 'trend' | 'regional';
 
 const NAV_ITEMS: { id: DashboardView; label: string; eyebrow: string; short: string }[] = [
-  { id: 'impact', label: '현재 성능 진단', eyebrow: 'Performance', short: 'PF' },
-  { id: 'ai', label: 'AI 액션 플랜', eyebrow: 'Next Action', short: 'AI' },
-  { id: 'traffic', label: '방문·세션 데이터', eyebrow: 'Session', short: 'SS' },
-  { id: 'competitors', label: '경쟁사 벤치마킹', eyebrow: 'Market', short: 'CP' },
-  { id: 'journey', label: '사용자 여정', eyebrow: 'Funnel', short: 'FN' },
-  { id: 'trend', label: '성능 추세', eyebrow: 'Change', short: 'TR' },
-  { id: 'regional', label: '보조 분석', eyebrow: 'RUM', short: 'RM' },
+  { id: 'impact', label: '현재 성능 진단', eyebrow: '성능', short: '성능' },
+  { id: 'competitors', label: '경쟁사 벤치마킹', eyebrow: '비교', short: '경쟁' },
+  { id: 'ai', label: 'AI 액션 플랜', eyebrow: '개선', short: 'AI' },
+  { id: 'journey', label: '사용자 여정', eyebrow: '여정', short: '여정' },
+  { id: 'trend', label: '성능 추세', eyebrow: '변경', short: '추세' },
+  { id: 'traffic', label: '방문·세션 데이터', eyebrow: '세션', short: '세션' },
+  { id: 'regional', label: '보조 분석', eyebrow: '분포', short: '보조' },
 ];
 
 const VIEW_TITLE: Record<DashboardView, { title: string; description: string }> = {
@@ -31,7 +31,7 @@ const VIEW_TITLE: Record<DashboardView, { title: string; description: string }> 
   },
   traffic: {
     title: '방문·세션 데이터',
-    description: '클론 사이트에서 수집할 수 있는 방문, 참여, 이탈 데이터를 확인합니다.',
+    description: '내부 로그 기반 방문, 구매, 이탈 데이터를 확인합니다.',
   },
   impact: {
     title: '현재 성능 진단',
@@ -51,7 +51,7 @@ const VIEW_TITLE: Record<DashboardView, { title: string; description: string }> 
   },
   regional: {
     title: '보조 분석',
-    description: '지역과 통신사 지연 차이를 분리해 사이트 문제와 네트워크 문제를 구분합니다.',
+    description: '지역과 통신사별 이용 규모를 보고 제휴·운영 참고 지표로 활용합니다.',
   },
 };
 
@@ -94,7 +94,7 @@ function Header() {
           {mounted && !loading && (
             <div className={styles.live_badge}>
               <span className={styles.live_dot} />
-              LIVE
+              실시간
             </div>
           )}
           {mounted && lastUpdated && (
@@ -162,7 +162,7 @@ export function MainDashboardPage() {
         <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebar_collapsed : ''}`}>
           <div className={styles.sidebar_header}>
             <div className={styles.sidebar_title_wrap}>
-              <span className={styles.sidebar_eyebrow}>Dashboard</span>
+              <span className={styles.sidebar_eyebrow}>대시보드</span>
               <span className={styles.sidebar_title}>상세 보기</span>
             </div>
             <button
@@ -176,7 +176,7 @@ export function MainDashboardPage() {
             </button>
           </div>
 
-          <nav className={styles.nav} aria-label="Dashboard views">
+          <nav className={styles.nav} aria-label="대시보드 보기">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.id}

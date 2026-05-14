@@ -70,15 +70,15 @@ function formatShare(part: number, total: number): string {
 }
 
 function usageFill(sessions: number, maxSessions: number): string {
-  if (maxSessions <= 0 || sessions <= 0) return '#111827';
+  if (maxSessions <= 0 || sessions <= 0) return '#e5e7eb';
   const ratio = Math.max(0.12, sessions / maxSessions);
-  return `rgba(59,130,246,${(0.16 + ratio * 0.58).toFixed(2)})`;
+  return `rgba(37,99,235,${(0.16 + ratio * 0.58).toFixed(2)})`;
 }
 
 function usageHover(sessions: number, maxSessions: number): string {
-  if (maxSessions <= 0 || sessions <= 0) return 'rgba(30,41,59,0.75)';
+  if (maxSessions <= 0 || sessions <= 0) return '#dbeafe';
   const ratio = Math.max(0.2, sessions / maxSessions);
-  return `rgba(96,165,250,${(0.25 + ratio * 0.55).toFixed(2)})`;
+  return `rgba(37,99,235,${(0.28 + ratio * 0.5).toFixed(2)})`;
 }
 
 function latencyStatus(ms: number | null): string {
@@ -265,8 +265,9 @@ export function RumHeatmap() {
     const selector = '#rum-map';
     const maxSessions = Math.max(...Object.values(SVG_TO_REGION).map((region) => sumSessions(regionalData, region, selectedIsp)), 1);
     const lines = [
-      `${selector} svg { width: 100%; height: auto; display: block; }`,
-      `${selector} svg path { fill: #111827; stroke: #0a0f1e; stroke-width: 0.6;`,
+      `${selector} { width: min(100%, 330px); height: 330px; display: flex; align-items: center; justify-content: center; }`,
+      `${selector} svg { width: 100%; height: auto; max-height: 330px; display: block; }`,
+      `${selector} svg path { fill: #e5e7eb; stroke: #94a3b8; stroke-width: 0.6;`,
       '                transition: fill 0.2s, stroke 0.2s; pointer-events: all; }',
     ];
 
@@ -276,13 +277,13 @@ export function RumHeatmap() {
       const hasSelected = selectedRegion !== null;
 
       if (hasSelected && !isSelected) {
-        lines.push(`${selector} #${id} { fill: #0b1120; stroke: rgba(255,255,255,0.16); stroke-width: 0.8; cursor: pointer; }`);
+        lines.push(`${selector} #${id} { fill: #eef2f7; stroke: #cbd5e1; stroke-width: 0.8; cursor: pointer; }`);
         return;
       }
 
       lines.push(
-        `${selector} #${id} { fill: ${usageFill(sessions, maxSessions)}; stroke: ${isSelected ? '#60a5fa' : '#1e3a5f'};`,
-        `              stroke-width: ${isSelected ? 2.5 : 0.7}; cursor: pointer; }`,
+        `${selector} #${id} { fill: ${isSelected ? '#1e3a5f' : usageFill(sessions, maxSessions)}; stroke: ${isSelected ? '#0f172a' : '#64748b'};`,
+        `              stroke-width: ${isSelected ? 3.4 : 0.9}; cursor: pointer; }`,
         `${selector} #${id}:hover { fill: ${usageHover(sessions, maxSessions)}; }`,
       );
     });
@@ -317,7 +318,7 @@ export function RumHeatmap() {
         <div className={styles.summary_card}>
           <span>최다 이용 통신사</span>
           <strong>{topIsp?.isp ?? '-'}</strong>
-          <em>{topIsp ? `${topIsp.share.toFixed(1)}% · 할인 이벤트 후보` : '데이터 없음'}</em>
+          <em>{topIsp ? `${topIsp.share.toFixed(1)}% · 제휴 참고` : '데이터 없음'}</em>
         </div>
         <div className={styles.summary_card}>
           <span>이용 많고 느린 지역</span>

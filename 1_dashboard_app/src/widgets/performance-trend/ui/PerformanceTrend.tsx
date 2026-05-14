@@ -217,7 +217,7 @@ function CustomTooltip({ active, payload, label, metricKey }: TooltipProps) {
         <p key={entry.name} className={styles.tooltip_row}>
           <span className={styles.tooltip_dot} style={{ backgroundColor: entry.color }} />
           <span style={{ color: entry.color }}>{entry.name}</span>
-          <span style={{ color: '#e2e8f0' }}>
+          <span style={{ color: '#1e293b' }}>
             {entry.name === CVR_LINE_KEY ? `+${entry.value}%` : formatValue(entry.value, metricKey)}
           </span>
         </p>
@@ -373,7 +373,7 @@ export function PerformanceTrend() {
               <XAxis
                 dataKey="date"
                 tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={{ stroke: '#1e293b' }}
+                axisLine={{ stroke: '#d7dee8' }}
                 tickLine={false}
               />
               <YAxis
@@ -409,7 +409,7 @@ export function PerformanceTrend() {
                   />
                 )}
               />
-              <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8', paddingTop: '8px' }} />
+              <Legend wrapperStyle={{ fontSize: '12px', color: '#64748b', paddingTop: '8px' }} />
 
               <ReferenceLine
                 yAxisId="left"
@@ -424,13 +424,13 @@ export function PerformanceTrend() {
                 <ReferenceLine
                   yAxisId="left"
                   y={competitorAvg}
-                  stroke="#f59e0b"
+                  stroke="#b45309"
                   strokeDasharray="3 4"
                   strokeOpacity={0.7}
                   label={{
                     value: `경쟁사 평균 ${competitorAvg}${config.unit}`,
                     position: 'insideBottomRight',
-                    fill: '#f59e0b',
+                    fill: '#b45309',
                     fontSize: 10,
                   }}
                 />
@@ -449,7 +449,7 @@ export function PerformanceTrend() {
                     label={{
                       value: release.version,
                       position: 'insideTop',
-                      fill: isSelected ? '#60a5fa' : '#475569',
+                      fill: isSelected ? '#2563eb' : '#64748b',
                       fontSize: 10,
                     }}
                   />
@@ -457,7 +457,7 @@ export function PerformanceTrend() {
               })}
 
               {activeBrands.map((brand) => {
-                const color = BRAND_COLORS[brand] ?? '#94a3b8';
+                const color = BRAND_COLORS[brand] ?? '#64748b';
                 return (
                   <Line
                     key={brand}
@@ -466,8 +466,8 @@ export function PerformanceTrend() {
                     dataKey={brand}
                     stroke={color}
                     strokeWidth={2.5}
-                    dot={{ r: 3, strokeWidth: 1.5, stroke: color, fill: '#0f172a' }}
-                    activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#0f172a' }}
+                    dot={{ r: 3, strokeWidth: 1.5, stroke: color, fill: '#ffffff' }}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#ffffff' }}
                     isAnimationActive={false}
                   />
                 );
@@ -481,8 +481,8 @@ export function PerformanceTrend() {
                   stroke="#10b981"
                   strokeWidth={2}
                   strokeDasharray="6 3"
-                  dot={{ r: 2.5, strokeWidth: 1.5, stroke: '#10b981', fill: '#0f172a' }}
-                  activeDot={{ r: 4, strokeWidth: 2, stroke: '#10b981', fill: '#0f172a' }}
+                  dot={{ r: 2.5, strokeWidth: 1.5, stroke: '#10b981', fill: '#ffffff' }}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: '#10b981', fill: '#ffffff' }}
                   isAnimationActive={false}
                 />
               )}

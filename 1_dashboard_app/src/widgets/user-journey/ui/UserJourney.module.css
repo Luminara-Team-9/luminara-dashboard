@@ -16,7 +16,7 @@
 
 .title {
   margin: 0;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 18px;
   font-weight: 900;
   letter-spacing: 0;
@@ -24,7 +24,7 @@
 
 .subtitle {
   margin: 3px 0 0;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -35,7 +35,7 @@
   border: 1px solid rgba(59, 130, 246, 0.35);
   border-radius: 999px;
   background: rgba(59, 130, 246, 0.12);
-  color: #93c5fd;
+  color: #2563eb;
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
@@ -51,9 +51,9 @@
 .summary_card {
   min-width: 0;
   padding: 12px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.62);
+  background: #fbfcfe;
 }
 
 .summary_card span,
@@ -63,7 +63,7 @@
 }
 
 .summary_card span {
-  color: #cbd5e1;
+  color: #334155;
   font-size: 12px;
   font-weight: 800;
 }
@@ -71,7 +71,7 @@
 .summary_card strong {
   display: block;
   margin-top: 5px;
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 22px;
   font-weight: 900;
   line-height: 1.2;
@@ -100,9 +100,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.45);
+  background: #fbfcfe;
   overflow: hidden;
 }
 
@@ -112,13 +112,13 @@
   justify-content: space-between;
   gap: 10px;
   padding: 11px 12px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid #d7dee8;
   flex-shrink: 0;
 }
 
 .panel_header h3 {
   margin: 0;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 14px;
   font-weight: 900;
 }
@@ -144,7 +144,7 @@
   min-width: 0;
   border: 1px solid #334155;
   border-radius: 8px;
-  background: #0f172a;
+  background: #fbfcfe;
   padding: 14px;
 }
 
@@ -162,7 +162,7 @@
 
 .path_title_group strong {
   display: block;
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 17px;
   font-weight: 900;
   line-height: 1.3;
@@ -172,7 +172,7 @@
 .path_title_group span {
   display: block;
   margin-top: 5px;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 13px;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -208,10 +208,10 @@
 
 .path_meta span {
   padding: 5px 8px;
-  border: 1px solid #263449;
+  border: 1px solid #d7dee8;
   border-radius: 999px;
-  background: rgba(30, 41, 59, 0.55);
-  color: #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
   font-size: 12px;
   font-weight: 800;
 }
@@ -233,9 +233,9 @@
   min-width: 148px;
   max-width: 210px;
   padding: 10px 12px;
-  border: 1px solid #263449;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.52);
+  background: #f8fafc;
   flex: 0 0 auto;
 }
 
@@ -257,7 +257,7 @@
 }
 
 .route_step strong {
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 900;
   line-height: 1.3;
@@ -265,19 +265,19 @@
 
 .route_step span {
   margin-top: 4px;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 12px;
   line-height: 1.35;
 }
 
 .route_last {
   border-color: rgba(248, 113, 113, 0.42);
-  background: rgba(127, 29, 29, 0.22);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .route_success {
   border-color: rgba(52, 211, 153, 0.42);
-  background: rgba(6, 78, 59, 0.24);
+  background: rgba(16, 185, 129, 0.08);
 }
 
 .path_footer {
@@ -287,16 +287,16 @@
   gap: 12px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid #d7dee8;
 }
 
 .event_trace {
   min-width: 0;
   margin: 0;
   padding: 9px 10px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 7px;
-  background: rgba(2, 6, 23, 0.34);
+  background: #f8fafc;
   color: #64748b;
   font-size: 10px;
   line-height: 1.45;
@@ -313,7 +313,7 @@
 
 .path_result span {
   display: block;
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 15px;
   font-weight: 900;
   line-height: 1.35;
@@ -323,7 +323,7 @@
 .path_result em {
   display: block;
   margin-top: 5px;
-  color: #bfdbfe;
+  color: #2563eb;
   font-size: 12px;
   font-style: normal;
   line-height: 1.35;
@@ -334,9 +334,25 @@
   padding: 10px;
   border: 1px dashed #334155;
   border-radius: 8px;
-  color: #94a3b8;
-  background: rgba(15, 23, 42, 0.42);
+  color: #64748b;
+  background: #f8fafc;
   font-size: 12px;
+  text-align: center;
+}
+
+.empty_state {
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border: 1px dashed #334155;
+  border-radius: 8px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
   text-align: center;
 }
 
@@ -356,9 +372,9 @@
   align-items: center;
   gap: 9px;
   padding: 11px 10px;
-  border: 1px solid #263449;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.32);
+  background: #f8fafc;
 }
 
 .rank_badge {
@@ -370,7 +386,7 @@
   justify-content: center;
   flex-shrink: 0;
   background: rgba(59, 130, 246, 0.16);
-  color: #93c5fd;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 900;
 }
@@ -387,7 +403,7 @@
 }
 
 .rank_main strong {
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 900;
   line-height: 1.35;
@@ -395,7 +411,7 @@
 
 .rank_main span {
   margin-top: 3px;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -415,7 +431,7 @@
 
 .rank_rate span {
   display: block;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 10px;
   font-weight: 800;
 }
@@ -427,7 +443,7 @@
   border: 1px solid rgba(59, 130, 246, 0.16);
   border-radius: 8px;
   background: rgba(59, 130, 246, 0.06);
-  color: #94a3b8;
+  color: #64748b;
   font-size: 11px;
   line-height: 1.45;
 }

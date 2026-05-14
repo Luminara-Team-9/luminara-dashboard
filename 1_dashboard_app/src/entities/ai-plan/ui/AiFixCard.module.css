@@ -5,23 +5,23 @@
   min-height: 210px;
   padding: 20px;
   border-radius: 14px;
-  border: 1px solid #1e293b;
-  background-color: #111827;
+  border: 1px solid #d7dee8;
+  background-color: #fbfcfe;
   border-left-width: 3px;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .card:hover {
-  border-color: #334155;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  border-color: #94a3b8;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.1);
   transform: translateY(-1px);
 }
 
 /* 우선순위별 왼쪽 border 색상 */
 .critical { border-left-color: #ef4444; }
-.high     { border-left-color: #f97316; }
-.medium   { border-left-color: #f59e0b; }
+.high     { border-left-color: #c2410c; }
+.medium   { border-left-color: #b45309; }
 .low      { border-left-color: #10b981; }
 
 /* ── 상단 행 ── */
@@ -41,15 +41,15 @@
 }
 
 .priority_critical { color: #ef4444; background-color: rgba(239, 68, 68, 0.12); }
-.priority_high     { color: #f97316; background-color: rgba(249, 115, 22, 0.12); }
-.priority_medium   { color: #f59e0b; background-color: rgba(245, 158, 11, 0.12); }
+.priority_high     { color: #c2410c; background-color: rgba(194, 65, 12, 0.12); }
+.priority_medium   { color: #b45309; background-color: rgba(180, 83, 9, 0.12); }
 .priority_low      { color: #10b981; background-color: rgba(16, 185, 129, 0.12); }
 
 .metric {
   font-size: 10px;
   font-weight: 600;
   color: #64748b;
-  background-color: #1e293b;
+  background-color: #d7dee8;
   padding: 3px 8px;
   border-radius: 5px;
 }
@@ -58,7 +58,7 @@
 .title {
   font-size: 18px;
   font-weight: 900;
-  color: #e2e8f0;
+  color: #1e293b;
   line-height: 1.3;
   margin: 0;
 }
@@ -66,7 +66,7 @@
 /* ── 설명 ── */
 .desc {
   font-size: 13px;
-  color: #94a3b8;
+  color: #64748b;
   line-height: 1.5;
   margin: 0;
   display: -webkit-box;
@@ -80,20 +80,20 @@
   flex-direction: column;
   gap: 5px;
   padding: 10px 12px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: #0b1120;
+  background: #fbfcfe;
 }
 
 .link_box strong {
-  color: #93c5fd;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 900;
 }
 
 .link_box p {
   margin: 0;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -111,7 +111,7 @@
 
 .roi_label {
   font-size: 10px;
-  color: #475569;
+  color: #64748b;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -132,7 +132,7 @@
   justify-content: space-between;
   margin-top: auto;
   padding-top: 8px;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid #d7dee8;
 }
 
 .impact {
@@ -146,11 +146,11 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #475569;
+  color: #64748b;
 }
 
 .dot_on  { width: 7px; height: 7px; border-radius: 50%; background-color: #3b82f6; display: inline-block; }
-.dot_off { width: 7px; height: 7px; border-radius: 50%; background-color: #1e293b; display: inline-block; }
+.dot_off { width: 7px; height: 7px; border-radius: 50%; background-color: #d7dee8; display: inline-block; }
 
 /* ── 하단 오른쪽 그룹 ── */
 .bottom_right {
@@ -190,7 +190,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -200,13 +200,13 @@
 
 /* ── 확인 모달 ── */
 .modal {
-  background: #0f172a;
-  border: 1px solid #1e293b;
+  background: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-radius: 16px;
   padding: 28px;
   width: 380px;
   max-width: 92vw;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
 }
 
 .modal_label {
@@ -228,7 +228,7 @@
 }
 
 .modal_close:hover {
-  color: #cbd5e1;
+  color: #334155;
 }
 
 .detail_modal {
@@ -236,10 +236,10 @@
   max-height: 88vh;
   overflow-y: auto;
   padding: 28px;
-  border: 1px solid #243247;
+  border: 1px solid #d7dee8;
   border-radius: 18px;
-  background: #0f172a;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+  background: #fbfcfe;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
 }
 
 .detail_head {
@@ -248,12 +248,12 @@
   justify-content: space-between;
   gap: 18px;
   padding-bottom: 18px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid #d7dee8;
 }
 
 .detail_title {
   margin: 0;
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 26px;
   font-weight: 950;
   line-height: 1.25;
@@ -272,9 +272,9 @@
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 10px;
-  background: #0b1120;
+  background: #fbfcfe;
 }
 
 .detail_section:nth-child(3) {
@@ -288,20 +288,20 @@
 }
 
 .section_label {
-  color: #60a5fa;
+  color: #2563eb;
   font-size: 11px;
   font-weight: 900;
 }
 
 .detail_section p {
   margin: 0;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 14px;
   line-height: 1.6;
 }
 
 .detail_section em {
-  color: #94a3b8;
+  color: #64748b;
   font-size: 12px;
   font-style: normal;
 }
@@ -313,7 +313,7 @@
 }
 
 .code_panel > strong {
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 13px;
   font-weight: 900;
 }
@@ -344,13 +344,13 @@
   overflow: auto;
   margin: 0;
   padding: 12px;
-  border: 1px solid #243247;
+  border: 1px solid #d7dee8;
   border-radius: 7px;
-  background: #111827;
+  background: #fbfcfe;
 }
 
 .code_columns code {
-  color: #93c5fd;
+  color: #2563eb;
   font-family: Consolas, Monaco, 'Courier New', monospace;
   font-size: 11px;
   line-height: 1.5;
@@ -367,7 +367,7 @@
 .modal_title {
   font-size: 16px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #111827;
   margin: 0 0 10px;
   line-height: 1.4;
 }
@@ -384,8 +384,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid #1e293b;
-  border-bottom: 1px solid #1e293b;
+  border-top: 1px solid #d7dee8;
+  border-bottom: 1px solid #d7dee8;
   margin-bottom: 20px;
 }
 
@@ -399,14 +399,14 @@
   font-size: 13px;
   font-weight: 600;
   color: #64748b;
-  background: #1e293b;
+  background: #d7dee8;
   border: none;
   border-radius: 8px;
   padding: 9px 20px;
   cursor: pointer;
   transition: background 0.15s;
 }
-.btn_cancel:hover { background: #243044; }
+.btn_cancel:hover { background: #334155; }
 
 .btn_confirm {
   font-size: 13px;
@@ -418,6 +418,29 @@
   padding: 9px 20px;
   cursor: pointer;
   transition: background 0.15s;
+}
+
+.btn_confirm:disabled {
+  cursor: default;
+  background: #94a3b8;
+}
+
+.apply_notice {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.apply_notice_error {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
 }
 
 @media (max-width: 720px) {

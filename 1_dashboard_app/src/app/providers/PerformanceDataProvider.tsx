@@ -4,6 +4,17 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import type { PerformanceApiResponse } from '@/shared/lib/types';
 
+const DEFAULT_REFRESH_INTERVAL_MS = 30_000;
+
+function getRefreshIntervalMs(): number {
+  const raw = process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS;
+  if (!raw) return DEFAULT_REFRESH_INTERVAL_MS;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_REFRESH_INTERVAL_MS;
+  return parsed;
+}
+
 interface PerformanceDataContextValue {
   data: PerformanceApiResponse | null;
   loading: boolean;
@@ -19,12 +30,12 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { background?: boolean }) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
+    if (!options?.background) setLoading(true);
     setError(null);
     try {
       const response = await fetch('/api/performance', {
@@ -46,6 +57,18 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void load();
+    const refreshIntervalMs = getRefreshIntervalMs();
+
+    if (refreshIntervalMs > 0) {
+      const timer = window.setInterval(() => {
+        void load({ background: true });
+      }, refreshIntervalMs);
+
+      return () => {
+        window.clearInterval(timer);
+        abortRef.current?.abort();
+      };
+    }
 
     return () => {
       abortRef.current?.abort();
