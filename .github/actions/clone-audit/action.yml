@@ -71,20 +71,17 @@ runs:
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
 
-        echo "Firing LHCI metrics against the Digital Twin..."
+        echo "🚀 Firing LHCI metrics against the Digital Twin on port ${{ env.TWIN_PORT }}..."
 
-        # 🚨 SRE FIX: Multi-Bind Architecture
-        # 1. Bind the Next.js code folder
-        # 2. Surgically bind the central config file into the same workspace
+        # We pass the URL explicitly to ensure it overrides any hardcoded config
         singularity exec \
           --bind ./${{ inputs.target_site }}:/data \
           --bind ./4_automation_tests:/workspace \
           --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          # npx lhci autorun --config=/workspace/lighthouserc.js --collect.url=$LHCI_COLLECT_URL
-          npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js --collect.settings.preset=desktop
-          # bash /scripts/run_audit_pipeline.sh
-
+          npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
+          --collect.url=$LHCI_COLLECT_URL \
+          --collect.settings.preset=desktop
 
     - name: 📊 Stage 4 - Post Performance Summary
       if: always()
@@ -94,16 +91,17 @@ runs:
       run: |
         echo "📝 Generating Performance Summary..."
         
-        # Use Node to parse the manifest.json and create a Markdown table
+        # SRE FIX: Updated path to 4_automation_tests/.lighthouseci/manifest.json
         node -e "
         const fs = require('fs');
+        const path = '4_automation_tests/.lighthouseci/manifest.json';
         try {
-          const manifest = JSON.parse(fs.readFileSync('.lighthouseci/manifest.json', 'utf8'));
+          if (!fs.existsSync(path)) throw new Error('Manifest not found');
+          const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
           let table = '### ⚡ Lighthouse Performance Audit\n\n';
           table += '| URL | Performance | Accessibility | Best Practices | SEO |\n';
           table += '| :--- | :---: | :---: | :---: | :---: |\n';
           
-          // Only show 'representative' (median) runs to keep the table clean
           manifest.filter(run => run.isRepresentativeRun).forEach(run => {
             const s = run.summary;
             const score = (val) => val >= 0.9 ? '🟢 ' + Math.round(val * 100) : (val >= 0.5 ? '🟠 ' + Math.round(val * 100) : '🔴 ' + Math.round(val * 100));
@@ -113,12 +111,13 @@ runs:
           
           fs.writeFileSync('lhci_summary.md', table);
         } catch (e) {
-          fs.writeFileSync('lhci_summary.md', '⚠️ **Lighthouse Audit Failed:** Could not generate summary table.');
+          console.log(e.message);
+          fs.writeFileSync('lhci_summary.md', '⚠️ **Lighthouse Audit Failed:** Could not generate summary table. Check logs for boot errors.');
         }
         "
 
-        # Use GitHub CLI to post the comment
-        if [ -f "lhci_summary.md" ]; then
+        # Only post comment if in a Pull Request context
+        if [ -f "lhci_summary.md" ] && [ "${{ github.event.pull_request.number }}" != "" ]; then
           gh pr comment ${{ github.event.pull_request.number }} --body-file=lhci_summary.md
         fi
 
