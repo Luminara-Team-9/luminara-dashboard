@@ -1,5 +1,7 @@
 import subprocess
 from datetime import datetime
+from typing import Optional
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -18,9 +20,14 @@ print("✅ Remediation Agent ready")
 
 
 class TriggerPayload(BaseModel):
+    # New: direct failed audit target
+    test_id: Optional[int] = None
+
+    # Old: fallback target mode
     url: str = "https://www.decathlon.co.kr/"
     page_type: str = "main"
     device_type: str = "desktop"
+
     max_opportunities: int = 5
     run_etl: bool = False
     dry_run: bool = True
@@ -30,7 +37,7 @@ class TriggerPayload(BaseModel):
 def root():
     return {
         "status": "Luminara AI listener is running",
-        "message": "Use POST /trigger to run the AI remediation agent"
+        "message": "Use POST /trigger to run the AI remediation agent",
     }
 
 
@@ -38,7 +45,7 @@ def root():
 def health():
     return {
         "status": "ok",
-        "time": datetime.now().isoformat()
+        "time": datetime.now().isoformat(),
     }
 
 
@@ -74,7 +81,8 @@ def trigger(payload: TriggerPayload):
 
     # Run agent directly in same Python process
     try:
-        result = agent_app.invoke({
+        agent_input = {
+            "test_id": payload.test_id,
             "url": payload.url,
             "page_type": payload.page_type,
             "device_type": payload.device_type,
@@ -82,20 +90,24 @@ def trigger(payload: TriggerPayload):
             "max_opportunities": payload.max_opportunities,
             "should_end": False,
             "opp_index": 0,
-        })
+        }
+
+        result = agent_app.invoke(agent_input)
 
         logs.append({
             "step": "agent",
             "status": "completed",
+            "test_id": result.get("test_id"),
             "confidence": result.get("confidence"),
             "processed": result.get("opp_index", 0),
         })
 
         return {
             "status": "success",
-            "url": payload.url,
-            "page_type": payload.page_type,
-            "device_type": payload.device_type,
+            "test_id": result.get("test_id"),
+            "url": result.get("url"),
+            "page_type": result.get("page_type"),
+            "device_type": result.get("device_type"),
             "max_opportunities": payload.max_opportunities,
             "dry_run": payload.dry_run,
             "logs": logs,

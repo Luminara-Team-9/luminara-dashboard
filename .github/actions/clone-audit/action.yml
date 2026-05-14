@@ -73,7 +73,7 @@ runs:
 
         echo "🚀 Firing LHCI metrics against port ${{ env.TWIN_PORT }}..."
 
-        # SRE FIX: Changed all binds to absolute workspace paths
+        # SRE FIX: Direct LHCI execution avoids "script not found" errors
         singularity exec \
           --bind ${{ github.workspace }}/${{ inputs.target_site }}:/data \
           --bind ${{ github.workspace }}/4_automation_tests:/workspace \
@@ -83,11 +83,9 @@ runs:
           --collect.url=$LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
 
-    - name: 📊 Stage 4 - Post Performance Summary
+    - name: 📝 Generate summary
       if: always()
       shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
       run: |
         echo "📝 Generating Performance Summary..."
         
@@ -128,25 +126,20 @@ runs:
         echo "📊 DUMPING DIGITAL TWIN LOGS (Instance: ${{ env.TWIN_NAME }})"
         echo "------------------------------------------------"
         
-        # Path varies by Singularity version; this finds the specific run's logs
         find "$HOME/.singularity/instances/logs" -name "${{ env.TWIN_NAME }}.*" -exec echo "--- File: {} ---" \; -exec cat {} \; || echo "No instance logs found."
+
         echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
 
         # 1. Gracefully stop the Digital Twin daemon
-        echo "[..] Stopping Digital Twin Instance..."
-        singularity instance stop ${{ env.TWIN_NAME }} 2>/dev/null || echo "Twin cleanly stopped."
+        singularity instance stop ${{ env.TWIN_NAME }} 2>/dev/null || true
 
-        # 2. The SRE Fail-Safe: Stop the audit instance (if it was ever booted as one)
-        echo "[..] Sweeping for Audit Instances..."
-        singularity instance stop audit_${{ github.run_id }} 2>/dev/null || echo "No audit instance found."
+        # 2. Stop the audit instance (if any)
+        singularity instance stop audit_${{ github.run_id }} 2>/dev/null || true
 
-        # 3. The SRE Fail-Safe: Terminate rogue hanging processes
-        # If 'singularity exec' froze and became a zombie, we forcefully kill any process
-        # that contains the string "infrastructure_audit_ephemeral.sif" tied to this run.
-        echo "[..] Hunting for orphaned exec processes..."
-        pkill -f "infrastructure_audit_ephemeral.sif.*${{ github.run_id }}" || echo "No zombie processes detected."
+        # 3. Terminate rogue hanging processes
+        pkill -f "infrastructure_audit_ephemeral.sif.*${{ github.run_id }}" || true
 
-        # Cleanup the RAM directory after the exec finishes
-        rm -rf "$AUDIT_TMP"
+        # 4. SRE FIX: Clean up the RAM directory to prevent memory leaks
+        rm -rf "/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
 
-        echo "✅ Teardown & Cleanup complete. Server environment is pristine."
+        echo "✅ Teardown complete. Server environment is pristine."

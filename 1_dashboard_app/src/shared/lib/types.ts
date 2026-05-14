@@ -3,6 +3,20 @@ export type FixPriority = 'critical' | 'high' | 'medium' | 'low';
 export type FixEffort   = 'low' | 'medium' | 'high';
 export type DataConfidence = 'measured' | 'estimated' | 'proxy' | 'mock';
 
+export interface AiFixDecisionDetail {
+  problem?: string;
+  area?: string;
+  reason?: string;
+  evidence?: string;
+  fix?: string;
+  codeTitle?: string;
+  beforeCode?: string;
+  afterCode?: string;
+  conclusion?: string;
+  source?: string;
+  generatedAt?: string;
+}
+
 export interface AiFixPlan {
   id: string;
   brand: string;
@@ -13,6 +27,44 @@ export interface AiFixPlan {
   estimatedImpact: string;
   effort: FixEffort;
   impactScore: number;   // 0–10, ROI 매트릭스 y축용
+  decision?: AiFixDecisionDetail;
+  remediationStatus?: AiActionApplyStatus;
+  remediationRunId?: string;
+  remediationMessage?: string;
+}
+
+export type AiActionApplyStatus =
+  | 'pending-connection'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed';
+
+export interface AiActionApplyRequest {
+  actionId: string;
+  requestedAt: string;
+  source: 'dashboard';
+  action: 'apply';
+  planSnapshot: {
+    id: string;
+    brand: string;
+    metricKey: string;
+    title: string;
+    priority: FixPriority;
+    estimatedImpact: string;
+    decision?: AiFixDecisionDetail;
+  };
+}
+
+export interface AiActionApplyResponse {
+  actionId: string;
+  accepted: boolean;
+  status: AiActionApplyStatus;
+  message: string;
+  runId?: string;
+  queuedAt?: string;
+  nextPollMs?: number;
+  source: 'remediation-agent' | 'dashboard-contract';
 }
 
 // ─── Executive Summary ────────────────────────────────────────
@@ -222,6 +274,35 @@ export interface DomainPopularity {
   collectedAt?: string;
 }
 
+export interface AuditChecks {
+  textCompression?: boolean;
+  javascriptMinified?: boolean;
+  lazyLoadImages?: boolean;
+  properlySizedImages?: boolean;
+  fontDisplaySwap?: boolean;
+  longTermCache?: boolean;
+  cdn?: boolean;
+  http2?: boolean;
+  dnsPrefetch?: boolean;
+  preconnect?: boolean;
+  gzipBrotli?: boolean;
+  serviceWorker?: boolean;
+  reactMemo?: boolean;
+  virtualScroll?: boolean;
+  codeSplitting?: boolean;
+  dynamicImport?: boolean;
+  aboveFoldPriority?: boolean;
+  https?: boolean;
+  hsts?: boolean;
+  csp?: boolean;
+  noMixedContent?: boolean;
+  sri?: boolean;
+  errorTracking?: boolean;
+  performanceBudget?: boolean;
+  lighthouseCi?: boolean;
+  realDeviceTesting?: boolean;
+}
+
 export interface BenchmarkEntry {
   brand: string;
   isTarget: boolean;
@@ -229,6 +310,7 @@ export interface BenchmarkEntry {
   metrics: Record<MetricKey, MetricItem>;
   resource?: ResourceEfficiency;
   technicalSeo?: TechnicalSeoChecks;
+  auditChecks?: AuditChecks;
   fieldData?: CruxFieldData;
   domainPopularity?: DomainPopularity;
 }
@@ -243,6 +325,7 @@ export interface PageBenchmarkEntry {
   metrics: Record<MetricKey, MetricItem>;
   resource?: ResourceEfficiency;
   technicalSeo?: TechnicalSeoChecks;
+  auditChecks?: AuditChecks;
   fieldData?: CruxFieldData;
   domainPopularity?: DomainPopularity;
 }

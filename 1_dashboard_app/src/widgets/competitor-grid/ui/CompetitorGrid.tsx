@@ -95,6 +95,10 @@ function getRankText(rank: number, total: number): string {
   return `경쟁사 ${total}개 중 ${rank}위`;
 }
 
+function getShortRankText(rank: number, total: number): string {
+  return `${total}개 중 ${rank}위`;
+}
+
 function getAverage(rows: RowEntry[], key: RankKey): number {
   const sum = rows.reduce((acc, row) => acc + getMetricValue(row.entry, key), 0);
   return round(sum / rows.length, 1);
@@ -257,8 +261,10 @@ export function CompetitorGrid() {
               <span>{item.title}</span>
               <i className={`${styles.dot} ${styles[`dot_${item.tone}`]}`} />
             </div>
-            <strong>{item.value}</strong>
-            <em>{getRankText(item.rank, item.total)}</em>
+            <div className={styles.metric_value_row}>
+              <strong>{item.value}</strong>
+              <em>{getShortRankText(item.rank, item.total)}</em>
+            </div>
             <p>{item.diff}</p>
           </article>
         ))}

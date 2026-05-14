@@ -14,9 +14,19 @@ from sentence_transformers import SentenceTransformer
 load_dotenv()
 
 # ── Config ───────────────────────────────────────────────────────────────────
+# vLLM/Qwen runs on DIS02 GPU server.
+# Agent/listener runs on ABRM02 and calls DIS02 through OpenAI-compatible API.
 
-QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen32b-int4")
-QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "http://localhost:8000/v1")
+QWEN_MODEL = os.getenv(
+    "QWEN_MODEL",
+    "/abr/coss41/shared_workspace/yuyu_workspace/data/models/qwen32b-int4",
+)
+
+QWEN_BASE_URL = os.getenv(
+    "QWEN_BASE_URL",
+    "http://DIS02:8000/v1",
+)
+
 MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "5"))
 
 client = OpenAI(
@@ -39,15 +49,23 @@ _embed_model = None
 
 
 def get_embed_model():
+    """
+    Load BGE-M3 only once per running listener/agent process.
+    This avoids reloading the embedding model on every trigger.
+    """
     global _embed_model
+
     if _embed_model is None:
         print("Loading BGE-M3...")
         _embed_model = SentenceTransformer("BAAI/bge-m3")
         print("✅ BGE-M3 loaded")
+
     return _embed_model
 
 
 class AgentState(TypedDict):
+    test_id: Optional[int]
+
     url: str
     page_type: str
     device_type: str
@@ -82,8 +100,10 @@ def normalize_title(title: str) -> str:
 
 def normalize_severity(severity: Optional[str]) -> str:
     severity = (severity or "").lower()
+
     if severity in {"high", "medium", "low"}:
         return severity
+
     return "medium"
 
 
@@ -97,8 +117,10 @@ def priority_from_savings(avg_savings_ms: int, severity: Optional[str]) -> str:
 
     if sev == "high" or avg_savings_ms >= 500:
         return "high"
+
     if sev == "medium" or avg_savings_ms >= 150:
         return "medium"
+
     return "low"
 
 
@@ -107,14 +129,24 @@ def infer_affected_metric(title: str, category: str) -> str:
 
     if "lcp" in text or "largest contentful paint" in text or "image" in text:
         return "LCP"
-    if "tbt" in text or "javascript" in text or "js" in text or "main thread" in text:
+
+    if (
+        "tbt" in text
+        or "javascript" in text
+        or "js" in text
+        or "main thread" in text
+    ):
         return "TBT"
+
     if "cls" in text or "layout shift" in text:
         return "CLS"
+
     if "fcp" in text or "render-blocking" in text or "css" in text:
         return "FCP"
+
     if "ttfb" in text or "server response" in text:
         return "TTFB"
+
     return "Performance"
 
 
@@ -130,7 +162,12 @@ def build_patch_template(title: str, category: str) -> dict:
             "after": "Add CDN/server caching, optimize backend query, and reduce TTFB for HTML document.",
         }
 
-    if "unused javascript" in text or "legacy javascript" in text or "js" in text or "javascript" in text:
+    if (
+        "unused javascript" in text
+        or "legacy javascript" in text
+        or "js" in text
+        or "javascript" in text
+    ):
         return {
             "summary": "Reduce JavaScript payload using code splitting and modern bundle output.",
             "target_file": "next.config.js / package build config / page component imports",
@@ -148,13 +185,18 @@ def build_patch_template(title: str, category: str) -> dict:
             "after": "Inline critical CSS, defer non-critical CSS, and remove unused CSS rules.",
         }
 
-    if "image" in text or "next-gen" in text or "properly size" in text or "offscreen" in text:
+    if (
+        "image" in text
+        or "next-gen" in text
+        or "properly size" in text
+        or "offscreen" in text
+    ):
         return {
             "summary": "Optimize images using responsive sizes, lazy loading, and WebP/AVIF.",
             "target_file": "image component / product card / hero section",
             "change_type": "image_optimization",
-            "before": "<img src=\"hero.jpg\" />",
-            "after": "<img src=\"hero.webp\" loading=\"eager\" fetchpriority=\"high\" width=\"...\" height=\"...\" />",
+            "before": '<img src="hero.jpg" />',
+            "after": '<img src="hero.webp" loading="eager" fetchpriority="high" width="..." height="..." />',
         }
 
     if "compression" in text:
@@ -185,12 +227,14 @@ def get_existing_columns(cursor, table_name: str) -> set:
         """,
         (table_name,),
     )
+
     return {row[0] for row in cursor.fetchall()}
 
 
 def db_value(value: Any):
     if isinstance(value, (dict, list)):
         return Json(value)
+
     return value
 
 
@@ -215,43 +259,150 @@ def safe_insert(cursor, table_name: str, data: dict, returning: str = "id"):
     return cursor.fetchone()[0]
 
 
-# ── N1: Get metrics + top unique opportunities ───────────────────────────────
+# ── N1: Get latest metrics + aggregated opportunities ──────────────────
 
 def get_metrics(state: AgentState) -> AgentState:
+    """
+    N1 purpose:
+    - If test_id is provided:
+        directly analyze that failed Lighthouse audit.
+    - Otherwise:
+        use latest 3-run average for same URL/page/device.
+    - Detect failed metrics.
+    - Aggregate and rank Lighthouse opportunities.
+    """
+
     print("\n[N1] Getting metrics...")
 
-    url = state["url"]
-    page_type = state["page_type"]
-    device_type = state["device_type"]
+    test_id = state.get("test_id")
+    url = state.get("url")
+    page_type = state.get("page_type")
+    device_type = state.get("device_type")
     max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        SELECT
-            test_id,
-            lcp_ms,
-            tbt_ms,
-            cls_score,
-            performance_score
-        FROM lighthouse_runs
-        WHERE url = %s
-          AND page_type = %s
-          AND device_type = %s
-        ORDER BY created_at DESC
-        LIMIT 3
-        """,
-        (url, page_type, device_type),
-    )
+    # ─────────────────────────────────────────────────────────────
+    # MODE 1: Direct failed audit analysis using test_id
+    # ─────────────────────────────────────────────────────────────
 
-    runs = cursor.fetchall()
+    if test_id:
+        cursor.execute(
+            """
+            SELECT
+                test_id,
+                url,
+                page_type,
+                device_type,
+                lcp_ms,
+                tbt_ms,
+                cls_score,
+                performance_score,
+                timestamp,
+                created_at,
+                run_number
+            FROM lighthouse_runs
+            WHERE test_id = %s
+            """,
+            (test_id,),
+        )
+
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            print(f"  ⚠️ No lighthouse_run found for test_id={test_id}")
+            return {**state, "should_end": True}
+
+        (
+            selected_test_id,
+            url,
+            page_type,
+            device_type,
+            lcp,
+            tbt,
+            cls,
+            perf,
+            timestamp,
+            created_at,
+            run_number,
+        ) = row
+
+        runs = [
+            (
+                selected_test_id,
+                lcp,
+                tbt,
+                cls,
+                perf,
+                timestamp,
+                created_at,
+                run_number,
+            )
+        ]
+
+    # ─────────────────────────────────────────────────────────────
+    # MODE 2: Use latest 3 runs by URL/page/device
+    # ─────────────────────────────────────────────────────────────
+
+    else:
+        if not url or not page_type or not device_type:
+            conn.close()
+            print("  ⚠️ Missing url/page_type/device_type and no test_id provided")
+            return {**state, "should_end": True}
+
+        url = url.rstrip("/")
+
+        cursor.execute(
+            """
+            WITH candidate_runs AS (
+                SELECT
+                    test_id,
+                    lcp_ms,
+                    tbt_ms,
+                    cls_score,
+                    performance_score,
+                    timestamp,
+                    created_at,
+                    DATE(COALESCE(timestamp, created_at)) AS run_date,
+                    run_number
+                FROM lighthouse_runs
+                WHERE TRIM(TRAILING '/' FROM url) = %s
+                  AND page_type = %s
+                  AND device_type = %s
+            ),
+            latest_day AS (
+                SELECT MAX(run_date) AS run_date
+                FROM candidate_runs
+            )
+            SELECT
+                test_id,
+                lcp_ms,
+                tbt_ms,
+                cls_score,
+                performance_score,
+                timestamp,
+                created_at,
+                run_number
+            FROM candidate_runs
+            WHERE run_date = (SELECT run_date FROM latest_day)
+            ORDER BY run_number ASC NULLS LAST, created_at DESC
+            LIMIT 3
+            """,
+            (url, page_type, device_type),
+        )
+
+        runs = cursor.fetchall()
+
+    # ─────────────────────────────────────────────────────────────
 
     if not runs:
         conn.close()
-        print(f"  ⚠️ No data found for {url} [{page_type}] [{device_type}]")
+        print("  ⚠️ No Lighthouse runs found")
         return {**state, "should_end": True}
+
+    test_ids = [r[0] for r in runs]
 
     lcp_values = [r[1] for r in runs if r[1] is not None]
     tbt_values = [r[2] for r in runs if r[2] is not None]
@@ -263,11 +414,40 @@ def get_metrics(state: AgentState) -> AgentState:
     avg_cls = sum(cls_values) / len(cls_values) if cls_values else 0
     avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
 
-    problem_runs = [r for r in runs if r[1] and r[1] > 2500]
+    # ─────────────────────────────────────────────────────────────
+    # Detect failed metrics
+    # ─────────────────────────────────────────────────────────────
 
-    if len(problem_runs) == 3:
+    failed_metrics = []
+
+    if avg_perf < 90:
+        failed_metrics.append("performance_score")
+
+    if avg_lcp > 2500:
+        failed_metrics.append("LCP")
+
+    if avg_tbt > 200:
+        failed_metrics.append("TBT")
+
+    if avg_cls > 0.1:
+        failed_metrics.append("CLS")
+
+    print(f"  ✅ Failed metrics: {failed_metrics}")
+
+    if not failed_metrics:
+        conn.close()
+        print("  ✅ No failed metrics detected")
+        return {**state, "should_end": True}
+
+    # ─────────────────────────────────────────────────────────────
+    # Confidence calculation
+    # ─────────────────────────────────────────────────────────────
+
+    failed_lcp_runs = [v for v in lcp_values if v > 2500]
+
+    if len(failed_lcp_runs) >= 3:
         confidence = "high"
-    elif len(problem_runs) == 2:
+    elif len(failed_lcp_runs) == 2:
         confidence = "medium"
     else:
         confidence = "low"
@@ -277,77 +457,55 @@ def get_metrics(state: AgentState) -> AgentState:
         "avg_tbt_ms": round(avg_tbt, 2),
         "avg_cls_score": round(avg_cls, 4),
         "avg_performance": round(avg_perf, 1),
-        "test_ids": [r[0] for r in runs],
+        "failed_metrics": failed_metrics,
+        "test_ids": test_ids,
         "run_count": len(runs),
     }
 
-    print(f"  ✅ LCP: {metrics['avg_lcp_ms']}ms")
-    print(f"  ✅ TBT: {metrics['avg_tbt_ms']}ms")
-    print(f"  ✅ CLS: {metrics['avg_cls_score']}")
-    print(f"  ✅ Score: {metrics['avg_performance']}")
+    print(f"  ✅ Selected test_ids: {test_ids}")
+    print(f"  ✅ LCP avg: {metrics['avg_lcp_ms']}ms")
+    print(f"  ✅ TBT avg: {metrics['avg_tbt_ms']}ms")
+    print(f"  ✅ CLS avg: {metrics['avg_cls_score']}")
+    print(f"  ✅ Score avg: {metrics['avg_performance']}")
     print(f"  ✅ Confidence: {confidence}")
 
-    # Important:
-    # Do NOT group by lo.id. That creates duplicate dashboard cards.
-    # Group by opportunity_id/title/category and keep the highest-impact row.
+    # ─────────────────────────────────────────────────────────────
+    # Aggregate opportunities
+    # ─────────────────────────────────────────────────────────────
+
     cursor.execute(
         """
-        WITH ranked AS (
-            SELECT
-                lo.id,
-                lo.opportunity_id,
-                lo.title,
-                lo.description,
-                lo.savings_ms,
-                lo.severity,
-                lo.category,
-                ROW_NUMBER() OVER (
-                    PARTITION BY LOWER(TRIM(lo.title)), COALESCE(lo.category, '')
-                    ORDER BY lo.savings_ms DESC NULLS LAST, lo.id ASC
-                ) AS rn
-            FROM lighthouse_opportunities lo
-            JOIN lighthouse_runs lr
-              ON lo.test_id = lr.test_id
-            WHERE lr.url = %s
-              AND lr.page_type = %s
-              AND lr.device_type = %s
-              AND COALESCE(lo.savings_ms, 0) > 0
-        )
         SELECT
-            MIN(id) AS id,
-            MIN(opportunity_id) AS opportunity_id,
-            title,
-            MAX(description) AS description,
-            AVG(savings_ms)::int AS avg_savings,
-            MAX(severity) AS severity,
-            category
-        FROM ranked
-        WHERE rn = 1
-        GROUP BY
-            LOWER(TRIM(title)),
-            title,
-            category
-        ORDER BY avg_savings DESC
+            MIN(lo.id) AS id,
+            MIN(lo.opportunity_id) AS opportunity_id,
+            lo.title,
+            MAX(lo.description) AS description,
+            AVG(lo.savings_ms)::int AS avg_savings,
+            MAX(lo.severity) AS severity,
+            MAX(lo.category) AS category,
+            COUNT(*) AS frequency
+        FROM lighthouse_opportunities lo
+        WHERE lo.test_id = ANY(%s)
+          AND COALESCE(lo.savings_ms, 0) > 0
+        GROUP BY LOWER(TRIM(lo.title)), lo.title
+        ORDER BY
+            COUNT(*) DESC,
+            AVG(lo.savings_ms) DESC
         LIMIT %s
         """,
-        (url, page_type, device_type, max_opportunities),
+        (test_ids, max_opportunities),
     )
 
     rows = cursor.fetchall()
     conn.close()
 
     opportunities = []
-    seen_titles = set()
 
     for row in rows:
-        title_key = normalize_title(row[2])
-        if title_key in seen_titles:
-            continue
-        seen_titles.add(title_key)
-
         avg_savings = int(row[4] or 0)
         severity = normalize_severity(row[5])
         category = row[6] or "performance"
+        frequency = int(row[7] or 1)
 
         opportunities.append(
             {
@@ -358,22 +516,33 @@ def get_metrics(state: AgentState) -> AgentState:
                 "avg_savings_ms": avg_savings,
                 "severity": severity,
                 "category": category,
+                "frequency": frequency,
                 "affected_metric": infer_affected_metric(row[2], category),
             }
         )
 
-    print(f"  ✅ Unique top opportunities: {len(opportunities)}")
+    print(f"  ✅ Aggregated opportunities: {len(opportunities)}")
+
+    for opp in opportunities:
+        print(
+            f"     - {opp['title']} | "
+            f"{opp['avg_savings_ms']}ms | "
+            f"freq {opp['frequency']}/{len(runs)} | "
+            f"{opp['affected_metric']}"
+        )
 
     return {
         **state,
+        "test_id": test_id,
+        "url": url,
+        "page_type": page_type,
+        "device_type": device_type,
         "metrics": metrics,
         "opportunities": opportunities,
         "confidence": confidence,
         "opp_index": 0,
-        "should_end": confidence == "low" or len(opportunities) == 0,
+        "should_end": len(opportunities) == 0,
     }
-
-
 # ── N2 ───────────────────────────────────────────────────────────────────────
 
 def sort_opportunities(state: AgentState) -> AgentState:
@@ -536,6 +705,7 @@ Issue:
 - Title: {opp['title']}
 - Description: {opp.get('description', '')}
 - Avg savings: {opp['avg_savings_ms']}ms
+- Frequency: {opp.get('frequency', 1)}/{metrics['run_count']} runs
 - Category: {opp['category']}
 - Severity: {opp['severity']}
 - Affected metric: {opp['affected_metric']}
@@ -778,6 +948,11 @@ def main():
         description="Luminara Remediation Agent — Phase 1"
     )
 
+    parser.add_argument(
+        "--test-id",
+        type=int,
+        help="Specific failed Lighthouse test_id to analyze"
+    )
     parser.add_argument("--url", help="URL to analyze")
     parser.add_argument(
         "--page-type",
@@ -799,11 +974,12 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.url:
+    if not args.test_id and not args.url:
         print("Usage:")
+        print("  python3 agent.py --test-id 68 --max-opportunities 3 --dry-run")
         print(
-            'python3 agent.py --url "https://www.decathlon.co.kr/" '
-            "--page-type main --device-type desktop --max-opportunities 5 --dry-run"
+            '  python3 agent.py --url "https://www.decathlon.co.kr/" '
+            "--page-type main --device-type desktop --max-opportunities 3 --dry-run"
         )
         return
 
@@ -822,6 +998,7 @@ def main():
 
     result = agent.invoke(
         {
+            "test_id": args.test_id,
             "url": args.url,
             "page_type": args.page_type,
             "device_type": args.device_type,

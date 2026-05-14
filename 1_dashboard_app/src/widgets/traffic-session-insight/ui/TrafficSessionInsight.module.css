@@ -16,7 +16,7 @@
 
 .header h2 {
   margin: 0;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 15px;
   font-weight: 900;
 }
@@ -24,15 +24,15 @@
 .header span {
   display: block;
   margin-top: 2px;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 11px;
 }
 
 .header em {
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 999px;
   padding: 5px 9px;
-  color: #bfdbfe;
+  color: #2563eb;
   background: rgba(59, 130, 246, 0.12);
   font-size: 11px;
   font-style: normal;
@@ -48,9 +48,9 @@
 
 .kpi_card,
 .panel {
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 10px;
-  background: #0d1424;
+  background: #fbfcfe;
 }
 
 .kpi_card {
@@ -69,7 +69,7 @@
 }
 
 .kpi_value {
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 23px;
   font-weight: 900;
   line-height: 1.05;
@@ -77,14 +77,14 @@
 }
 
 .kpi_sub {
-  color: #cbd5e1;
+  color: #334155;
   font-size: 11px;
   font-weight: 800;
   line-height: 1.25;
 }
 
 .kpi_note {
-  color: #94a3b8;
+  color: #64748b;
   font-size: 10px;
   line-height: 1.3;
 }
@@ -114,14 +114,14 @@
 
 .panel_title {
   margin: 0;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 13px;
   font-weight: 900;
 }
 
 .panel_desc {
   margin: 2px 0 0;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 10px;
   line-height: 1.3;
 }
@@ -129,7 +129,7 @@
 .data_table_wrap {
   min-height: 0;
   overflow: auto;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
 }
 
@@ -142,7 +142,7 @@
 .data_table th,
 .data_table td {
   padding: 7px 9px;
-  border-bottom: 1px solid #131d2e;
+  border-bottom: 1px solid #e5eaf2;
   text-align: left;
   vertical-align: middle;
 }
@@ -151,7 +151,7 @@
   position: sticky;
   top: 0;
   color: #64748b;
-  background: #0d1424;
+  background: #fbfcfe;
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -159,7 +159,7 @@
 }
 
 .data_table td {
-  color: #cbd5e1;
+  color: #334155;
   font-size: 11px;
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
@@ -172,14 +172,14 @@
 }
 
 .data_table td strong {
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 12px;
   font-weight: 900;
 }
 
 .data_table td span {
   margin-top: 3px;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 10px;
 }
 
@@ -188,11 +188,19 @@
   border: 1px solid rgba(59, 130, 246, 0.32);
   border-radius: 6px;
   padding: 2px 6px;
-  color: #bfdbfe;
+  color: #2563eb;
   background: rgba(59, 130, 246, 0.12);
   font-style: normal;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.empty_cell {
+  padding: 34px 12px !important;
+  color: #64748b !important;
+  text-align: center !important;
+  font-size: 12px !important;
+  font-weight: 800;
 }
 
 .revenue_value {
@@ -214,9 +222,9 @@
   align-items: stretch;
   gap: 7px;
   padding: 9px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: #111827;
+  background: #fbfcfe;
 }
 
 .segment_card > div:first-child {
@@ -228,18 +236,18 @@
 }
 
 .segment_card span {
-  color: #94a3b8;
+  color: #64748b;
   font-size: 11px;
 }
 
 .segment_card strong {
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 15px;
   font-weight: 900;
 }
 
 .segment_card em {
-  color: #cbd5e1;
+  color: #334155;
   font-size: 11px;
   font-style: normal;
   line-height: 1.35;
@@ -257,30 +265,45 @@
   gap: 2px;
   min-width: 0;
   padding: 6px 7px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 7px;
-  background: #0d1424;
+  background: #fbfcfe;
 }
 
 .segment_metrics span strong {
-  color: #bfdbfe;
+  color: #2563eb;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.empty_state {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border: 1px dashed #334155;
+  border-radius: 8px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .data_source_box {
   flex-shrink: 0;
   margin-top: 8px;
   padding: 9px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: #111827;
+  background: #fbfcfe;
 }
 
 .data_source_box span,
 .data_source_box em {
   display: block;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 11px;
   font-weight: 800;
 }
@@ -288,7 +311,7 @@
 .data_source_box strong {
   display: block;
   margin-top: 4px;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 14px;
   font-weight: 900;
 }
@@ -303,10 +326,10 @@
   flex-shrink: 0;
   margin: 0;
   padding: 9px 11px;
-  border: 1px solid rgba(245, 158, 11, 0.24);
+  border: 1px solid rgba(180, 83, 9, 0.26);
   border-radius: 8px;
-  color: #cbd5e1;
-  background: rgba(245, 158, 11, 0.08);
+  color: #334155;
+  background: rgba(180, 83, 9, 0.1);
   font-size: 11px;
   line-height: 1.45;
 }

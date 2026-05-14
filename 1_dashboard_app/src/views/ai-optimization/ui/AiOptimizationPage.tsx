@@ -9,10 +9,10 @@ import type { AiFixPlan, FixPriority } from '@/shared/lib/types';
 import styles from './AiOptimizationPage.module.css';
 
 const PRIORITY_META: Record<FixPriority, { label: string; color: string }> = {
-  critical: { label: 'P0 긴급', color: '#ef4444' },
-  high: { label: 'P1 높음', color: '#f97316' },
-  medium: { label: 'P2 중간', color: '#f59e0b' },
-  low: { label: 'P3 낮음', color: '#10b981' },
+  critical: { label: '긴급', color: '#ef4444' },
+  high: { label: '높음', color: '#c2410c' },
+  medium: { label: '중간', color: '#b45309' },
+  low: { label: '낮음', color: '#10b981' },
 };
 
 const EFFORT_LABEL = { low: '낮음', medium: '중간', high: '높음' } as const;
@@ -27,15 +27,12 @@ const METRIC_LABEL: Record<string, string> = {
   assetSize: '리소스 크기(Asset Size)',
 };
 
-const DECISION_AREA: Record<string, string> = {
-  lcp: '이탈 위험',
-  fcp: '이탈 위험',
-  speedIndex: '체감 속도',
-  inp: '탐색 반응성',
-  tbt: '반응 속도 개선 필요',
-  cls: '화면 안정성',
-  assetSize: '비용 절감',
-};
+function cleanActionTitle(value: string): string {
+  return value
+    .replace(/^\[(?:P\d\s*)?[^\]]+\]\s*/i, '')
+    .replace(/^P\d\s*(?:Critical|High|Medium|Low|긴급|높음|중간|낮음)?\s*[-:]?\s*/i, '')
+    .trim();
+}
 
 function StatCard({ value, label, color }: { value: number; label: string; color?: string }) {
   return (
@@ -48,6 +45,11 @@ function StatCard({ value, label, color }: { value: number; label: string; color
 
 function PlanCard({ plan }: { plan: AiFixPlan }) {
   const { label: priorityLabel, color: priorityColor } = PRIORITY_META[plan.priority];
+  const title = cleanActionTitle(plan.decision?.problem ?? plan.title);
+  const description = plan.decision?.reason ?? plan.description;
+  const area = plan.decision?.area ?? METRIC_LABEL[plan.metricKey] ?? plan.metricKey;
+  const impact = plan.decision?.conclusion ?? plan.estimatedImpact;
+
   return (
     <article className={styles.plan_card} style={{ borderLeftColor: priorityColor }}>
       <div className={styles.plan_top}>
@@ -60,18 +62,18 @@ function PlanCard({ plan }: { plan: AiFixPlan }) {
         </div>
       </div>
 
-      <h3 className={styles.plan_title}>{plan.title}</h3>
-      <p className={styles.plan_desc}>{plan.description}</p>
+      <h3 className={styles.plan_title}>{title}</h3>
+      <p className={styles.plan_desc}>{description}</p>
 
       <div className={styles.plan_bottom}>
         <span className={styles.plan_impact}>
-          {METRIC_LABEL[plan.metricKey] ?? plan.metricKey}{' → '}{DECISION_AREA[plan.metricKey] ?? '사용자 경험'}
+          {METRIC_LABEL[plan.metricKey] ?? plan.metricKey}{' → '}{area}
         </span>
         <span className={styles.plan_brand}>판단 연결</span>
       </div>
 
       <div className={styles.plan_bottom}>
-        <span className={styles.plan_impact}>{plan.estimatedImpact}</span>
+        <span className={styles.plan_impact}>{impact}</span>
         <span className={styles.plan_brand}>{plan.brand}</span>
       </div>
     </article>
@@ -165,10 +167,10 @@ export function AiOptimizationPage() {
         <div className={styles.content}>
           <div className={styles.stat_row}>
             <StatCard value={plans.length} label="전체 항목" />
-            <StatCard value={counts.critical} label="P0 Critical" color="#ef4444" />
-            <StatCard value={counts.high}     label="P1 High"     color="#f97316" />
-            <StatCard value={counts.medium}   label="P2 Medium"   color="#f59e0b" />
-            <StatCard value={counts.low}      label="P3 Low"      color="#10b981" />
+            <StatCard value={counts.critical} label="긴급" color="#ef4444" />
+            <StatCard value={counts.high}     label="높음" color="#c2410c" />
+            <StatCard value={counts.medium}   label="중간" color="#b45309" />
+            <StatCard value={counts.low}      label="낮음" color="#10b981" />
           </div>
 
           <div className={styles.filter_bar}>
