@@ -13,6 +13,10 @@ concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   performance_audit:
     name: Immutable Artifact Build & Audit
@@ -39,7 +43,7 @@ jobs:
           output_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
 
       # ---------------------------------------------------------
-      # PHASE 2: AUDIT THE ARTIFACT
+      # PHASE 2: AUDIT THE ARTIFACT (Includes spinnning up of staging container)
       # ---------------------------------------------------------
       - name: 🧪 Run Ephemeral Gatekeeper Audit
         # Calls your custom composite action
@@ -86,3 +90,14 @@ jobs:
           find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
           
           echo "✅ Cleanup complete. Zero storage bloat left behind."
+
+      # ---------------------------------------------------------
+      # PHASE 5: AUTO-MERGE ON SUCCESS
+      # ---------------------------------------------------------
+      - name: 🚀 Auto-Merge Pull Request
+        if: success() # Only runs if the audit and all previous steps passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "✅ Audit passed. Attempting to merge PR #${{ github.event.pull_request.number }}..."
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
