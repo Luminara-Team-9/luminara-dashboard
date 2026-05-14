@@ -114,31 +114,23 @@ runs:
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
 
-    - name: 📸 Emergency Screenshot
+    - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
       shell: bash
       run: |
-        # SRE FIX: Use a heredoc (<<-EOF) to avoid Python indentation hell in YAML
+        # SRE FIX: No Python script needed. Use the Playwright CLI directly.
+        # This prevents all indentation issues.
         singularity exec \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          python3 <<-'EOF'
-import sys
-from playwright.sync_api import sync_playwright
+          playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
 
-try:
-    with sync_playwright() as p:
-        browser = p.chromium.launch(args=['--no-sandbox'])
-        page = browser.new_page()
-        # Use the env variable directly inside the formatted string
-        page.goto("http://localhost:${{ env.TWIN_PORT }}", timeout=60000)
-        page.screenshot(path="debug_view.png")
-        print(f"✅ Captured view of: {page.title()}")
-        browser.close()
-except Exception as e:
-    print(f"❌ Playwright Error: {e}")
-    sys.exit(0)
-EOF
+        # 2. Execute the file inside Singularity
+        singularity exec \
+          --env TWIN_PORT=${{ env.TWIN_PORT }} \
+          --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+          python3 /tmp/debug_screenshot.py
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
