@@ -69,7 +69,7 @@ runs:
           sleep 3
           ELAPSED=$((ELAPSED+3))
         done
-        sleep 10
+        sleep 60
         echo -e "\n✅ Digital Twin is online and ready for audit!"
 
     - name: ⚡ Stage 3 - Execute Ephemeral Audit
@@ -80,7 +80,8 @@ runs:
         
         # 2. Inject it into the container
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
-        
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__AVATAR_URL="https://github.com/${{ github.actor }}.png"
+
         # 3. Existing metadata injections
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
@@ -117,18 +118,25 @@ runs:
       if: failure()
       shell: bash
       run: |
+       # SRE FIX: Use a heredoc (<<-EOF) to avoid Python indentation hell in YAML
         singularity exec \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          python3 -c "
+          python3 <<-'EOF'
+          import sys
           from playwright.sync_api import sync_playwright
-          with sync_playwright() as p:
-              browser = p.chromium.launch()
-              page = browser.new_page()
-              page.goto('http://localhost:${{ env.TWIN_PORT }}')
-              page.screenshot(path='debug_view.png')
-              print('HTML Content:', page.content()[:500])
-              browser.close()"
+
+          try:
+              with sync_playwright() as p:
+                  browser = p.chromium.launch(args=['--no-sandbox'])
+                  page = browser.new_page()
+                  page.goto("http://localhost:${{ env.TWIN_PORT }}", timeout=60000)
+                  page.screenshot(path="debug_view.png")
+                  print(f"✅ Captured view of: {page.title()}")
+                  browser.close()
+          except Exception as e:
+              print(f"❌ Playwright Error: {e}")
+          EOF
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
