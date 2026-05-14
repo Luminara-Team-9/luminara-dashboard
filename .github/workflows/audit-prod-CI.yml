@@ -49,6 +49,8 @@ jobs:
           audit_image_dir: ${{ env.IMAGE_DIR }}
           target_site: ${{ env.TARGET_SITE }}
           lhci_token: ${{ secrets.LHCI_BUILD_TOKEN }}
+          lhci_user: ${{ secrets.LHCI_SERVER_USER }}
+          lhci_password: ${{ secrets.LHCI_SERVER_PASS }}
 
       # ---------------------------------------------------------
       # PHASE 3: AGENT TRIGGER OR SUCCESS HANDOFF

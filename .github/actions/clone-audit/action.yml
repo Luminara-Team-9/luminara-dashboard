@@ -14,6 +14,12 @@ inputs:
   target_site:
     description: 'Path to the codebase (still needed for the Agent trigger)'
     required: true
+  lhci_user:
+    description: 'Username for LHCI Basic Auth'
+    required: true
+  lhci_password:
+    description: 'Password for LHCI Basic Auth'
+    required: true
 
 runs:
   using: 'composite'
@@ -66,9 +72,9 @@ runs:
       shell: bash
       env:
         LHCI_BUILD_TOKEN: ${{ inputs.lhci_token }}
+        LHCI_USER: ${{ inputs.lhci_user }} # Add these to your secrets
+        LHCI_PASS: ${{ inputs.lhci_password }}
         LHCI_COLLECT_URL: http://localhost:${{ env.TWIN_PORT }}/
-        LHCI_USER: ${{ secrets.LHCI_SERVER_USER }} # Add these to your secrets
-        LHCI_PASS: ${{ secrets.LHCI_SERVER_PASS }}
       run: |
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
