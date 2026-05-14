@@ -68,25 +68,69 @@ runs:
         LHCI_BUILD_TOKEN: ${{ inputs.lhci_token }}
         LHCI_COLLECT_URL: http://localhost:${{ env.TWIN_PORT }}/
       run: |
-        echo "Firing LHCI metrics against the Digital Twin..."
-        # 🚨 SRE FIX: Multi-Bind Architecture
-        # 1. Bind the Next.js code folder
-        # 2. Surgically bind the central config file into the same workspace
-        singularity exec \
-          --bind ./${{ inputs.target_site }}:/workspace \
-          --bind ./4_automation_tests/lighthouse-runner/lighthouserc.js:/workspace/lighthouserc.js \
-          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif npx lhci autorun --config=/workspace/lighthouserc.js
+        AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
+        mkdir -p "$AUDIT_TMP"
 
+        echo "🚀 Firing LHCI metrics against the Digital Twin on port ${{ env.TWIN_PORT }}..."
+
+        # We pass the URL explicitly to ensure it overrides any hardcoded config
         singularity exec \
-          --bind ./${{ inputs.target_site }}:/workspace \
-          --bind ./4_automation_tests:/scripts \
+          --bind ./${{ inputs.target_site }}:/data \
+          --bind ./4_automation_tests:/workspace \
+          --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          bash /scripts/run_audit_pipeline.sh
+          npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
+          --collect.url=$LHCI_COLLECT_URL \
+          --collect.settings.preset=desktop
 
-    - name: 🛑 Mandatory Teardown
+    - name: 📊 Stage 4 - Post Performance Summary
+      if: always()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "📝 Generating Performance Summary..."
+        
+        # SRE FIX: Updated path to 4_automation_tests/.lighthouseci/manifest.json
+        node -e "
+        const fs = require('fs');
+        const path = '4_automation_tests/.lighthouseci/manifest.json';
+        try {
+          if (!fs.existsSync(path)) throw new Error('Manifest not found');
+          const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
+          let table = '### ⚡ Lighthouse Performance Audit\n\n';
+          table += '| URL | Performance | Accessibility | Best Practices | SEO |\n';
+          table += '| :--- | :---: | :---: | :---: | :---: |\n';
+          
+          manifest.filter(run => run.isRepresentativeRun).forEach(run => {
+            const s = run.summary;
+            const score = (val) => val >= 0.9 ? '🟢 ' + Math.round(val * 100) : (val >= 0.5 ? '🟠 ' + Math.round(val * 100) : '🔴 ' + Math.round(val * 100));
+            const urlLabel = run.url.replace('http://localhost:${{ env.TWIN_PORT }}', 'Staging');
+            table += '| ' + urlLabel + ' | ' + score(s.performance) + ' | ' + score(s.accessibility) + ' | ' + score(s['best-practices']) + ' | ' + score(s.seo) + ' |\n';
+          });
+          
+          fs.writeFileSync('lhci_summary.md', table);
+        } catch (e) {
+          console.log(e.message);
+          fs.writeFileSync('lhci_summary.md', '⚠️ **Lighthouse Audit Failed:** Could not generate summary table. Check logs for boot errors.');
+        }
+        "
+
+        # Only post comment if in a Pull Request context
+        if [ -f "lhci_summary.md" ] && [ "${{ github.event.pull_request.number }}" != "" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body-file=lhci_summary.md
+        fi
+
+    - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
       shell: bash
       run: |
+        echo "------------------------------------------------"
+        echo "📊 DUMPING DIGITAL TWIN LOGS (Instance: ${{ env.TWIN_NAME }})"
+        echo "------------------------------------------------"
+        
+        # Path varies by Singularity version; this finds the specific run's logs
+        find "$HOME/.singularity/instances/logs" -name "${{ env.TWIN_NAME }}.*" -exec echo "--- File: {} ---" \; -exec cat {} \; || echo "No instance logs found."
         echo "Executing surgical teardown for Run ID: ${{ github.run_id }}"
 
         # 1. Gracefully stop the Digital Twin daemon
@@ -103,4 +147,7 @@ runs:
         echo "[..] Hunting for orphaned exec processes..."
         pkill -f "infrastructure_audit_ephemeral.sif.*${{ github.run_id }}" || echo "No zombie processes detected."
 
-        echo "✅ Teardown complete. Server environment is pristine."
+        # Cleanup the RAM directory after the exec finishes
+        rm -rf "$AUDIT_TMP"
+
+        echo "✅ Teardown & Cleanup complete. Server environment is pristine."
