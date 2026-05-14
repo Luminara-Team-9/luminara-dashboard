@@ -76,7 +76,7 @@ runs:
         # We pass the URL explicitly to ensure it overrides any hardcoded config
         singularity exec \
           --bind ./${{ inputs.target_site }}:/data \
-          --bind ./4_automation_tests:/workspace \
+          --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
