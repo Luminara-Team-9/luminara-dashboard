@@ -227,7 +227,16 @@ def run_auto():
                 # ETL fills NULL metric columns
                 cursor.execute("""
                     UPDATE lighthouse_runs SET
+                        timestamp            = COALESCE(%s, timestamp),
+                        lcp_ms               = %s,
+                        tbt_ms               = %s,
+                        cls_score            = %s,
+                        fcp_ms               = %s,
+                        si_ms                = %s,
+                        tti_ms               = %s,
+                        ttfb_ms              = %s,
                         inp_ms               = %s,
+                        performance_score    = %s,
                         accessibility_score  = %s,
                         best_practices_score = %s,
                         seo_score            = %s,
@@ -238,7 +247,16 @@ def run_auto():
                         image_size_kb        = %s
                     WHERE test_id = %s
                 """, (
+                    transformed['timestamp'],
+                    transformed['lcp_ms'],
+                    transformed['tbt_ms'],
+                    transformed['cls_score'],
+                    transformed['fcp_ms'],
+                    transformed['si_ms'],
+                    transformed['tti_ms'],
+                    transformed['ttfb_ms'],
                     transformed['inp_ms'],
+                    transformed['performance_score'],
                     transformed['accessibility_score'],
                     transformed['best_practices_score'],
                     transformed['seo_score'],
@@ -249,7 +267,6 @@ def run_auto():
                     transformed['image_size_kb'],
                     test_id,
                 ))
-
                 # STEP 4 — Insert opportunities
                 from load import insert_opportunities
                 insert_opportunities(
