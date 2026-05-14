@@ -67,6 +67,8 @@ runs:
       env:
         LHCI_BUILD_TOKEN: ${{ inputs.lhci_token }}
         LHCI_COLLECT_URL: http://localhost:${{ env.TWIN_PORT }}/
+        LHCI_USER: ${{ secrets.LHCI_SERVER_USER }} # Add these to your secrets
+        LHCI_PASS: ${{ secrets.LHCI_SERVER_PASS }}
       run: |
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
@@ -82,41 +84,6 @@ runs:
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
           --collect.url=$LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
-
-    - name: 📝 Generate summary
-      if: always()
-      shell: bash
-      run: |
-        echo "📝 Generating Performance Summary..."
-        
-        # SRE FIX: Use absolute path for manifest lookup
-        node -e "
-        const fs = require('fs');
-        const path = '${{ github.workspace }}/4_automation_tests/.lighthouseci/manifest.json';
-        try {
-          if (!fs.existsSync(path)) throw new Error('LHCI Manifest not found at ' + path);
-          const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
-          let table = '### ⚡ Lighthouse Performance Audit\n\n';
-          table += '| URL | Performance | Accessibility | Best Practices | SEO |\n';
-          table += '| :--- | :---: | :---: | :---: | :---: |\n';
-          
-          manifest.filter(run => run.isRepresentativeRun).forEach(run => {
-            const s = run.summary;
-            const score = (val) => val >= 0.9 ? '🟢 ' + Math.round(val * 100) : (val >= 0.5 ? '🟠 ' + Math.round(val * 100) : '🔴 ' + Math.round(val * 100));
-            const urlLabel = run.url.replace('http://localhost:${{ env.TWIN_PORT }}', 'Staging');
-            table += '| ' + urlLabel + ' | ' + score(s.performance) + ' | ' + score(s.accessibility) + ' | ' + score(s['best-practices']) + ' | ' + score(s.seo) + ' |\n';
-          });
-          
-          fs.writeFileSync('lhci_summary.md', table);
-        } catch (e) {
-          console.error('❌ Summary Error:', e.message);
-          fs.writeFileSync('lhci_summary.md', '⚠️ **Lighthouse Audit Failed:** Could not generate summary table. Check logs for boot errors.');
-        }
-        "
-
-        if [ -f "lhci_summary.md" ] && [ "${{ github.event.pull_request.number }}" != "" ]; then
-          gh pr comment ${{ github.event.pull_request.number }} --body-file=lhci_summary.md
-        fi
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()

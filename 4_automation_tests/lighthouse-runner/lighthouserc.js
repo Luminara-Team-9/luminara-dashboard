@@ -21,7 +21,8 @@ module.exports = {
     },
     upload: {
       target: 'lhci',
-      serverBaseUrl: 'http://127.0.0.1:9001',
+      // Format: http://user:password@host:port
+      serverBaseUrl: `http://${process.env.LHCI_USER}:${process.env.LHCI_PASS}@127.0.0.1:9001`,
       token: process.env.LHCI_BUILD_TOKEN,
     },
   },
