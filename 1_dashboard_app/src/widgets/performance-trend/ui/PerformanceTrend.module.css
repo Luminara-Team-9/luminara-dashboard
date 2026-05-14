@@ -19,14 +19,14 @@
   margin: 0;
   font-size: 18px;
   font-weight: 900;
-  color: #e2e8f0;
+  color: #1e293b;
   letter-spacing: 0;
 }
 
 .click_hint {
   display: block;
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
   margin-top: 4px;
   line-height: 1.35;
 }
@@ -36,8 +36,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  background-color: #0d1424;
-  border: 1px solid #1e293b;
+  background-color: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-radius: 10px;
   padding: 3px;
 }
@@ -55,8 +55,8 @@
   white-space: nowrap;
 }
 
-.tab:hover  { color: #94a3b8; background-color: #1a2234; }
-.tab_active { color: #f1f5f9; background-color: #1e3a5f; }
+.tab:hover  { color: #64748b; background-color: #eef2f7; }
+.tab_active { color: #ffffff; background-color: #2563eb; }
 
 /* ── 차트 컨테이너 ── */
 .chart_wrap {
@@ -65,8 +65,8 @@
   min-width: 0;
   min-height: 420px;
   position: relative;
-  background-color: #111827;
-  border: 1px solid #1e293b;
+  background-color: #dbe2ea;
+  border: 1px solid #d7dee8;
   border-radius: 16px;
   overflow: visible;
 }
@@ -82,7 +82,7 @@
 
 /* ── 커스텀 툴팁 ── */
 .tooltip {
-  background-color: #1e293b;
+  background-color: #d7dee8;
   border: 1px solid #334155;
   border-radius: 10px;
   padding: 10px 14px;
@@ -90,7 +90,7 @@
 }
 
 .tooltip_date {
-  color: #94a3b8;
+  color: #64748b;
   font-weight: 600;
   margin-bottom: 6px;
 }
@@ -157,7 +157,7 @@
 .panel_version {
   font-size: 12px;
   font-weight: 700;
-  color: #60a5fa;
+  color: #2563eb;
   background: rgba(96, 165, 250, 0.1);
   border: 1px solid rgba(96, 165, 250, 0.2);
   padding: 1px 7px;
@@ -166,13 +166,13 @@
 
 .panel_desc {
   font-size: 11px;
-  color: #475569;
+  color: #64748b;
 }
 
 .panel_close {
   background: none;
   border: none;
-  color: #475569;
+  color: #64748b;
   cursor: pointer;
   font-size: 11px;
   padding: 2px 6px;
@@ -182,15 +182,15 @@
 }
 
 .panel_close:hover {
-  color: #94a3b8;
-  background-color: #1e293b;
+  color: #64748b;
+  background-color: #d7dee8;
 }
 
 /* ── 비즈니스 섹션 ── */
 .section_label {
   font-size: 10px;
   font-weight: 600;
-  color: #475569;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 6px;
@@ -206,7 +206,7 @@
 .cause_desc {
   font-size: 13px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: #1e293b;
   margin: 0;
 }
 
@@ -241,15 +241,15 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: #111827;
-  border: 1px solid #1e293b;
+  background: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-radius: 6px;
   padding: 5px 8px;
 }
 
 .snapshot_label {
   font-size: 9px;
-  color: #475569;
+  color: #64748b;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -258,13 +258,13 @@
 .snapshot_val {
   font-size: 13px;
   font-weight: 700;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 /* ── 구분선 ── */
 .section_divider {
   height: 1px;
-  background: #1e293b;
+  background: #d7dee8;
 }
 
 /* ── 릴리즈 섹션 ── */
@@ -281,8 +281,8 @@
 }
 
 .delta_card {
-  background-color: #111827;
-  border: 1px solid #1e293b;
+  background-color: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-radius: 8px;
   padding: 8px 10px;
   display: flex;
@@ -300,13 +300,13 @@
 .delta_metric_name {
   font-size: 11px;
   font-weight: 700;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .delta_target {
   font-size: 9px;
-  color: #475569;
-  background-color: #1e293b;
+  color: #64748b;
+  background-color: #d7dee8;
   border-radius: 4px;
   padding: 1px 5px;
   white-space: nowrap;
@@ -320,7 +320,7 @@
   font-weight: 600;
 }
 
-.delta_before { opacity: 0.5; color: #94a3b8; }
+.delta_before { opacity: 0.5; color: #64748b; }
 .delta_arrow  { color: #334155; font-size: 10px; }
 .delta_after  { font-weight: 800; }
 .pass         { color: #10b981; }

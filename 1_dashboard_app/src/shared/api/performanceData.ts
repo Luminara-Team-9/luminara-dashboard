@@ -2,7 +2,7 @@ import type { PerformanceApiResponse } from '@/shared/lib/types';
 import mockData from '@/shared/api/performance-mock.json';
 import { fetchExternalTrafficMetrics } from '@/shared/api/externalTrafficAdapter';
 
-const PERFORMANCE_API_URL = process.env.DASHBOARD_PERFORMANCE_API_URL;
+const PERFORMANCE_API_URL = process.env.DASHBOARD_PERFORMANCE_API_URL ?? process.env.DASHBOARD_DATA_API_URL;
 
 function isPerformanceApiResponse(value: unknown): value is PerformanceApiResponse {
   if (!value || typeof value !== 'object') return false;
