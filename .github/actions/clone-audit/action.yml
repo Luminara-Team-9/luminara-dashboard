@@ -69,30 +69,31 @@ runs:
           sleep 3
           ELAPSED=$((ELAPSED+3))
         done
-        sleep 10
+        sleep 60
         echo -e "\n✅ Digital Twin is online and ready for audit!"
 
     - name: ⚡ Stage 3 - Execute Ephemeral Audit
       shell: bash
       run: |
-        # 1. Capture the message on the HOST (where Git exists)
+        # 1. Capture Git Metadata from Host
         COMMIT_MSG=$(git log -1 --pretty=%B)
+        COMMIT_TIME=$(git log -1 --format=%ct)
         
-        # 2. Inject it into the container
+        # 2. Inject ALL Metadata (Added Commit Time and Avatar URL)
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
-        
-        # 3. Existing metadata injections
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_TIME="$COMMIT_TIME"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
-        export SINGULARITYENV_LHCI_COLLECT_URL="http://localhost:${{ env.TWIN_PORT }}/"
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__AVATAR_URL="https://github.com/${{ github.actor }}.png"
         
-        # 4. Credentials
+        # 3. Credentials & URL
         export SINGULARITYENV_LHCI_BUILD_TOKEN="${{ inputs.lhci_token }}"
         export SINGULARITYENV_LHCI_USER="${{ inputs.lhci_user }}"
         export SINGULARITYENV_LHCI_PASS="${{ inputs.lhci_password }}"
         export SINGULARITYENV_LHCI_GITHUB_TOKEN="${{ inputs.github_token }}"
+        export SINGULARITYENV_LHCI_COLLECT_URL="http://localhost:${{ env.TWIN_PORT }}/"
 
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
@@ -113,22 +114,23 @@ runs:
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
 
-    - name: 📸 Emergency Screenshot
+    - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
       shell: bash
       run: |
+        # SRE FIX: No Python script needed. Use the Playwright CLI directly.
+        # This prevents all indentation issues.
         singularity exec \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          python3 -c "
-          from playwright.sync_api import sync_playwright
-          with sync_playwright() as p:
-              browser = p.chromium.launch()
-              page = browser.new_page()
-              page.goto('http://localhost:${{ env.TWIN_PORT }}')
-              page.screenshot(path='debug_view.png')
-              print('HTML Content:', page.content()[:500])
-              browser.close()"
+          playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
+
+        # 2. Execute the file inside Singularity
+        singularity exec \
+          --env TWIN_PORT=${{ env.TWIN_PORT }} \
+          --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+          python3 /tmp/debug_screenshot.py
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
