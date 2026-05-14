@@ -64,6 +64,8 @@ def get_embed_model():
 
 
 class AgentState(TypedDict):
+    test_id: Optional[int]
+
     url: str
     page_type: str
     device_type: str
@@ -257,34 +259,123 @@ def safe_insert(cursor, table_name: str, data: dict, returning: str = "id"):
     return cursor.fetchone()[0]
 
 
-# ── N1: Get latest 3-run metrics + aggregated opportunities ──────────────────
+# ── N1: Get latest metrics + aggregated opportunities ──────────────────
 
 def get_metrics(state: AgentState) -> AgentState:
     """
     N1 purpose:
-    - Select latest daily Lighthouse runs for same URL + page_type + device_type.
-    - Use up to 3 runs because Lighthouse is repeated 3 times per page/device.
-    - Average metrics for stable judgment.
-    - Aggregate opportunities only from those selected test_ids.
+    - If test_id is provided:
+        directly analyze that failed Lighthouse audit.
+    - Otherwise:
+        use latest 3-run average for same URL/page/device.
+    - Detect failed metrics.
+    - Aggregate and rank Lighthouse opportunities.
     """
 
     print("\n[N1] Getting metrics...")
 
-    url = state["url"].rstrip("/")
-    page_type = state["page_type"]
-    device_type = state["device_type"]
+    test_id = state.get("test_id")
+    url = state.get("url")
+    page_type = state.get("page_type")
+    device_type = state.get("device_type")
     max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Pick latest daily group.
-    # Example:
-    # main + desktop has 3 runs today.
-    # We select those 3 latest same-day runs and average them.
-    cursor.execute(
-        """
-        WITH candidate_runs AS (
+    # ─────────────────────────────────────────────────────────────
+    # MODE 1: Direct failed audit analysis using test_id
+    # ─────────────────────────────────────────────────────────────
+
+    if test_id:
+        cursor.execute(
+            """
+            SELECT
+                test_id,
+                url,
+                page_type,
+                device_type,
+                lcp_ms,
+                tbt_ms,
+                cls_score,
+                performance_score,
+                timestamp,
+                created_at,
+                run_number
+            FROM lighthouse_runs
+            WHERE test_id = %s
+            """,
+            (test_id,),
+        )
+
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            print(f"  ⚠️ No lighthouse_run found for test_id={test_id}")
+            return {**state, "should_end": True}
+
+        (
+            selected_test_id,
+            url,
+            page_type,
+            device_type,
+            lcp,
+            tbt,
+            cls,
+            perf,
+            timestamp,
+            created_at,
+            run_number,
+        ) = row
+
+        runs = [
+            (
+                selected_test_id,
+                lcp,
+                tbt,
+                cls,
+                perf,
+                timestamp,
+                created_at,
+                run_number,
+            )
+        ]
+
+    # ─────────────────────────────────────────────────────────────
+    # MODE 2: Use latest 3 runs by URL/page/device
+    # ─────────────────────────────────────────────────────────────
+
+    else:
+        if not url or not page_type or not device_type:
+            conn.close()
+            print("  ⚠️ Missing url/page_type/device_type and no test_id provided")
+            return {**state, "should_end": True}
+
+        url = url.rstrip("/")
+
+        cursor.execute(
+            """
+            WITH candidate_runs AS (
+                SELECT
+                    test_id,
+                    lcp_ms,
+                    tbt_ms,
+                    cls_score,
+                    performance_score,
+                    timestamp,
+                    created_at,
+                    DATE(COALESCE(timestamp, created_at)) AS run_date,
+                    run_number
+                FROM lighthouse_runs
+                WHERE TRIM(TRAILING '/' FROM url) = %s
+                  AND page_type = %s
+                  AND device_type = %s
+            ),
+            latest_day AS (
+                SELECT MAX(run_date) AS run_date
+                FROM candidate_runs
+            )
             SELECT
                 test_id,
                 lcp_ms,
@@ -293,39 +384,22 @@ def get_metrics(state: AgentState) -> AgentState:
                 performance_score,
                 timestamp,
                 created_at,
-                DATE(COALESCE(timestamp, created_at)) AS run_date,
                 run_number
-            FROM lighthouse_runs
-            WHERE TRIM(TRAILING '/' FROM url) = %s
-              AND page_type = %s
-              AND device_type = %s
-        ),
-        latest_day AS (
-            SELECT MAX(run_date) AS run_date
             FROM candidate_runs
+            WHERE run_date = (SELECT run_date FROM latest_day)
+            ORDER BY run_number ASC NULLS LAST, created_at DESC
+            LIMIT 3
+            """,
+            (url, page_type, device_type),
         )
-        SELECT
-            test_id,
-            lcp_ms,
-            tbt_ms,
-            cls_score,
-            performance_score,
-            timestamp,
-            created_at,
-            run_number
-        FROM candidate_runs
-        WHERE run_date = (SELECT run_date FROM latest_day)
-        ORDER BY run_number ASC NULLS LAST, created_at DESC
-        LIMIT 3
-        """,
-        (url, page_type, device_type),
-    )
 
-    runs = cursor.fetchall()
+        runs = cursor.fetchall()
+
+    # ─────────────────────────────────────────────────────────────
 
     if not runs:
         conn.close()
-        print(f"  ⚠️ No data found for {url} [{page_type}] [{device_type}]")
+        print("  ⚠️ No Lighthouse runs found")
         return {**state, "should_end": True}
 
     test_ids = [r[0] for r in runs]
@@ -339,6 +413,10 @@ def get_metrics(state: AgentState) -> AgentState:
     avg_tbt = sum(tbt_values) / len(tbt_values) if tbt_values else 0
     avg_cls = sum(cls_values) / len(cls_values) if cls_values else 0
     avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
+
+    # ─────────────────────────────────────────────────────────────
+    # Detect failed metrics
+    # ─────────────────────────────────────────────────────────────
 
     failed_metrics = []
 
@@ -354,12 +432,17 @@ def get_metrics(state: AgentState) -> AgentState:
     if avg_cls > 0.1:
         failed_metrics.append("CLS")
 
+    print(f"  ✅ Failed metrics: {failed_metrics}")
+
     if not failed_metrics:
-        print("✅ No failed metrics. Agent does not need to run.")
+        conn.close()
+        print("  ✅ No failed metrics detected")
         return {**state, "should_end": True}
 
-    # Confidence based on repeated LCP failure.
-    # If LCP fails in all 3 runs, confidence is high.
+    # ─────────────────────────────────────────────────────────────
+    # Confidence calculation
+    # ─────────────────────────────────────────────────────────────
+
     failed_lcp_runs = [v for v in lcp_values if v > 2500]
 
     if len(failed_lcp_runs) >= 3:
@@ -374,18 +457,10 @@ def get_metrics(state: AgentState) -> AgentState:
         "avg_tbt_ms": round(avg_tbt, 2),
         "avg_cls_score": round(avg_cls, 4),
         "avg_performance": round(avg_perf, 1),
-
         "failed_metrics": failed_metrics,
-
         "test_ids": test_ids,
         "run_count": len(runs),
     }
-
-
-    if not failed_metrics:
-        print("  ✅ No failed metrics detected")
-        conn.close()
-        return {**state, "should_end": True}
 
     print(f"  ✅ Selected test_ids: {test_ids}")
     print(f"  ✅ LCP avg: {metrics['avg_lcp_ms']}ms")
@@ -394,11 +469,10 @@ def get_metrics(state: AgentState) -> AgentState:
     print(f"  ✅ Score avg: {metrics['avg_performance']}")
     print(f"  ✅ Confidence: {confidence}")
 
-    # Aggregate opportunities only from the selected latest 3 runs.
-    # Ranking:
-    # 1. issue frequency across selected runs
-    # 2. average savings
-    # 3. severity
+    # ─────────────────────────────────────────────────────────────
+    # Aggregate opportunities
+    # ─────────────────────────────────────────────────────────────
+
     cursor.execute(
         """
         SELECT
@@ -459,6 +533,10 @@ def get_metrics(state: AgentState) -> AgentState:
 
     return {
         **state,
+        "test_id": test_id,
+        "url": url,
+        "page_type": page_type,
+        "device_type": device_type,
         "metrics": metrics,
         "opportunities": opportunities,
         "confidence": confidence,
@@ -870,6 +948,11 @@ def main():
         description="Luminara Remediation Agent — Phase 1"
     )
 
+    parser.add_argument(
+        "--test-id",
+        type=int,
+        help="Specific failed Lighthouse test_id to analyze"
+    )
     parser.add_argument("--url", help="URL to analyze")
     parser.add_argument(
         "--page-type",
@@ -891,11 +974,12 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.url:
+    if not args.test_id and not args.url:
         print("Usage:")
+        print("  python3 agent.py --test-id 68 --max-opportunities 3 --dry-run")
         print(
-            'python3 agent.py --url "https://www.decathlon.co.kr/" '
-            "--page-type main --device-type desktop --max-opportunities 5 --dry-run"
+            '  python3 agent.py --url "https://www.decathlon.co.kr/" '
+            "--page-type main --device-type desktop --max-opportunities 3 --dry-run"
         )
         return
 
@@ -914,6 +998,7 @@ def main():
 
     result = agent.invoke(
         {
+            "test_id": args.test_id,
             "url": args.url,
             "page_type": args.page_type,
             "device_type": args.device_type,
