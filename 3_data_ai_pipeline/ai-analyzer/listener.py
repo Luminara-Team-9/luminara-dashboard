@@ -1,15 +1,20 @@
-import os
 import subprocess
 from datetime import datetime
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from agent import build_agent
+
 app = FastAPI()
 
 BASE_DIR = "/abr/coss41/shared_workspace/yuyu_workspace/codebase/luminara-dashboard"
-AI_DIR = f"{BASE_DIR}/3_data_ai_pipeline/ai-analyzer"
 ETL_DIR = f"{BASE_DIR}/3_data_ai_pipeline/etl"
 PYTHON = f"{BASE_DIR}/.venv/bin/python3"
+
+# Load LangGraph agent once when listener starts
+print("🚀 Loading Remediation Agent once...")
+agent_app = build_agent()
+print("✅ Remediation Agent ready")
 
 
 class TriggerPayload(BaseModel):
@@ -17,13 +22,16 @@ class TriggerPayload(BaseModel):
     page_type: str = "main"
     device_type: str = "desktop"
     max_opportunities: int = 5
-    run_etl: bool = True
-    dry_run: bool = False
+    run_etl: bool = False
+    dry_run: bool = True
 
 
 @app.get("/")
 def root():
-    return {"status": "Luminara AI listener is running"}
+    return {
+        "status": "Luminara AI listener is running",
+        "message": "Use POST /trigger to run the AI remediation agent"
+    }
 
 
 @app.get("/health")
@@ -38,8 +46,10 @@ def health():
 def trigger(payload: TriggerPayload):
     logs = []
 
+    # Optional ETL step
     if payload.run_etl:
         etl_cmd = [PYTHON, "pipeline.py", "--auto"]
+
         etl_result = subprocess.run(
             etl_cmd,
             cwd=ETL_DIR,
@@ -62,46 +72,38 @@ def trigger(payload: TriggerPayload):
                 "logs": logs,
             }
 
-    agent_cmd = [
-        PYTHON,
-        "agent.py",
-        "--url", payload.url,
-        "--page-type", payload.page_type,
-        "--device-type", payload.device_type,
-        "--max-opportunities", str(payload.max_opportunities),
-    ]
+    # Run agent directly in same Python process
+    try:
+        result = agent_app.invoke({
+            "url": payload.url,
+            "page_type": payload.page_type,
+            "device_type": payload.device_type,
+            "dry_run": payload.dry_run,
+            "max_opportunities": payload.max_opportunities,
+            "should_end": False,
+            "opp_index": 0,
+        })
 
-    if payload.dry_run:
-        agent_cmd.append("--dry-run")
+        logs.append({
+            "step": "agent",
+            "status": "completed",
+            "confidence": result.get("confidence"),
+            "processed": result.get("opp_index", 0),
+        })
 
-    agent_result = subprocess.run(
-        agent_cmd,
-        cwd=AI_DIR,
-        capture_output=True,
-        text=True,
-        timeout=1200,
-    )
-
-    logs.append({
-        "step": "agent",
-        "command": " ".join(agent_cmd),
-        "returncode": agent_result.returncode,
-        "stdout": agent_result.stdout[-5000:],
-        "stderr": agent_result.stderr[-5000:],
-    })
-
-    if agent_result.returncode != 0:
         return {
-            "status": "agent_failed",
+            "status": "success",
+            "url": payload.url,
+            "page_type": payload.page_type,
+            "device_type": payload.device_type,
+            "max_opportunities": payload.max_opportunities,
+            "dry_run": payload.dry_run,
             "logs": logs,
         }
 
-    return {
-        "status": "success",
-        "url": payload.url,
-        "page_type": payload.page_type,
-        "device_type": payload.device_type,
-        "max_opportunities": payload.max_opportunities,
-        "dry_run": payload.dry_run,
-        "logs": logs,
-    }
+    except Exception as e:
+        return {
+            "status": "agent_failed",
+            "error": str(e),
+            "logs": logs,
+        }
