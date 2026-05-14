@@ -1,13 +1,6 @@
 """
 load.py
 Inserts processed Lighthouse data into core_db.
-Part of ETL pipeline — runs after transform.py.
-
-Tables affected:
-    playwright_runs        (session tracking)
-    lighthouse_runs        (metrics)
-    lighthouse_raw_reports (raw JSON)
-    lighthouse_opportunities (fixable issues)
 """
 
 import os
@@ -19,59 +12,39 @@ load_dotenv()
 
 
 def get_db_connection():
-    """
-    Connect to core_db on production server.
-    Variable names match .env.example template.
-    """
     return psycopg2.connect(
-        host=os.getenv('HOST_IP', '127.0.0.1'),
-        port=os.getenv('PGPORT', '5432'),
-        dbname=os.getenv('POSTGRES_DB'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD')
+        host=os.getenv("HOST_IP", "127.0.0.1"),
+        port=os.getenv("PGPORT", "5432"),
+        dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
     )
 
 
 def create_playwright_run(conn, metadata):
-    """
-    Create session record in playwright_runs.
-    run_type: 'decathlon_daily' / 'competitor_scan' / 'manual_test'
-    Returns playwright_run_id.
-    """
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO playwright_runs (
-            run_type,
-            url,
-            device_type,
-            started_at,
-            status
+            run_type, url, device_type, started_at, status
         ) VALUES (%s, %s, %s, NOW(), 'running')
         RETURNING id
     """, (
-        metadata.get('run_type'),
-        metadata.get('url', None),
-        metadata.get('device_type', None),
+        metadata.get("run_type"),
+        metadata.get("url"),
+        metadata.get("device_type"),
     ))
     return cursor.fetchone()[0]
 
 
-def update_playwright_run(
-    conn, playwright_run_id,
-    success_count, failed_count
-):
-    """
-    Update session status when ETL finishes.
-    status: 'completed' / 'partial' / 'failed'
-    """
+def update_playwright_run(conn, playwright_run_id, success_count, failed_count):
     cursor = conn.cursor()
 
     if failed_count == 0:
-        status = 'completed'
+        status = "completed"
     elif success_count == 0:
-        status = 'failed'
+        status = "failed"
     else:
-        status = 'partial'
+        status = "partial"
 
     cursor.execute("""
         UPDATE playwright_runs
@@ -86,18 +59,11 @@ def update_playwright_run(
         success_count,
         failed_count,
         status,
-        playwright_run_id
+        playwright_run_id,
     ))
 
 
-def insert_lighthouse_run(
-    conn, transformed, metadata,
-    playwright_run_id
-):
-    """
-    Insert one page scan into lighthouse_runs.
-    Returns test_id to link raw_reports + opportunities.
-    """
+def insert_lighthouse_run(conn, transformed, metadata, playwright_run_id):
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO lighthouse_runs (
@@ -119,40 +85,36 @@ def insert_lighthouse_run(
         RETURNING test_id
     """, (
         playwright_run_id,
-        transformed['url'],
-        metadata['site_type'],
-        metadata.get('competitor_name', None),
-        metadata['page_type'],
-        metadata['device_type'],
-        metadata.get('network_profile', None),
-        metadata['run_number'],
-        transformed['timestamp'],
-        transformed['lcp_ms'],
-        transformed['tbt_ms'],
-        transformed['cls_score'],
-        transformed['fcp_ms'],
-        transformed['si_ms'],
-        transformed['tti_ms'],
-        transformed['ttfb_ms'],
-        transformed['inp_ms'],
-        transformed['performance_score'],
-        transformed['accessibility_score'],
-        transformed['best_practices_score'],
-        transformed['seo_score'],
-        transformed['total_requests'],
-        transformed['page_size_kb'],
-        transformed['js_size_kb'],
-        transformed['css_size_kb'],
-        transformed['image_size_kb'],
+        transformed["url"],
+        metadata["site_type"],
+        metadata.get("competitor_name"),
+        metadata["page_type"],
+        metadata["device_type"],
+        metadata.get("network_profile"),
+        metadata["run_number"],
+        transformed["timestamp"],
+        transformed["lcp_ms"],
+        transformed["tbt_ms"],
+        transformed["cls_score"],
+        transformed["fcp_ms"],
+        transformed["si_ms"],
+        transformed["tti_ms"],
+        transformed["ttfb_ms"],
+        transformed["inp_ms"],
+        transformed["performance_score"],
+        transformed["accessibility_score"],
+        transformed["best_practices_score"],
+        transformed["seo_score"],
+        transformed["total_requests"],
+        transformed["page_size_kb"],
+        transformed["js_size_kb"],
+        transformed["css_size_kb"],
+        transformed["image_size_kb"],
     ))
     return cursor.fetchone()[0]
 
 
 def insert_raw_report(conn, test_id, raw_json):
-    """
-    Store complete raw Lighthouse JSON.
-    Kept for reprocessing without re-running audits.
-    """
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO lighthouse_raw_reports (
@@ -161,13 +123,21 @@ def insert_raw_report(conn, test_id, raw_json):
     """, (test_id, Json(raw_json)))
 
 
-def insert_opportunities(conn, test_id, opportunities):
+def delete_opportunities_for_test(conn, test_id):
     """
-    Insert fixable issues found by Lighthouse.
-    Sorted highest savings_ms first (from extract.py).
-    Agent uses frequency across 3 runs to prioritize fixes.
+    Delete existing opportunities for one test_id.
+    Needed before reprocessing the same Lighthouse report.
     """
     cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM lighthouse_opportunities WHERE test_id = %s",
+        (test_id,),
+    )
+
+
+def insert_opportunities(conn, test_id, opportunities):
+    cursor = conn.cursor()
+
     for opp in opportunities:
         cursor.execute("""
             INSERT INTO lighthouse_opportunities (
@@ -181,61 +151,43 @@ def insert_opportunities(conn, test_id, opportunities):
             )
         """, (
             test_id,
-            opp['opportunity_id'],
-            opp['title'],
-            opp['description'],
-            opp['savings_ms'],
-            opp['severity'],
-            opp['category'],
-            Json(opp['details']) if opp.get('details') else None,
+            opp["opportunity_id"],
+            opp["title"],
+            opp["description"],
+            opp["savings_ms"],
+            opp["severity"],
+            opp["category"],
+            Json(opp["details"]) if opp.get("details") else None,
         ))
 
 
-def load(transformed, raw_json, metadata,
-         playwright_run_id=None):
-    """
-    Main load function.
-    Runs all inserts in one transaction.
-    If anything fails → full rollback, no partial data.
-
-    Args:
-        transformed:       clean metrics from transform.py
-        raw_json:          original Lighthouse JSON
-        metadata:          scan info (site_type, page_type etc.)
-        playwright_run_id: pass existing session ID to continue
-                          None = create new session
-
-    Returns:
-        dict with success, playwright_run_id, test_id
-    """
+def load(transformed, raw_json, metadata, playwright_run_id=None):
     conn = None
+
     try:
         conn = get_db_connection()
 
-        # create new session or continue existing one
         if playwright_run_id is None:
-            playwright_run_id = create_playwright_run(
-                conn, metadata
-            )
+            playwright_run_id = create_playwright_run(conn, metadata)
 
-        # insert metrics → get test_id
         test_id = insert_lighthouse_run(
-            conn, transformed, metadata,
-            playwright_run_id
+            conn,
+            transformed,
+            metadata,
+            playwright_run_id,
         )
 
-        # store raw JSON for reprocessing later
         insert_raw_report(conn, test_id, raw_json)
 
-        # insert opportunities for agent analysis
         insert_opportunities(
-            conn, test_id,
-            transformed['opportunities']
+            conn,
+            test_id,
+            transformed["opportunities"],
         )
 
         conn.commit()
 
-        print(f"✅ Loaded successfully!")
+        print("✅ Loaded successfully!")
         print(f"   db:                {os.getenv('POSTGRES_DB')}")
         print(f"   playwright_run_id: {playwright_run_id}")
         print(f"   test_id:           {test_id}")
@@ -244,9 +196,9 @@ def load(transformed, raw_json, metadata,
         print(f"   opportunities:     {len(transformed['opportunities'])}")
 
         return {
-            'playwright_run_id': playwright_run_id,
-            'test_id':           test_id,
-            'success':           True
+            "playwright_run_id": playwright_run_id,
+            "test_id": test_id,
+            "success": True,
         }
 
     except Exception as e:
@@ -254,8 +206,8 @@ def load(transformed, raw_json, metadata,
             conn.rollback()
         print(f"❌ Load failed: {e}")
         return {
-            'success': False,
-            'error':   str(e)
+            "success": False,
+            "error": str(e),
         }
 
     finally:

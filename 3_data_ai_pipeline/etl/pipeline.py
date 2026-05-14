@@ -1,50 +1,20 @@
 """
 pipeline.py
 Master ETL pipeline — connects extract → transform → load.
-
-Two modes:
-
-    MANUAL (--file):
-        Test pipeline with one real Lighthouse JSON file.
-        Use this before Phoo's automation is ready.
-
-        python pipeline.py \
-            --file path/to/lighthouse.json \
-            --site_type decathlon \
-            --page_type main \
-            --device_type mobile \
-            --run_number 1
-
-    AUTO (--auto):
-        Reads ALL unprocessed raw JSON from core_db.
-        Runs automatically via cron job every night.
-        Use this after Phoo's automation is ready.
-
-        python pipeline.py --auto
-        Cron: 30 2 * * * python pipeline.py --auto
-
-Flow:
-    raw Lighthouse JSON
-            ↓
-    extract_metrics() → transform() → load()
-            ↓
-    core_db:
-    → playwright_runs
-    → lighthouse_runs
-    → lighthouse_raw_reports
-    → lighthouse_opportunities
 """
 
-import os
 import json
 import argparse
 from dotenv import load_dotenv
+
 from extract import extract_metrics
 from transform import transform
 from load import (
     load,
     get_db_connection,
     update_playwright_run,
+    insert_opportunities,
+    delete_opportunities_for_test,
 )
 
 load_dotenv()
@@ -58,24 +28,8 @@ def run_pipeline(
     run_number,
     competitor_name=None,
     network_profile=None,
-    playwright_run_id=None
+    playwright_run_id=None,
 ):
-    """
-    Run full ETL pipeline on one Lighthouse JSON file.
-
-    Args:
-        filepath:          path to Lighthouse JSON file
-        site_type:         'decathlon' or 'competitor'
-        page_type:         'main', 'product', 'cart' etc.
-        device_type:       'mobile' or 'desktop'
-        run_number:        1, 2, or 3
-        competitor_name:   'nike', 'adidas' etc. (None for Decathlon)
-        network_profile:   'WiFi', '4G' etc. (None if unknown)
-        playwright_run_id: continue existing session or None = new
-
-    Returns:
-        dict with success, playwright_run_id, test_id
-    """
     print("=" * 50)
     print("ETL PIPELINE — MANUAL MODE")
     print("=" * 50)
@@ -84,57 +38,52 @@ def run_pipeline(
     print(f"→ Page:       {page_type}")
     print(f"→ Device:     {device_type}")
     print(f"→ Run:        {run_number}")
+
     if competitor_name:
         print(f"→ Competitor: {competitor_name}")
 
-    # run_type based on site_type
     run_type = (
-        'competitor_scan'
-        if site_type == 'competitor'
-        else 'decathlon_daily'
+        "competitor_scan"
+        if site_type == "competitor"
+        else "decathlon_daily"
     )
 
-    # read raw JSON from file
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         raw_json = json.load(f)
 
-    # STEP 1 — Extract
-    print(f"\n[1/3] Extracting...")
+    print("\n[1/3] Extracting...")
     extracted = extract_metrics(raw_json)
     print(f"✅ URL:           {extracted.get('url')}")
     print(f"✅ Opportunities: {len(extracted['opportunities'])}")
 
-    # STEP 2 — Transform
-    print(f"\n[2/3] Transforming...")
+    print("\n[2/3] Transforming...")
     transformed = transform(extracted)
     print(f"✅ Performance:   {transformed['performance_score']}")
     print(f"✅ LCP:           {transformed['lcp_ms']}ms")
     print(f"✅ TBT:           {transformed['tbt_ms']}ms")
 
-    # metadata from args + url from JSON
     metadata = {
-        'run_type':        run_type,
-        'site_type':       site_type,
-        'competitor_name': competitor_name,
-        'page_type':       page_type,
-        'device_type':     device_type,
-        'network_profile': network_profile,
-        'run_number':      run_number,
-        'url':             extracted.get('url'),
+        "run_type": run_type,
+        "site_type": site_type,
+        "competitor_name": competitor_name,
+        "page_type": page_type,
+        "device_type": device_type,
+        "network_profile": network_profile,
+        "run_number": run_number,
+        "url": extracted.get("url"),
     }
 
-    # STEP 3 — Load into core_db
-    print(f"\n[3/3] Loading into core_db...")
+    print("\n[3/3] Loading into core_db...")
     result = load(
         transformed=transformed,
         raw_json=raw_json,
         metadata=metadata,
-        playwright_run_id=playwright_run_id
+        playwright_run_id=playwright_run_id,
     )
 
     print(f"\n{'=' * 50}")
-    if result['success']:
-        print(f"✅ Pipeline completed!")
+    if result["success"]:
+        print("✅ Pipeline completed!")
         print(f"   playwright_run_id: {result['playwright_run_id']}")
         print(f"   test_id:           {result['test_id']}")
     else:
@@ -146,19 +95,11 @@ def run_pipeline(
 
 def run_auto():
     """
-    AUTO mode — for cron job daily use.
-    Reads ALL unprocessed raw JSON from core_db.
-    Unprocessed = lighthouse_raw_reports rows
-                  where lighthouse_runs.lcp_ms IS NULL.
+    AUTO mode.
 
-    Phoo's automation inserts:
-    → playwright_runs (session info)
-    → lighthouse_runs (metadata only, metrics = NULL)
-    → lighthouse_raw_reports (raw JSON)
-
-    This ETL fills:
-    → lighthouse_runs (metrics columns)
-    → lighthouse_opportunities (fixable issues)
+    Processes:
+    1. new raw reports with no opportunities yet
+    2. old incomplete rows where key Lighthouse metrics are NULL
     """
     print("=" * 50)
     print("ETL PIPELINE — AUTO MODE")
@@ -172,9 +113,6 @@ def run_auto():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # get all unprocessed raw reports
-        # unprocessed = lcp_ms IS NULL
-        # meaning Phoo inserted metadata but ETL hasn't run yet
         cursor.execute("""
             SELECT
                 lr.test_id,
@@ -189,42 +127,54 @@ def run_auto():
             FROM lighthouse_runs lr
             JOIN lighthouse_raw_reports lrr
                 ON lr.test_id = lrr.test_id
-            WHERE NOT EXISTS (
-                SELECT 1 FROM lighthouse_opportunities lo
-                WHERE lo.test_id = lr.test_id
-            )
+            WHERE
+                NOT EXISTS (
+                    SELECT 1
+                    FROM lighthouse_opportunities lo
+                    WHERE lo.test_id = lr.test_id
+                )
+                OR lr.lcp_ms IS NULL
+                OR lr.tbt_ms IS NULL
+                OR lr.cls_score IS NULL
+                OR lr.fcp_ms IS NULL
+                OR lr.si_ms IS NULL
+                OR lr.tti_ms IS NULL
+                OR lr.ttfb_ms IS NULL
+                OR lr.performance_score IS NULL
+                OR lr.accessibility_score IS NULL
+                OR lr.best_practices_score IS NULL
+                OR lr.seo_score IS NULL
             ORDER BY lr.timestamp ASC
         """)
 
         rows = cursor.fetchall()
-        print(f"Found {len(rows)} unprocessed reports")
+        print(f"Found {len(rows)} reports to process/reprocess")
 
         if len(rows) == 0:
             print("✅ Nothing to process — all up to date!")
             return
 
-        # track unique playwright_run_ids for status update
         playwright_run_ids = set()
 
         for row in rows:
-            (test_id, playwright_run_id,
-             site_type, competitor_name,
-             page_type, device_type,
-             network_profile, run_number,
-             raw_json) = row
+            (
+                test_id,
+                playwright_run_id,
+                site_type,
+                competitor_name,
+                page_type,
+                device_type,
+                network_profile,
+                run_number,
+                raw_json,
+            ) = row
 
             try:
                 print(f"\n→ Processing test_id: {test_id}")
 
-                # STEP 1 — Extract from raw JSON
                 extracted = extract_metrics(raw_json)
-
-                # STEP 2 — Transform
                 transformed = transform(extracted)
 
-                # STEP 3 — Update lighthouse_runs metrics
-                # Phoo created row with metadata only
-                # ETL fills NULL metric columns
                 cursor.execute("""
                     UPDATE lighthouse_runs SET
                         timestamp            = COALESCE(%s, timestamp),
@@ -247,38 +197,49 @@ def run_auto():
                         image_size_kb        = %s
                     WHERE test_id = %s
                 """, (
-                    transformed['timestamp'],
-                    transformed['lcp_ms'],
-                    transformed['tbt_ms'],
-                    transformed['cls_score'],
-                    transformed['fcp_ms'],
-                    transformed['si_ms'],
-                    transformed['tti_ms'],
-                    transformed['ttfb_ms'],
-                    transformed['inp_ms'],
-                    transformed['performance_score'],
-                    transformed['accessibility_score'],
-                    transformed['best_practices_score'],
-                    transformed['seo_score'],
-                    transformed['total_requests'],
-                    transformed['page_size_kb'],
-                    transformed['js_size_kb'],
-                    transformed['css_size_kb'],
-                    transformed['image_size_kb'],
+                    transformed["timestamp"],
+                    transformed["lcp_ms"],
+                    transformed["tbt_ms"],
+                    transformed["cls_score"],
+                    transformed["fcp_ms"],
+                    transformed["si_ms"],
+                    transformed["tti_ms"],
+                    transformed["ttfb_ms"],
+                    transformed["inp_ms"],
+                    transformed["performance_score"],
+                    transformed["accessibility_score"],
+                    transformed["best_practices_score"],
+                    transformed["seo_score"],
+                    transformed["total_requests"],
+                    transformed["page_size_kb"],
+                    transformed["js_size_kb"],
+                    transformed["css_size_kb"],
+                    transformed["image_size_kb"],
                     test_id,
                 ))
-                # STEP 4 — Insert opportunities
-                from load import insert_opportunities
+
+                # Important:
+                # Reprocessing same test_id should replace old opportunities,
+                # not append duplicates.
+                delete_opportunities_for_test(conn, test_id)
+
                 insert_opportunities(
-                    conn, test_id,
-                    transformed['opportunities']
+                    conn,
+                    test_id,
+                    transformed["opportunities"],
                 )
 
                 conn.commit()
                 success_count += 1
-                playwright_run_ids.add(playwright_run_id)
+
+                if playwright_run_id is not None:
+                    playwright_run_ids.add(playwright_run_id)
+
                 print(f"✅ test_id {test_id} done")
                 print(f"   performance: {transformed['performance_score']}")
+                print(f"   accessibility: {transformed['accessibility_score']}")
+                print(f"   best_practices: {transformed['best_practices_score']}")
+                print(f"   seo: {transformed['seo_score']}")
                 print(f"   opportunities: {len(transformed['opportunities'])}")
 
             except Exception as e:
@@ -286,12 +247,14 @@ def run_auto():
                 failed_count += 1
                 print(f"❌ test_id {test_id} failed: {e}")
 
-        # update all playwright_run sessions status
         for pr_id in playwright_run_ids:
             update_playwright_run(
-                conn, pr_id,
-                success_count, failed_count
+                conn,
+                pr_id,
+                success_count,
+                failed_count,
             )
+
         conn.commit()
 
     except Exception as e:
@@ -309,57 +272,52 @@ def run_auto():
     print("=" * 50)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Luminara ETL Pipeline'
+        description="Luminara ETL Pipeline"
     )
 
-    # mode selection
     parser.add_argument(
-        '--auto', action='store_true',
-        help='Auto mode: process all unprocessed rows from DB'
+        "--auto",
+        action="store_true",
+        help="Auto mode: process unprocessed or incomplete rows from DB",
     )
 
-    # manual mode args
+    parser.add_argument("--file", help="Path to Lighthouse JSON file")
     parser.add_argument(
-        '--file',
-        help='Path to Lighthouse JSON file (manual mode)'
+        "--site_type",
+        choices=["decathlon", "competitor"],
+        help="decathlon or competitor",
+    )
+    parser.add_argument("--page_type", help="main, product, cart etc.")
+    parser.add_argument(
+        "--device_type",
+        choices=["mobile", "desktop"],
+        help="mobile or desktop",
     )
     parser.add_argument(
-        '--site_type',
-        choices=['decathlon', 'competitor'],
-        help='decathlon or competitor'
+        "--run_number",
+        type=int,
+        default=1,
+        help="Run number 1, 2, or 3",
     )
     parser.add_argument(
-        '--page_type',
-        help='main, product, cart etc.'
+        "--competitor_name",
+        default=None,
+        help="nike, adidas etc.",
     )
     parser.add_argument(
-        '--device_type',
-        choices=['mobile', 'desktop'],
-        help='mobile or desktop'
-    )
-    parser.add_argument(
-        '--run_number', type=int, default=1,
-        help='Run number 1, 2, or 3'
-    )
-    parser.add_argument(
-        '--competitor_name', default=None,
-        help='nike, adidas etc.'
-    )
-    parser.add_argument(
-        '--network_profile', default=None,
-        help='WiFi, 4G etc.'
+        "--network_profile",
+        default=None,
+        help="WiFi, 4G etc.",
     )
 
     args = parser.parse_args()
 
     if args.auto:
-        # AUTO mode — cron job daily
         run_auto()
 
     elif args.file:
-        # MANUAL mode — test with one JSON file
         if not all([args.site_type, args.page_type, args.device_type]):
             print("❌ Manual mode requires:")
             print("   --site_type, --page_type, --device_type")
