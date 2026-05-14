@@ -14,9 +14,19 @@ from sentence_transformers import SentenceTransformer
 load_dotenv()
 
 # ── Config ───────────────────────────────────────────────────────────────────
+# vLLM/Qwen runs on DIS02 GPU server.
+# Agent/listener runs on ABRM02 and calls DIS02 through OpenAI-compatible API.
 
-QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen32b-int4")
-QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "http://localhost:8000/v1")
+QWEN_MODEL = os.getenv(
+    "QWEN_MODEL",
+    "/abr/coss41/shared_workspace/yuyu_workspace/data/models/qwen32b-int4",
+)
+
+QWEN_BASE_URL = os.getenv(
+    "QWEN_BASE_URL",
+    "http://DIS02:8000/v1",
+)
+
 MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "5"))
 
 client = OpenAI(
@@ -39,11 +49,17 @@ _embed_model = None
 
 
 def get_embed_model():
+    """
+    Load BGE-M3 only once per running listener/agent process.
+    This avoids reloading the embedding model on every trigger.
+    """
     global _embed_model
+
     if _embed_model is None:
         print("Loading BGE-M3...")
         _embed_model = SentenceTransformer("BAAI/bge-m3")
         print("✅ BGE-M3 loaded")
+
     return _embed_model
 
 
@@ -82,8 +98,10 @@ def normalize_title(title: str) -> str:
 
 def normalize_severity(severity: Optional[str]) -> str:
     severity = (severity or "").lower()
+
     if severity in {"high", "medium", "low"}:
         return severity
+
     return "medium"
 
 
@@ -97,8 +115,10 @@ def priority_from_savings(avg_savings_ms: int, severity: Optional[str]) -> str:
 
     if sev == "high" or avg_savings_ms >= 500:
         return "high"
+
     if sev == "medium" or avg_savings_ms >= 150:
         return "medium"
+
     return "low"
 
 
@@ -107,14 +127,24 @@ def infer_affected_metric(title: str, category: str) -> str:
 
     if "lcp" in text or "largest contentful paint" in text or "image" in text:
         return "LCP"
-    if "tbt" in text or "javascript" in text or "js" in text or "main thread" in text:
+
+    if (
+        "tbt" in text
+        or "javascript" in text
+        or "js" in text
+        or "main thread" in text
+    ):
         return "TBT"
+
     if "cls" in text or "layout shift" in text:
         return "CLS"
+
     if "fcp" in text or "render-blocking" in text or "css" in text:
         return "FCP"
+
     if "ttfb" in text or "server response" in text:
         return "TTFB"
+
     return "Performance"
 
 
@@ -130,7 +160,12 @@ def build_patch_template(title: str, category: str) -> dict:
             "after": "Add CDN/server caching, optimize backend query, and reduce TTFB for HTML document.",
         }
 
-    if "unused javascript" in text or "legacy javascript" in text or "js" in text or "javascript" in text:
+    if (
+        "unused javascript" in text
+        or "legacy javascript" in text
+        or "js" in text
+        or "javascript" in text
+    ):
         return {
             "summary": "Reduce JavaScript payload using code splitting and modern bundle output.",
             "target_file": "next.config.js / package build config / page component imports",
@@ -148,13 +183,18 @@ def build_patch_template(title: str, category: str) -> dict:
             "after": "Inline critical CSS, defer non-critical CSS, and remove unused CSS rules.",
         }
 
-    if "image" in text or "next-gen" in text or "properly size" in text or "offscreen" in text:
+    if (
+        "image" in text
+        or "next-gen" in text
+        or "properly size" in text
+        or "offscreen" in text
+    ):
         return {
             "summary": "Optimize images using responsive sizes, lazy loading, and WebP/AVIF.",
             "target_file": "image component / product card / hero section",
             "change_type": "image_optimization",
-            "before": "<img src=\"hero.jpg\" />",
-            "after": "<img src=\"hero.webp\" loading=\"eager\" fetchpriority=\"high\" width=\"...\" height=\"...\" />",
+            "before": '<img src="hero.jpg" />',
+            "after": '<img src="hero.webp" loading="eager" fetchpriority="high" width="..." height="..." />',
         }
 
     if "compression" in text:
@@ -185,12 +225,14 @@ def get_existing_columns(cursor, table_name: str) -> set:
         """,
         (table_name,),
     )
+
     return {row[0] for row in cursor.fetchall()}
 
 
 def db_value(value: Any):
     if isinstance(value, (dict, list)):
         return Json(value)
+
     return value
 
 
@@ -215,12 +257,20 @@ def safe_insert(cursor, table_name: str, data: dict, returning: str = "id"):
     return cursor.fetchone()[0]
 
 
-# ── N1: Get metrics + top unique opportunities ───────────────────────────────
+# ── N1: Get latest 3-run metrics + aggregated opportunities ──────────────────
 
 def get_metrics(state: AgentState) -> AgentState:
+    """
+    N1 purpose:
+    - Select latest daily Lighthouse runs for same URL + page_type + device_type.
+    - Use up to 3 runs because Lighthouse is repeated 3 times per page/device.
+    - Average metrics for stable judgment.
+    - Aggregate opportunities only from those selected test_ids.
+    """
+
     print("\n[N1] Getting metrics...")
 
-    url = state["url"]
+    url = state["url"].rstrip("/")
     page_type = state["page_type"]
     device_type = state["device_type"]
     max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
@@ -228,19 +278,44 @@ def get_metrics(state: AgentState) -> AgentState:
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Pick latest daily group.
+    # Example:
+    # main + desktop has 3 runs today.
+    # We select those 3 latest same-day runs and average them.
     cursor.execute(
         """
+        WITH candidate_runs AS (
+            SELECT
+                test_id,
+                lcp_ms,
+                tbt_ms,
+                cls_score,
+                performance_score,
+                timestamp,
+                created_at,
+                DATE(COALESCE(timestamp, created_at)) AS run_date,
+                run_number
+            FROM lighthouse_runs
+            WHERE TRIM(TRAILING '/' FROM url) = %s
+              AND page_type = %s
+              AND device_type = %s
+        ),
+        latest_day AS (
+            SELECT MAX(run_date) AS run_date
+            FROM candidate_runs
+        )
         SELECT
             test_id,
             lcp_ms,
             tbt_ms,
             cls_score,
-            performance_score
-        FROM lighthouse_runs
-        WHERE url = %s
-          AND page_type = %s
-          AND device_type = %s
-        ORDER BY created_at DESC
+            performance_score,
+            timestamp,
+            created_at,
+            run_number
+        FROM candidate_runs
+        WHERE run_date = (SELECT run_date FROM latest_day)
+        ORDER BY run_number ASC NULLS LAST, created_at DESC
         LIMIT 3
         """,
         (url, page_type, device_type),
@@ -253,6 +328,8 @@ def get_metrics(state: AgentState) -> AgentState:
         print(f"  ⚠️ No data found for {url} [{page_type}] [{device_type}]")
         return {**state, "should_end": True}
 
+    test_ids = [r[0] for r in runs]
+
     lcp_values = [r[1] for r in runs if r[1] is not None]
     tbt_values = [r[2] for r in runs if r[2] is not None]
     cls_values = [r[3] for r in runs if r[3] is not None]
@@ -263,11 +340,13 @@ def get_metrics(state: AgentState) -> AgentState:
     avg_cls = sum(cls_values) / len(cls_values) if cls_values else 0
     avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
 
-    problem_runs = [r for r in runs if r[1] and r[1] > 2500]
+    # Confidence based on repeated LCP failure.
+    # If LCP fails in all 3 runs, confidence is high.
+    failed_lcp_runs = [v for v in lcp_values if v > 2500]
 
-    if len(problem_runs) == 3:
+    if len(failed_lcp_runs) >= 3:
         confidence = "high"
-    elif len(problem_runs) == 2:
+    elif len(failed_lcp_runs) == 2:
         confidence = "medium"
     else:
         confidence = "low"
@@ -277,77 +356,55 @@ def get_metrics(state: AgentState) -> AgentState:
         "avg_tbt_ms": round(avg_tbt, 2),
         "avg_cls_score": round(avg_cls, 4),
         "avg_performance": round(avg_perf, 1),
-        "test_ids": [r[0] for r in runs],
+        "test_ids": test_ids,
         "run_count": len(runs),
     }
 
-    print(f"  ✅ LCP: {metrics['avg_lcp_ms']}ms")
-    print(f"  ✅ TBT: {metrics['avg_tbt_ms']}ms")
-    print(f"  ✅ CLS: {metrics['avg_cls_score']}")
-    print(f"  ✅ Score: {metrics['avg_performance']}")
+    print(f"  ✅ Selected test_ids: {test_ids}")
+    print(f"  ✅ LCP avg: {metrics['avg_lcp_ms']}ms")
+    print(f"  ✅ TBT avg: {metrics['avg_tbt_ms']}ms")
+    print(f"  ✅ CLS avg: {metrics['avg_cls_score']}")
+    print(f"  ✅ Score avg: {metrics['avg_performance']}")
     print(f"  ✅ Confidence: {confidence}")
 
-    # Important:
-    # Do NOT group by lo.id. That creates duplicate dashboard cards.
-    # Group by opportunity_id/title/category and keep the highest-impact row.
+    # Aggregate opportunities only from the selected latest 3 runs.
+    # Ranking:
+    # 1. issue frequency across selected runs
+    # 2. average savings
+    # 3. severity
     cursor.execute(
         """
-        WITH ranked AS (
-            SELECT
-                lo.id,
-                lo.opportunity_id,
-                lo.title,
-                lo.description,
-                lo.savings_ms,
-                lo.severity,
-                lo.category,
-                ROW_NUMBER() OVER (
-                    PARTITION BY LOWER(TRIM(lo.title)), COALESCE(lo.category, '')
-                    ORDER BY lo.savings_ms DESC NULLS LAST, lo.id ASC
-                ) AS rn
-            FROM lighthouse_opportunities lo
-            JOIN lighthouse_runs lr
-              ON lo.test_id = lr.test_id
-            WHERE lr.url = %s
-              AND lr.page_type = %s
-              AND lr.device_type = %s
-              AND COALESCE(lo.savings_ms, 0) > 0
-        )
         SELECT
-            MIN(id) AS id,
-            MIN(opportunity_id) AS opportunity_id,
-            title,
-            MAX(description) AS description,
-            AVG(savings_ms)::int AS avg_savings,
-            MAX(severity) AS severity,
-            category
-        FROM ranked
-        WHERE rn = 1
-        GROUP BY
-            LOWER(TRIM(title)),
-            title,
-            category
-        ORDER BY avg_savings DESC
+            MIN(lo.id) AS id,
+            MIN(lo.opportunity_id) AS opportunity_id,
+            lo.title,
+            MAX(lo.description) AS description,
+            AVG(lo.savings_ms)::int AS avg_savings,
+            MAX(lo.severity) AS severity,
+            MAX(lo.category) AS category,
+            COUNT(*) AS frequency
+        FROM lighthouse_opportunities lo
+        WHERE lo.test_id = ANY(%s)
+          AND COALESCE(lo.savings_ms, 0) > 0
+        GROUP BY LOWER(TRIM(lo.title)), lo.title
+        ORDER BY
+            COUNT(*) DESC,
+            AVG(lo.savings_ms) DESC
         LIMIT %s
         """,
-        (url, page_type, device_type, max_opportunities),
+        (test_ids, max_opportunities),
     )
 
     rows = cursor.fetchall()
     conn.close()
 
     opportunities = []
-    seen_titles = set()
 
     for row in rows:
-        title_key = normalize_title(row[2])
-        if title_key in seen_titles:
-            continue
-        seen_titles.add(title_key)
-
         avg_savings = int(row[4] or 0)
         severity = normalize_severity(row[5])
         category = row[6] or "performance"
+        frequency = int(row[7] or 1)
 
         opportunities.append(
             {
@@ -358,11 +415,20 @@ def get_metrics(state: AgentState) -> AgentState:
                 "avg_savings_ms": avg_savings,
                 "severity": severity,
                 "category": category,
+                "frequency": frequency,
                 "affected_metric": infer_affected_metric(row[2], category),
             }
         )
 
-    print(f"  ✅ Unique top opportunities: {len(opportunities)}")
+    print(f"  ✅ Aggregated opportunities: {len(opportunities)}")
+
+    for opp in opportunities:
+        print(
+            f"     - {opp['title']} | "
+            f"{opp['avg_savings_ms']}ms | "
+            f"freq {opp['frequency']}/{len(runs)} | "
+            f"{opp['affected_metric']}"
+        )
 
     return {
         **state,
@@ -370,10 +436,8 @@ def get_metrics(state: AgentState) -> AgentState:
         "opportunities": opportunities,
         "confidence": confidence,
         "opp_index": 0,
-        "should_end": confidence == "low" or len(opportunities) == 0,
+        "should_end": len(opportunities) == 0,
     }
-
-
 # ── N2 ───────────────────────────────────────────────────────────────────────
 
 def sort_opportunities(state: AgentState) -> AgentState:
@@ -536,6 +600,7 @@ Issue:
 - Title: {opp['title']}
 - Description: {opp.get('description', '')}
 - Avg savings: {opp['avg_savings_ms']}ms
+- Frequency: {opp.get('frequency', 1)}/{metrics['run_count']} runs
 - Category: {opp['category']}
 - Severity: {opp['severity']}
 - Affected metric: {opp['affected_metric']}
