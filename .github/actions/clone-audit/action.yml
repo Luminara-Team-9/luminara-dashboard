@@ -117,6 +117,7 @@ runs:
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
           --collect.settings.preset=desktop
+          --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN
 
     - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
@@ -128,7 +129,7 @@ runs:
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
-          
+
     - name: 📦 Upload Debug Artifacts
       if: failure()
       uses: actions/upload-artifact@v4
