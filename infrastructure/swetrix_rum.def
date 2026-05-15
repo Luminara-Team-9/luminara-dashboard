@@ -53,6 +53,7 @@ From: swetrix/swetrix-api:latest
     echo "------------------------------------------------"
     
     # Swetrix is a compiled NestJS app. We bypass npm and execute Node directly.
+    cd /app
     exec node dist/main.js
 
 %help
