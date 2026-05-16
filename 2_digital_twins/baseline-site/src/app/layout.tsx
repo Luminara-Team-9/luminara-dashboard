@@ -36,9 +36,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={roboto.className}>
-      <head>
-        <script async src="https://swetrix.org/swetrix.js" />
-      </head>
       {/* Apply font-sans to activate Roboto */}
       <body className="antialiased font-sans">
         {/* Our Sabotage Components listening to the router */}
