@@ -3,6 +3,8 @@
 import { useEffect } from 'react';
 import { init, trackViews } from 'swetrix';
 
+let initialized = false;
+
 export function SwetrixTracker() {
   useEffect(() => {
     if (!initialized) {
