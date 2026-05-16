@@ -9,7 +9,7 @@ export function SwetrixTracker() {
 
   useEffect(() => {
     init({
-      pid: 'TEMP_PROJECT_ID', // We will replace this once the self-hosted UI is running
+      pid: 'n9FlE09mPFlv',
       apiURL: 'http://155.230.135.209:5005/log', // Pointing it to your custom Singularity API!
     });
 
