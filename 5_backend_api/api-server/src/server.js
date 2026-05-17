@@ -4,7 +4,10 @@ import { getDashboardPerformanceData } from './dashboardData.js';
 
 const host = process.env.DASHBOARD_API_HOST ?? '127.0.0.1';
 const port = Number(process.env.DASHBOARD_API_PORT ?? 3024);
-const pool = createPool();
+const pools = {
+  core: createPool({ database: process.env.CORE_PGDATABASE ?? 'core_db' }),
+  lhci: createPool({ database: process.env.LHCI_PGDATABASE ?? 'lhci' }),
+};
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -35,7 +38,7 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'GET' && url.pathname === '/dashboard/performance') {
     try {
-      const payload = await getDashboardPerformanceData(pool);
+      const payload = await getDashboardPerformanceData(pools);
       sendJson(response, 200, payload);
     } catch (error) {
       sendJson(response, 500, {
@@ -55,7 +58,7 @@ server.listen(port, host, () => {
 
 async function shutdown() {
   server.close();
-  await pool.end();
+  await Promise.all([pools.core.end(), pools.lhci.end()]);
   process.exit(0);
 }
 

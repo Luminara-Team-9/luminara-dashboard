@@ -34,6 +34,25 @@ function normalizeBrand(row) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
+function classifyUrl(url) {
+  const value = String(url ?? '').toLowerCase();
+
+  if (value.includes('nike.com')) {
+    return { site_type: 'competitor', competitor_name: 'nike', page_type: 'nike' };
+  }
+
+  if (value.includes('ssg.com')) {
+    return { site_type: 'competitor', competitor_name: 'ssg', page_type: 'ssg' };
+  }
+
+  let pageType = 'main';
+  if (value.includes('/cart')) pageType = 'cart';
+  else if (value.includes('/products/') || value.includes('/p/')) pageType = 'product';
+  else if (value.includes('/c/') || value.includes('category')) pageType = 'category';
+
+  return { site_type: 'decathlon', competitor_name: null, page_type: pageType };
+}
+
 function normalizePage(pageType) {
   if (pageType === 'product') return 'product';
   if (pageType === 'cart' || pageType === 'checkout') return 'checkout';
@@ -161,41 +180,93 @@ function buildAiPlan(row) {
   };
 }
 
+function normalizeScore(value) {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  return numeric <= 1 ? numeric * 100 : numeric;
+}
+
+function mapLhciRun(row) {
+  const classification = classifyUrl(row.url);
+
+  return {
+    ...classification,
+    url: row.url,
+    device_type: 'desktop',
+    timestamp: row.timestamp,
+    lcp_ms: toNumber(row.lcp_ms, null),
+    tbt_ms: toNumber(row.tbt_ms, null),
+    cls_score: toNumber(row.cls_score, null),
+    fcp_ms: toNumber(row.fcp_ms, null),
+    si_ms: toNumber(row.si_ms, null),
+    tti_ms: toNumber(row.tti_ms, null),
+    ttfb_ms: toNumber(row.ttfb_ms, null),
+    inp_ms: toNumber(row.inp_ms, null),
+    performance_score: normalizeScore(row.performance_score),
+    accessibility_score: normalizeScore(row.accessibility_score),
+    best_practices_score: normalizeScore(row.best_practices_score),
+    seo_score: normalizeScore(row.seo_score),
+    total_requests: row.total_requests,
+    page_size_kb: row.page_size_kb,
+    js_size_kb: null,
+    css_size_kb: null,
+    image_size_kb: null,
+  };
+}
+
 async function fetchLatestLighthouseRows(pool) {
   const { rows } = await pool.query(`
     WITH ranked AS (
       SELECT
-        lr.*,
+        r.url,
+        r."createdAt" AS timestamp,
+        r.representative,
+        r.lhr::jsonb #>> '{categories,performance,score}' AS performance_score,
+        r.lhr::jsonb #>> '{categories,accessibility,score}' AS accessibility_score,
+        r.lhr::jsonb #>> '{categories,best-practices,score}' AS best_practices_score,
+        r.lhr::jsonb #>> '{categories,seo,score}' AS seo_score,
+        r.lhr::jsonb #>> '{audits,largest-contentful-paint,numericValue}' AS lcp_ms,
+        r.lhr::jsonb #>> '{audits,total-blocking-time,numericValue}' AS tbt_ms,
+        r.lhr::jsonb #>> '{audits,cumulative-layout-shift,numericValue}' AS cls_score,
+        r.lhr::jsonb #>> '{audits,first-contentful-paint,numericValue}' AS fcp_ms,
+        r.lhr::jsonb #>> '{audits,speed-index,numericValue}' AS si_ms,
+        r.lhr::jsonb #>> '{audits,interactive,numericValue}' AS tti_ms,
+        r.lhr::jsonb #>> '{audits,server-response-time,numericValue}' AS ttfb_ms,
+        COALESCE(
+          r.lhr::jsonb #>> '{audits,interaction-to-next-paint,numericValue}',
+          r.lhr::jsonb #>> '{audits,experimental-interaction-to-next-paint,numericValue}'
+        ) AS inp_ms,
+        (r.lhr::jsonb #>> '{audits,total-byte-weight,numericValue}')::float / 1024 AS page_size_kb,
+        jsonb_array_length(COALESCE(r.lhr::jsonb #> '{audits,network-requests,details,items}', '[]'::jsonb)) AS total_requests,
         ROW_NUMBER() OVER (
-          PARTITION BY lr.site_type, COALESCE(lr.competitor_name, ''), lr.page_type, lr.device_type
-          ORDER BY lr.timestamp DESC, lr.test_id DESC
+          PARTITION BY r.url
+          ORDER BY r.representative DESC, r."createdAt" DESC
         ) AS row_rank
-      FROM lighthouse_runs lr
-      WHERE lr.device_type = COALESCE($1, lr.device_type)
+      FROM runs r
     )
     SELECT *
     FROM ranked
     WHERE row_rank = 1
-    ORDER BY timestamp DESC, test_id DESC
-  `, [process.env.DASHBOARD_DEVICE_TYPE ?? 'desktop']);
+    ORDER BY timestamp DESC, url DESC
+  `);
 
-  return rows;
+  return rows.map(mapLhciRun);
 }
 
 async function fetchTrendRows(pool) {
   const { rows } = await pool.query(`
     SELECT
-      TO_CHAR(timestamp::date, 'YYYY-MM-DD') AS label,
-      site_type,
-      competitor_name,
-      AVG(performance_score) AS performance_score
-    FROM lighthouse_runs
-    WHERE performance_score IS NOT NULL
-    GROUP BY timestamp::date, site_type, competitor_name
-    ORDER BY timestamp::date ASC
+      TO_CHAR(r."createdAt"::date, 'YYYY-MM-DD') AS label,
+      r.url,
+      AVG((r.lhr::jsonb #>> '{categories,performance,score}')::float * 100) AS performance_score
+    FROM runs r
+    WHERE r.lhr::jsonb #>> '{categories,performance,score}' IS NOT NULL
+    GROUP BY r."createdAt"::date, r.url
+    ORDER BY r."createdAt"::date ASC
   `);
 
-  return rows;
+  return rows.map((row) => ({ ...row, ...classifyUrl(row.url) }));
 }
 
 async function fetchAiPlans(pool) {
@@ -215,9 +286,9 @@ async function fetchAiPlans(pool) {
 
 export async function getDashboardPerformanceData(pool) {
   const [latestRows, trendRows, aiPlanRows] = await Promise.all([
-    fetchLatestLighthouseRows(pool),
-    fetchTrendRows(pool),
-    fetchAiPlans(pool),
+    fetchLatestLighthouseRows(pool.lhci),
+    fetchTrendRows(pool.lhci),
+    fetchAiPlans(pool.core),
   ]);
 
   const preferredTargetSiteType = latestRows.some((row) => row.site_type === 'target') ? 'target' : 'decathlon';
@@ -271,7 +342,7 @@ export async function getDashboardPerformanceData(pool) {
       searchVisibility: {
         relativeRankPercentile: seoScore || 0,
         seoScore: seoScore || undefined,
-        source: 'core_db.lighthouse_runs',
+        source: 'lhci.runs',
         period: 'latest audit',
       },
     },

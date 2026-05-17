@@ -14,9 +14,10 @@
 ```bash
 PGHOST=127.0.0.1 \
 PGPORT=5432 \
-PGDATABASE=core_db \
 PGUSER=lumin_admin \
 PGPASSWORD=<local-password> \
+CORE_PGDATABASE=core_db \
+LHCI_PGDATABASE=lhci \
 DASHBOARD_API_PORT=3024 \
 pnpm --dir 5_backend_api/api-server start
 ```
@@ -36,5 +37,6 @@ DASHBOARD_PERFORMANCE_API_URL=http://127.0.0.1:3024/dashboard/performance
 
 주의:
 - 실제 DB 비밀번호는 Git에 올리지 않습니다.
-- 이 API는 현재 `lighthouse_runs`, `fix_plans`를 read-only로 조회합니다.
+- 이 API는 현재 `lhci.runs`에서 Lighthouse 원본 report를 읽고,
+  `core_db.fix_plans`에서 AI 개선안을 read-only로 조회합니다.
 - RUM/session 데이터가 준비되기 전까지 해당 영역은 빈 배열 또는 연결 대기 상태로 내려갑니다.
