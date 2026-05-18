@@ -1,11 +1,16 @@
+import os
 import subprocess
 from datetime import datetime
 from typing import Optional
 
+import psycopg2
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from agent import build_agent
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -13,31 +18,67 @@ BASE_DIR = "/abr/coss41/shared_workspace/yuyu_workspace/codebase/luminara-dashbo
 ETL_DIR = f"{BASE_DIR}/3_data_ai_pipeline/etl"
 PYTHON = f"{BASE_DIR}/.venv/bin/python3"
 
-# Load LangGraph agent once when listener starts
 print("🚀 Loading Remediation Agent once...")
 agent_app = build_agent()
 print("✅ Remediation Agent ready")
 
 
+def get_db_connection():
+    return psycopg2.connect(
+        host=os.getenv("HOST_IP"),
+        port=os.getenv("PGPORT", "5432"),
+        dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+    )
+
+
+def find_latest_failed_test_id():
+    """
+    Find the latest Lighthouse run that failed performance thresholds.
+    This is used when trigger does not include test_id.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT test_id
+        FROM lighthouse_runs
+        WHERE
+            performance_score < 90
+            OR lcp_ms > 2500
+            OR tbt_ms > 200
+            OR cls_score > 0.1
+        ORDER BY created_at DESC
+        LIMIT 1
+    """)
+
+    row = cursor.fetchone()
+    conn.close()
+
+    return row[0] if row else None
+
+
 class TriggerPayload(BaseModel):
-    # New: direct failed audit target
+    # Exact audit target if available later
     test_id: Optional[int] = None
 
-    # Old: fallback target mode
-    url: str = "https://www.decathlon.co.kr/"
-    page_type: str = "main"
-    device_type: str = "desktop"
+    # CI/CD trigger fields
+    pr_branch: Optional[str] = None
+    target_dir: Optional[str] = None
+    thread_id: Optional[str] = None
 
-    max_opportunities: int = 5
-    run_etl: bool = False
-    dry_run: bool = True
+    # Agent control
+    max_opportunities: int = 1
+    run_etl: bool = True
+    dry_run: bool = False
 
 
 @app.get("/")
 def root():
     return {
         "status": "Luminara AI listener is running",
-        "message": "Use POST /trigger to run the AI remediation agent",
+        "message": "Use POST /api/trigger-agent",
     }
 
 
@@ -49,11 +90,11 @@ def health():
     }
 
 
-@app.post("/trigger")
-def trigger(payload: TriggerPayload):
+@app.post("/api/trigger-agent")
+def trigger_agent(payload: TriggerPayload):
     logs = []
 
-    # Optional ETL step
+    # 1. Run ETL first
     if payload.run_etl:
         etl_cmd = [PYTHON, "pipeline.py", "--auto"]
 
@@ -79,20 +120,44 @@ def trigger(payload: TriggerPayload):
                 "logs": logs,
             }
 
-    # Run agent directly in same Python process
+    # 2. Resolve failed test_id
+    resolved_test_id = payload.test_id
+
+    if resolved_test_id is None:
+        resolved_test_id = find_latest_failed_test_id()
+        logs.append({
+            "step": "resolve_test_id",
+            "mode": "latest_failed_from_db",
+            "test_id": resolved_test_id,
+        })
+    else:
+        logs.append({
+            "step": "resolve_test_id",
+            "mode": "payload_test_id",
+            "test_id": resolved_test_id,
+        })
+
+    if resolved_test_id is None:
+        return {
+            "status": "no_failed_audit_found",
+            "message": "ETL finished, but no failed Lighthouse audit was found.",
+            "logs": logs,
+        }
+
+    # 3. Run agent using exact test_id
     try:
-        agent_input = {
-            "test_id": payload.test_id,
-            "url": payload.url,
-            "page_type": payload.page_type,
-            "device_type": payload.device_type,
+        result = agent_app.invoke({
+            "test_id": resolved_test_id,
             "dry_run": payload.dry_run,
             "max_opportunities": payload.max_opportunities,
             "should_end": False,
             "opp_index": 0,
-        }
 
-        result = agent_app.invoke(agent_input)
+            # keep PR metadata for future self-healing
+            "pr_branch": payload.pr_branch,
+            "target_dir": payload.target_dir,
+            "thread_id": payload.thread_id,
+        })
 
         logs.append({
             "step": "agent",
@@ -105,11 +170,11 @@ def trigger(payload: TriggerPayload):
         return {
             "status": "success",
             "test_id": result.get("test_id"),
-            "url": result.get("url"),
-            "page_type": result.get("page_type"),
-            "device_type": result.get("device_type"),
-            "max_opportunities": payload.max_opportunities,
-            "dry_run": payload.dry_run,
+            "confidence": result.get("confidence"),
+            "processed": result.get("opp_index", 0),
+            "pr_branch": payload.pr_branch,
+            "target_dir": payload.target_dir,
+            "thread_id": payload.thread_id,
             "logs": logs,
         }
 
@@ -117,5 +182,12 @@ def trigger(payload: TriggerPayload):
         return {
             "status": "agent_failed",
             "error": str(e),
+            "test_id": resolved_test_id,
             "logs": logs,
         }
+
+
+# optional old endpoint for your manual testing
+@app.post("/trigger")
+def trigger(payload: TriggerPayload):
+    return trigger_agent(payload)
