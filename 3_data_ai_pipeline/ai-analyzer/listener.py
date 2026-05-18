@@ -16,6 +16,7 @@ app = FastAPI()
 
 BASE_DIR = "/abr/coss41/shared_workspace/yuyu_workspace/codebase/luminara-dashboard"
 ETL_DIR = f"{BASE_DIR}/3_data_ai_pipeline/etl"
+AI_DIR = f"{BASE_DIR}/3_data_ai_pipeline/ai-analyzer"
 PYTHON = f"{BASE_DIR}/.venv/bin/python3"
 
 print("🚀 Loading Remediation Agent once...")
@@ -35,8 +36,8 @@ def get_db_connection():
 
 def find_latest_failed_test_id():
     """
-    Find the latest Decathlon/target Lighthouse run that failed performance thresholds.
-    This is used when trigger does not include test_id.
+    Find the latest target/Decathlon Lighthouse run that failed thresholds.
+    Used when CI/CD trigger does not provide test_id.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -61,18 +62,20 @@ def find_latest_failed_test_id():
 
     return row[0] if row else None
 
+
 class TriggerPayload(BaseModel):
-    # Exact audit target if available later
+    # Exact failed audit ID if available
     test_id: Optional[int] = None
 
-    # CI/CD trigger fields
+    # CI/CD metadata from leader workflow
     pr_branch: Optional[str] = None
     target_dir: Optional[str] = None
     thread_id: Optional[str] = None
 
-    # Agent control
-    max_opportunities: int = 1
+    # Pipeline controls
     run_etl: bool = True
+    update_rag: bool = True
+    max_opportunities: int = 1
     dry_run: bool = False
 
 
@@ -122,7 +125,33 @@ def trigger_agent(payload: TriggerPayload):
                 "logs": logs,
             }
 
-    # 2. Resolve failed test_id
+    # 2. Update RAG knowledge base
+    if payload.update_rag:
+        rag_cmd = [PYTHON, "embed.py"]
+
+        rag_result = subprocess.run(
+            rag_cmd,
+            cwd=AI_DIR,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+
+        logs.append({
+            "step": "rag_update",
+            "command": " ".join(rag_cmd),
+            "returncode": rag_result.returncode,
+            "stdout": rag_result.stdout[-3000:],
+            "stderr": rag_result.stderr[-3000:],
+        })
+
+        if rag_result.returncode != 0:
+            return {
+                "status": "rag_update_failed",
+                "logs": logs,
+            }
+
+    # 3. Resolve failed test_id
     resolved_test_id = payload.test_id
 
     if resolved_test_id is None:
@@ -142,11 +171,11 @@ def trigger_agent(payload: TriggerPayload):
     if resolved_test_id is None:
         return {
             "status": "no_failed_audit_found",
-            "message": "ETL finished, but no failed Lighthouse audit was found.",
+            "message": "ETL/RAG finished, but no failed target Lighthouse audit was found.",
             "logs": logs,
         }
 
-    # 3. Run agent using exact test_id
+    # 4. Run agent using exact test_id
     try:
         result = agent_app.invoke({
             "test_id": resolved_test_id,
@@ -155,7 +184,7 @@ def trigger_agent(payload: TriggerPayload):
             "should_end": False,
             "opp_index": 0,
 
-            # keep PR metadata for future self-healing
+            # kept for future self-healing/PR patch flow
             "pr_branch": payload.pr_branch,
             "target_dir": payload.target_dir,
             "thread_id": payload.thread_id,
@@ -189,7 +218,7 @@ def trigger_agent(payload: TriggerPayload):
         }
 
 
-# optional old endpoint for your manual testing
+# Optional old endpoint for manual tests
 @app.post("/trigger")
 def trigger(payload: TriggerPayload):
     return trigger_agent(payload)
