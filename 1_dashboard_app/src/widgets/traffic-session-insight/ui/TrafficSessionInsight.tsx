@@ -27,14 +27,6 @@ function sumRevenue(rows: Array<{ revenue: number }>): number {
   return rows.reduce((sum, row) => sum + row.revenue, 0);
 }
 
-function getTopRevenueChannel(channels: AcquisitionChannel[]): AcquisitionChannel | undefined {
-  return [...channels].sort((a, b) => b.revenue - a.revenue)[0];
-}
-
-function getTopConversionDevice(devices: DeviceSegment[]): DeviceSegment | undefined {
-  return [...devices].sort((a, b) => b.conversionRate - a.conversionRate)[0];
-}
-
 function getChannelRole(channel: AcquisitionChannel): string {
   if (channel.revenue >= 100000000) return '매출 핵심';
   if (channel.conversionRate >= 6) return '효율 우수';
@@ -84,8 +76,15 @@ export function TrafficSessionInsight() {
   const purchaseSessions = channelPurchases || devicePurchases || basePurchaseSessions;
   const conversionRate = data.businessMetrics?.conversionRate?.value ?? calcConversionRatePercent(purchaseSessions, sessions);
   const revenue = sumRevenue(channels) || sumRevenue(devices) || calcRevenue(purchaseSessions, averageOrderValue);
-  const topChannel = getTopRevenueChannel(channels);
-  const topDevice = getTopConversionDevice(devices);
+  const pagePerformance = data.rum.pagePerformance ?? [];
+  const latestCollectedAt = data.rum.latestCollectedAt
+    ? new Date(data.rum.latestCollectedAt).toLocaleString("ko-KR", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
   const changeText =
     traffic?.changeRate != null
       ? `전월 대비 ${traffic.changeRate >= 0 ? '+' : ''}${traffic.changeRate}%`
@@ -127,12 +126,35 @@ export function TrafficSessionInsight() {
         </article>
 
         <article className={styles.kpi_card}>
-          <span className={styles.kpi_label}>최고 매출 유입 경로</span>
-          <strong className={styles.kpi_value}>{topChannel?.channel ?? '데이터 없음'}</strong>
-          <span className={styles.kpi_sub}>{topChannel ? formatKrw(topChannel.revenue) : '-'}</span>
-          <span className={styles.kpi_note}>최고 전환 디바이스 {topDevice ? DEVICE_LABEL[topDevice.device] : '-'}</span>
+          <span className={styles.kpi_label}>최근 접속 기록</span>
+          <strong className={styles.kpi_value}>{latestCollectedAt ?? "없음"}</strong>
+          <span className={styles.kpi_sub}>{pagePerformance.length > 0 ? `${pagePerformance.length}개 페이지 경로` : "페이지 경로 데이터 없음"}</span>
+          <span className={styles.kpi_note}>실제 사용자 접속 데이터 기준</span>
         </article>
       </div>
+
+      <section className={styles.page_perf_panel}>
+        <div className={styles.panel_head}>
+          <div>
+            <h3 className={styles.panel_title}>페이지 경로별 실제 로딩</h3>
+            <p className={styles.panel_desc}>Swetrix 접속 기록 기준 페이지 경로 · 세션 · 평균 로딩 · p75 로딩</p>
+          </div>
+        </div>
+        {pagePerformance.length > 0 ? (
+          <div className={styles.page_perf_list}>
+            {pagePerformance.map((page) => (
+              <article key={page.path} className={styles.page_perf_row}>
+                <strong>{page.path}</strong>
+                <span>{formatCompactCount(page.sessions)} 세션</span>
+                <span>평균 {formatInteger(page.avgPageLoad)}ms</span>
+                <span>p75 {page.p75PageLoad != null ? `${formatInteger(page.p75PageLoad)}ms` : "-"}</span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.empty_state}>페이지 경로별 실제 로딩 데이터가 아직 연결되지 않았습니다.</div>
+        )}
+      </section>
 
       <div className={styles.content_grid}>
         <section className={styles.panel}>

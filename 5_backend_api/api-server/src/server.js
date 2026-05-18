@@ -2,8 +2,8 @@ import http from 'node:http';
 import { createPool } from './db.js';
 import { getDashboardPerformanceData } from './dashboardData.js';
 
-const host = process.env.DASHBOARD_API_HOST ?? '127.0.0.1';
-const port = Number(process.env.DASHBOARD_API_PORT ?? 3024);
+const host = process.env.DASHBOARD_API_HOST ?? process.env.HOST ?? '127.0.0.1';
+const port = Number(process.env.DASHBOARD_API_PORT ?? process.env.PORT ?? 3024);
 const pools = {
   core: createPool({ database: process.env.CORE_PGDATABASE ?? 'core_db' }),
   lhci: createPool({ database: process.env.LHCI_PGDATABASE ?? 'lhci' }),
@@ -38,7 +38,11 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'GET' && url.pathname === '/dashboard/performance') {
     try {
-      const payload = await getDashboardPerformanceData(pools);
+      const payload = await getDashboardPerformanceData(pools, {
+        range: url.searchParams.get('range'),
+        from: url.searchParams.get('from'),
+        to: url.searchParams.get('to'),
+      });
       sendJson(response, 200, payload);
     } catch (error) {
       sendJson(response, 500, {

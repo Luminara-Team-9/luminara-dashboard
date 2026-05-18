@@ -19,6 +19,10 @@ interface PerformanceDataContextValue {
   data: PerformanceApiResponse | null;
   loading: boolean;
   error: string | null;
+  dateFrom: string;
+  dateTo: string;
+  setDateFrom: (value: string) => void;
+  setDateTo: (value: string) => void;
   refetch: () => void;
 }
 
@@ -28,6 +32,8 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<PerformanceApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (options?: { background?: boolean }) => {
@@ -38,7 +44,10 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
     if (!options?.background) setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/performance', {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set('from', dateFrom);
+      if (dateTo) params.set('to', dateTo);
+      const response = await fetch(`/api/performance?${params.toString()}`, {
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -53,7 +62,7 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
       if (!controller.signal.aborted) setLoading(false);
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     void load();
@@ -76,7 +85,7 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   return (
-    <PerformanceDataContext.Provider value={{ data, loading, error, refetch: load }}>
+    <PerformanceDataContext.Provider value={{ data, loading, error, dateFrom, dateTo, setDateFrom, setDateTo, refetch: load }}>
       {children}
     </PerformanceDataContext.Provider>
   );

@@ -63,6 +63,7 @@
   gap: 14px;
 }
 
+
 .live_badge {
   display: flex;
   align-items: center;
@@ -350,6 +351,13 @@
   line-height: 1.15;
 }
 
+.workspace_meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .workspace_desc {
   max-width: 620px;
   margin: 0;
@@ -436,6 +444,10 @@
     min-height: auto;
   }
 
+  .workspace_meta {
+    align-items: flex-start;
+  }
+
   .workspace_desc {
     text-align: left;
   }
@@ -444,4 +456,57 @@
     min-height: 520px;
     overflow: visible;
   }
+}
+
+.date_range_group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background-color: #eef3f8;
+}
+
+.date_field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.date_field input {
+  height: 28px;
+  min-width: 128px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.date_separator {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.date_clear_button {
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background-color: #2563eb;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.date_clear_button:hover {
+  background-color: #1d4ed8;
 }
