@@ -35,7 +35,7 @@ def get_db_connection():
 
 def find_latest_failed_test_id():
     """
-    Find the latest Lighthouse run that failed performance thresholds.
+    Find the latest Decathlon/target Lighthouse run that failed performance thresholds.
     This is used when trigger does not include test_id.
     """
     conn = get_db_connection()
@@ -45,10 +45,13 @@ def find_latest_failed_test_id():
         SELECT test_id
         FROM lighthouse_runs
         WHERE
-            performance_score < 90
-            OR lcp_ms > 2500
-            OR tbt_ms > 200
-            OR cls_score > 0.1
+            site_type IN ('target', 'decathlon')
+            AND (
+                performance_score < 90
+                OR lcp_ms > 2500
+                OR tbt_ms > 200
+                OR cls_score > 0.1
+            )
         ORDER BY created_at DESC
         LIMIT 1
     """)
@@ -57,7 +60,6 @@ def find_latest_failed_test_id():
     conn.close()
 
     return row[0] if row else None
-
 
 class TriggerPayload(BaseModel):
     # Exact audit target if available later
