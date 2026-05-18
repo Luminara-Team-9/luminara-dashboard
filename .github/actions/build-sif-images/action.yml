@@ -78,7 +78,17 @@ runs:
 
     - name: Smart Verification (Pre-Flight Checks)
       shell: bash
+      env:
+        SINGULARITY_TMPDIR: "/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        TMPDIR: "/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        # This blocks the choked host /tmp from bleeding into your validation run
+        SINGULARITY_BIND: "/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}:/tmp"
       run: |
+        echo "🔍 Testing SIF Integrity in RAM Disk..."
+        
+        # Ensure our temporary target folder actually exists for this step
+        mkdir -p $SINGULARITY_TMPDIR
+        
         echo "🔍 Testing SIF Integrity in RAM Disk..."
         singularity exec ${{ env.LOCAL_SIF_PATH }} ls -d /workspace || echo "ℹ️ No /workspace found."
         singularity exec ${{ env.LOCAL_SIF_PATH }} ls -d /data || echo "ℹ️ No /data found."

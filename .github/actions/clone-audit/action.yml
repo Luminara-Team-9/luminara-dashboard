@@ -77,7 +77,7 @@ runs:
       run: |
         # 1. Capture Git Metadata from Host
         COMMIT_MSG=$(git log -1 --pretty=%B)
-        COMMIT_TIME=$(git log -1 --format=%ct)
+        COMMIT_TIME=$(git log -1 --format=%cI)
         
         # 2. Inject ALL Metadata (Added Commit Time and Avatar URL)
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
@@ -112,25 +112,27 @@ runs:
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
-          --collect.settings.preset=desktop
+          --collect.settings.preset=desktop \
+          --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN
 
     - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
       shell: bash
+      env:
+        TMPDIR: /abr/coss41/tmp
       run: |
-        # SRE FIX: No Python script needed. Use the Playwright CLI directly.
-        # This prevents all indentation issues.
-        singularity exec \
-          --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
-          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
+        # 1. Ensure your personal temporary folder exists on the host
+        mkdir -p $TMPDIR
 
-        # 2. Execute the file inside Singularity
+        echo "Running Playwright diagnostics against port ${{ env.TWIN_PORT }}..."
+
         singularity exec \
-          --env TWIN_PORT=${{ env.TWIN_PORT }} \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          --bind /abr/coss41/tmp:/tmp \
+          --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          python3 /tmp/debug_screenshot.py
+          python3 /workspace/clone_debug.py
+        # playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
