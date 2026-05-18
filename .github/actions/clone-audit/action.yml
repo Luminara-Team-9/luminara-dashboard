@@ -77,12 +77,12 @@ runs:
       run: |
         # 1. Capture Git Metadata from Host
         COMMIT_MSG=$(git log -1 --pretty=%B)
-        COMMIT_TIME=$(git log -1 --format=%ct)
+        COMMIT_TIME=$(git log -1 --format=%cI)
         
         # 2. Inject ALL Metadata (Added Commit Time and Avatar URL)
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_TIME="$COMMIT_TIME"
-        export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}"
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}{{ github.run_id }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
@@ -112,7 +112,8 @@ runs:
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
-          --collect.settings.preset=desktop
+          --collect.settings.preset=desktop \
+          --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN
 
     - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
