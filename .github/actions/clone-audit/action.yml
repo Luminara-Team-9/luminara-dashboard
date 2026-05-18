@@ -129,6 +129,7 @@ runs:
         singularity exec \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
           --bind /abr/coss41/tmp:/tmp \
+          --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           python3 /workspace/clone_debug.py
         # playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
