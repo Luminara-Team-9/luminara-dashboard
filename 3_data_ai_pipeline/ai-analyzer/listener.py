@@ -2,7 +2,7 @@ import os
 import subprocess
 from datetime import datetime
 from typing import Optional
-
+import requests
 import psycopg2
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -125,32 +125,42 @@ def trigger_agent(payload: TriggerPayload):
                 "logs": logs,
             }
 
-    # 2. Update RAG knowledge base
+    # 2. Update RAG knowledge base through long-running RAG service
     if payload.update_rag:
-        rag_cmd = [PYTHON, "embed.py"]
+        try:
+            rag_response = requests.post(
+                "http://localhost:9020/update",
+                timeout=900,
+            )
 
-        rag_result = subprocess.run(
-            rag_cmd,
-            cwd=AI_DIR,
-            capture_output=True,
-            text=True,
-            timeout=900,
-        )
+            rag_json = rag_response.json()
 
-        logs.append({
-            "step": "rag_update",
-            "command": " ".join(rag_cmd),
-            "returncode": rag_result.returncode,
-            "stdout": rag_result.stdout[-3000:],
-            "stderr": rag_result.stderr[-3000:],
-        })
+            logs.append({
+                "step": "rag_update",
+                "mode": "rag_service",
+                "status_code": rag_response.status_code,
+                "response": rag_json,
+            })
 
-        if rag_result.returncode != 0:
+            if rag_response.status_code != 200 or rag_json.get("status") != "success":
+                return {
+                    "status": "rag_update_failed",
+                    "logs": logs,
+                }
+
+        except Exception as e:
+            logs.append({
+                "step": "rag_update",
+                "mode": "rag_service",
+                "error": str(e),
+            })
+
             return {
                 "status": "rag_update_failed",
                 "logs": logs,
             }
-
+        
+        
     # 3. Resolve failed test_id
     resolved_test_id = payload.test_id
 
