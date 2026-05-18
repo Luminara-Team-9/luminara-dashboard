@@ -1,0 +1,96 @@
+Bootstrap: docker
+From: node:24-slim
+
+%labels
+    Maintainer Luminara-SRE
+    Project Luminara-Infrastructure
+    Service API-Core-Gateway
+    Tier Production-Backend
+    Tested True
+
+# ---------------------------------------------------------
+# 📦 DATA & SOURCE CODE INJECTION
+# ---------------------------------------------------------
+%files
+    # Injecting the monorepo workspace dependencies
+    ./3_api_service /workspace/3_api_service
+    ./0_shared_packages /workspace/0_shared_packages
+    ./pnpm-workspace.yaml /workspace/pnpm-workspace.yaml
+    ./package.json /workspace/package.json
+    ./pnpm-lock.yaml /workspace/pnpm-lock.yaml
+
+%environment
+    export PORT=${PORT:-4000}
+    export NODE_ENV=production
+    
+    # SRE FIX: Isolate pnpm caching to prevent home directory disk friction
+    export PNPM_HOME="/tmp/pnpm"
+    export PATH="$PNPM_HOME:$PATH"
+    
+    # Restore standard system execution paths
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# ---------------------------------------------------------
+# 🏗️ COMPILATION & HARDENING PHASE
+# ---------------------------------------------------------
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    export NODE_ENV=production
+
+    # 1. SRE FIX: Bypassing the host /tmp statvfs disk capacity limitations
+    mkdir -p /tmp/apt-cache
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3
+    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/apt-cache
+
+    # 2. Configure global JS workspace tools
+    npm install -g pnpm@latest
+
+    # 3. Create persistent anchors and dynamic system mounts
+    mkdir -p /data
+    mkdir -p /workspace
+    mkdir -p /logs/api
+
+    # 4. Build the API Engine inside the isolated container
+    cd /workspace
+    echo "📦 Restoring isolated workspace dependencies..."
+    pnpm install --frozen-lockfile
+
+    echo "🏗️ Compiling production API distribution assets..."
+    pnpm --filter ./3_api_service build
+
+    # Clean package manager caching layers to optimize final SIF footprint
+    npm cache clean --force
+
+# ---------------------------------------------------------
+# 🚀 RUNTIME INFRASTRUCTURE BOOTSTRAP
+# ---------------------------------------------------------
+%startscript
+    echo "------------------------------------------------"
+    echo "🏛️ Luminara CENTRALIZED BACKEND API Starting"
+    echo "🌐 Mode: $NODE_ENV | Bound Port: $PORT"
+    echo "------------------------------------------------"
+
+    # Route execution context straight to the compiled output directory
+    cd /workspace/3_api_service
+    
+    # Fallback checking for necessary infrastructure links
+    if [ -z "$DATABASE_URL" ]; then
+        echo "⚠️ CRITICAL WARNING: DATABASE_URL is unassigned. Relational transactions will drop."
+    fi
+
+    # Execute utilizing the local node binary map
+    exec pnpm start --port ${PORT} --hostname 0.0.0.0
+
+%help
+    Luminara Core Data API Gateway
+    ----------------------------------------------
+    Isolates ClickHouse, Postgres, and Redis transactions into a single system thread.
+    
+    To deploy a production daemon instance:
+    singularity instance start --env-file .env.api.prod \
+                               --bind /home/coss41/tmp:/tmp \
+                               infrastructure_api.sif luminara_api_live
