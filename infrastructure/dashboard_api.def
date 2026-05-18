@@ -39,12 +39,10 @@ From: node:24-slim
     export NODE_ENV=production
 
     # 1. SRE FIX: Bypassing the host /tmp statvfs disk capacity limitations
-    mkdir -p /tmp/apt-cache
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache update -o Acquire::Retries=3
-    apt-get -o Dir::Cache::archives=/tmp/apt-cache -o APT::Get::List-Cleanup="0" install -y --no-install-recommends \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
         curl \
         ca-certificates \
-        && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/apt-cache
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
 
     # 2. Configure global JS workspace tools
     npm install -g pnpm@latest
