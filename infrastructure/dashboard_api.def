@@ -13,7 +13,7 @@ From: node:24-slim
 # ---------------------------------------------------------
 %files
     # Injecting the monorepo workspace dependencies
-    ./3_api_service /workspace/3_api_service
+    ./5_backend_api /workspace/5_backend_api
     ./0_shared_packages /workspace/0_shared_packages
     ./pnpm-workspace.yaml /workspace/pnpm-workspace.yaml
     ./package.json /workspace/package.json
@@ -60,7 +60,7 @@ From: node:24-slim
     pnpm install --frozen-lockfile
 
     echo "🏗️ Compiling production API distribution assets..."
-    pnpm --filter ./3_api_service build
+    pnpm --filter ./5_backend_api build
 
     # Clean package manager caching layers to optimize final SIF footprint
     npm cache clean --force
@@ -75,7 +75,7 @@ From: node:24-slim
     echo "------------------------------------------------"
 
     # Route execution context straight to the compiled output directory
-    cd /workspace/3_api_service
+    cd /workspace/5_backend_api
     
     # Fallback checking for necessary infrastructure links
     if [ -z "$DATABASE_URL" ]; then
