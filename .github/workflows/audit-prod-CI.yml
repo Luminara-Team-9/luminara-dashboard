@@ -23,7 +23,11 @@ jobs:
       IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
       STAGING_PATH: /abr/coss41/Luminara_App/images-staging
       ARTIFACT_NAME: clone_pr_${{ github.event.pull_request.number }}.sif
-
+    # 🚨 SRE FIX: Authorize the runner to write status updates back to GitHub
+    permissions:
+      statuses: write
+      contents: read # Required to read the git tree structure
+      
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
