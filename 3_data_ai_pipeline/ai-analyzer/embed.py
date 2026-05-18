@@ -439,7 +439,7 @@ def embed_competitor_benchmarks(cursor, model):
              comp_name, comp_lcp, comp_tbt,
              comp_cls, comp_score) = comp
 
-            if dec_page != comp_page or dec_device != comp_device:
+            if dec_page != "main" or dec_device != comp_device:
                 continue
 
             dec_lcp = float(dec_lcp or 0)
