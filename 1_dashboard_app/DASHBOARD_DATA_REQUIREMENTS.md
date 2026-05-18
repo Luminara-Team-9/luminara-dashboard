@@ -254,6 +254,19 @@ Backend API는 DB 테이블을 그대로 노출하기보다, dashboard가 바로
 - 클론 사이트에는 `localStorage` 기반 장바구니 동작이 있다.
 - 하지만 `add_to_cart`, `checkout_click` 같은 행동 이벤트를 Swetrix/DB로 보내는 코드는 별도로 필요하다.
 - 따라서 현재는 페이지 이동 정도만 추정 가능하고, 정확한 퍼널은 아직 부족하다.
+- Dashboard API는 아래 이벤트 이름이 ClickHouse `analytics.events.event_name`에 들어오면 자동으로 `rum.userJourney`와 `rum.sessionPaths`로 변환한다.
+
+Dashboard API 수신 이벤트 계약:
+
+| event_name | Dashboard label | Page type |
+| --- | --- | --- |
+| `page_view` | 사이트 진입 | main |
+| `search` | 검색 | main |
+| `product_view` | 상품 상세 조회 | product |
+| `add_to_cart` | 장바구니 담기 | product |
+| `cart_view` | 장바구니 | checkout |
+| `checkout_click` 또는 `checkout_start` | 결제 진입 | checkout |
+| `purchase`, `mock_purchase`, `purchase_complete` | 구매 완료 | checkout |
 
 ## 6. Real User Monitoring Web Vitals
 

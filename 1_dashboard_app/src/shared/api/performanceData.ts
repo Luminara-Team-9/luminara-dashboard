@@ -4,6 +4,14 @@ import { fetchExternalTrafficMetrics } from '@/shared/api/externalTrafficAdapter
 
 const PERFORMANCE_API_URL = process.env.DASHBOARD_PERFORMANCE_API_URL ?? process.env.DASHBOARD_DATA_API_URL;
 
+function withSearchParams(targetUrl: string, params: URLSearchParams): string {
+  const url = new URL(targetUrl, 'http://localhost');
+  params.forEach((value, key) => {
+    if (value) url.searchParams.set(key, value);
+  });
+  return targetUrl.startsWith('/') ? url.pathname + url.search : url.toString();
+}
+
 function isPerformanceApiResponse(value: unknown): value is PerformanceApiResponse {
   if (!value || typeof value !== 'object') return false;
 
@@ -19,11 +27,11 @@ function isPerformanceApiResponse(value: unknown): value is PerformanceApiRespon
   );
 }
 
-async function fetchExternalPerformanceData(): Promise<PerformanceApiResponse | null> {
+async function fetchExternalPerformanceData(params: URLSearchParams): Promise<PerformanceApiResponse | null> {
   if (!PERFORMANCE_API_URL) return null;
 
   try {
-    const response = await fetch(PERFORMANCE_API_URL, {
+    const response = await fetch(withSearchParams(PERFORMANCE_API_URL, params), {
       cache: 'no-store',
       headers: { accept: 'application/json' },
     });
@@ -37,8 +45,8 @@ async function fetchExternalPerformanceData(): Promise<PerformanceApiResponse | 
   }
 }
 
-export async function getPerformanceData(): Promise<PerformanceApiResponse> {
-  const externalData = await fetchExternalPerformanceData();
+export async function getPerformanceData(params = new URLSearchParams()): Promise<PerformanceApiResponse> {
+  const externalData = await fetchExternalPerformanceData(params);
   const baseData = externalData ?? (mockData as PerformanceApiResponse);
   const externalTraffic = await fetchExternalTrafficMetrics();
 

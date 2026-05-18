@@ -131,6 +131,29 @@ function Header() {
   );
 }
 
+function DateRangeControl() {
+  const { dateFrom, dateTo, setDateFrom, setDateTo } = usePerformanceData();
+
+  return (
+    <div className={styles.date_range_group} aria-label="RUM 데이터 조회 기간">
+      <label className={styles.date_field}>
+        <span>시작일</span>
+        <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} />
+      </label>
+      <span className={styles.date_separator}>~</span>
+      <label className={styles.date_field}>
+        <span>종료일</span>
+        <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} />
+      </label>
+      {(dateFrom || dateTo) && (
+        <button type="button" className={styles.date_clear_button} onClick={() => { setDateFrom(''); setDateTo(''); }}>
+          전체
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ViewContent({ view }: { view: DashboardView }) {
   if (view === 'ai') return <AiFixPanel />;
   if (view === 'traffic') return <TrafficSessionInsight />;
@@ -145,6 +168,7 @@ export function MainDashboardPage() {
   const [activeView, setActiveView] = useState<DashboardView>('impact');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const viewMeta = VIEW_TITLE[activeView];
+  const showsTimeRange = activeView === 'traffic' || activeView === 'journey' || activeView === 'regional';
 
   useEffect(() => {
     const handleNavigateAi = () => setActiveView('ai');
@@ -199,7 +223,10 @@ export function MainDashboardPage() {
               <p className={styles.workspace_eyebrow}>현재 보기</p>
               <h2 className={styles.workspace_title}>{viewMeta.title}</h2>
             </div>
-            <p className={styles.workspace_desc}>{viewMeta.description}</p>
+            <div className={styles.workspace_meta}>
+              <p className={styles.workspace_desc}>{viewMeta.description}</p>
+              {showsTimeRange && <DateRangeControl />}
+            </div>
           </div>
 
           <div className={`${styles.view_panel} ${activeView === 'trend' ? styles.view_panel_overflow_visible : ''}`}>

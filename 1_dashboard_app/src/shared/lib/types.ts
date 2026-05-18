@@ -215,10 +215,19 @@ export interface SessionPathPattern {
   }[];
 }
 
+export interface RumPagePerformance {
+  path: string;
+  sessions: number;
+  avgPageLoad: number;
+  p75PageLoad?: number;
+}
+
 export interface RUM {
   regionalData: RegionalData[];
   userJourney: UserJourneyStep[];
   sessionPaths?: SessionPathPattern[];
+  pagePerformance?: RumPagePerformance[];
+  latestCollectedAt?: string;
 }
 
 // ─── 벤치마크 지표 키 (entities/metric과 공유) ────────────────
