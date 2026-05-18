@@ -112,9 +112,6 @@ def run_auto():
                 OR lr.tti_ms IS NULL
                 OR lr.ttfb_ms IS NULL
                 OR lr.performance_score IS NULL
-                OR lr.accessibility_score IS NULL
-                OR lr.best_practices_score IS NULL
-                OR lr.seo_score IS NULL
             ORDER BY lr.timestamp ASC
         """)
 
