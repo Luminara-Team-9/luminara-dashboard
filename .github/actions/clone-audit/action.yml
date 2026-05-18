@@ -82,7 +82,7 @@ runs:
         # 2. Inject ALL Metadata (Added Commit Time and Avatar URL)
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_TIME="$COMMIT_TIME"
-        export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}{{ github.run_id }}"
+        export SINGULARITYENV_LHCI_BUILD_CONTEXT__CURRENT_HASH="${{ github.sha }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AUTHOR="${{ github.actor }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
@@ -118,11 +118,17 @@ runs:
     - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
       shell: bash
+      env:
+        TMPDIR: /abr/coss41/tmp
       run: |
-        # SRE FIX: No Python script needed. Use the Playwright CLI directly.
-        # This prevents all indentation issues.
+        # 1. Ensure your personal temporary folder exists on the host
+        mkdir -p $TMPDIR
+
+        # 2. SRE FIX: Explicitly bind your personal folder to the container's /tmp
+        # This completely intercepts and isolates Playwright's artifact creations
         singularity exec \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          -bind /abr/coss41/tmp:/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
 
