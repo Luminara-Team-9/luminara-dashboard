@@ -54,7 +54,7 @@ runs:
         echo "⏳ Waiting for Next.js to finish building and start routing..."
         TIMEOUT=180
         ELAPSED=0
-        until curl -s http://127.0.0.1:${{ env.TWIN_PORT }} | grep -q "__next"; do
+        until curl -s http://localhost:${{ env.TWIN_PORT }} | grep -q "__next"; do
           if [ $ELAPSED -ge $TIMEOUT ]; then
             echo "❌ ERROR: Twin failed to boot within $TIMEOUT seconds."
             echo "🔍 -------------------------------------------------"
@@ -93,20 +93,16 @@ runs:
         export SINGULARITYENV_LHCI_USER="${{ inputs.lhci_user }}"
         export SINGULARITYENV_LHCI_PASS="${{ inputs.lhci_password }}"
         export SINGULARITYENV_LHCI_GITHUB_TOKEN="${{ inputs.github_token }}"
-        export SINGULARITYENV_LHCI_COLLECT_URL="http://127.0.0.1:${{ env.TWIN_PORT }}/"
+        export SINGULARITYENV_LHCI_COLLECT_URL="http://localhost:${{ env.TWIN_PORT }}/"
 
         AUDIT_TMP="/dev/shm/coss41_luminara/audit_tmp_${{ github.run_id }}"
         mkdir -p "$AUDIT_TMP"
-
-        # SRE FIX: Give the Next.js Twin 10 seconds to hydrate JS before auditing
-        echo "⏳ Giving Next.js hydration grace period..."
-        sleep 10
 
         echo "🔍 DEBUG: Auditor Container's view of the Twin:"
         singularity exec \
           --bind ${{ inputs.audit_image_dir }}:/audit \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          curl -v http://127.0.0.1:${{ env.TWIN_PORT }} | head -n 50
+          curl -v http://localhost:${{ env.TWIN_PORT }} | head -n 50
 
         echo "🚀 Firing LHCI metrics against port ${{ env.TWIN_PORT }}..."
         singularity exec \
@@ -116,8 +112,7 @@ runs:
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
           --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
-          --collect.settings.preset=desktop \
-          --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN
+          --collect.settings.preset=desktop
 
     - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
@@ -125,29 +120,17 @@ runs:
       run: |
         # SRE FIX: No Python script needed. Use the Playwright CLI directly.
         # This prevents all indentation issues.
-        #singularity exec \
-        #  --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
-        #  ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-        #  playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
+        singularity exec \
+          --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+          playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
 
-        echo "Running Playwright diagnostics against port ${{ env.TWIN_PORT }}..."
-        
+        # 2. Execute the file inside Singularity
         singularity exec \
           --env TWIN_PORT=${{ env.TWIN_PORT }} \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
-          --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          python3 /workspace/clone_debug.py
-
-    - name: 📦 Upload Debug Artifacts
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: lhci-debug-report-${{ github.run_id }}
-        path: |
-          debug_view.png
-          lhci_summary.md
-        retention-days: 7
+          python3 /tmp/debug_screenshot.py
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()
