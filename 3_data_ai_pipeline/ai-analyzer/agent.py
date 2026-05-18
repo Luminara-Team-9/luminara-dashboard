@@ -3,19 +3,20 @@ import re
 import json
 import uuid
 import argparse
+from typing import TypedDict, Optional, Any
+
 import psycopg2
+import requests
 from psycopg2.extras import Json
 from dotenv import load_dotenv
 from openai import OpenAI
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Optional, Any
-from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
-# ── Config ───────────────────────────────────────────────────────────────────
-# vLLM/Qwen runs on DIS02 GPU server.
-# Agent/listener runs on ABRM02 and calls DIS02 through OpenAI-compatible API.
+# ─────────────────────────────────────────────
+# Config
+# ─────────────────────────────────────────────
 
 QWEN_MODEL = os.getenv(
     "QWEN_MODEL",
@@ -27,7 +28,13 @@ QWEN_BASE_URL = os.getenv(
     "http://DIS02:8000/v1",
 )
 
-MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "5"))
+RAG_SERVICE_URL = os.getenv(
+    "RAG_SERVICE_URL",
+    "http://localhost:9020",
+)
+
+# Staged self-healing: fix top 1 first by default
+MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "1"))
 
 client = OpenAI(
     base_url=QWEN_BASE_URL,
@@ -45,30 +52,17 @@ def get_db_connection():
     )
 
 
-_embed_model = None
-
-
-def get_embed_model():
-    """
-    Load BGE-M3 only once per running listener/agent process.
-    This avoids reloading the embedding model on every trigger.
-    """
-    global _embed_model
-
-    if _embed_model is None:
-        print("Loading BGE-M3...")
-        _embed_model = SentenceTransformer("BAAI/bge-m3")
-        print("✅ BGE-M3 loaded")
-
-    return _embed_model
-
-
-class AgentState(TypedDict):
-    test_id: Optional[int]
+class AgentState(TypedDict, total=False):
+    test_id: int
 
     url: str
     page_type: str
     device_type: str
+
+    pr_branch: Optional[str]
+    target_dir: Optional[str]
+    thread_id: Optional[str]
+
     dry_run: bool
     max_opportunities: int
 
@@ -90,37 +84,22 @@ class AgentState(TypedDict):
     should_end: bool
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-def normalize_title(title: str) -> str:
-    title = title or ""
-    title = re.sub(r"\s+", " ", title.strip().lower())
-    return title
-
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
 
 def normalize_severity(severity: Optional[str]) -> str:
     severity = (severity or "").lower()
-
-    if severity in {"high", "medium", "low"}:
-        return severity
-
-    return "medium"
-
-
-def severity_rank(severity: Optional[str]) -> int:
-    severity = normalize_severity(severity)
-    return {"low": 1, "medium": 2, "high": 3}.get(severity, 2)
+    return severity if severity in {"high", "medium", "low"} else "medium"
 
 
 def priority_from_savings(avg_savings_ms: int, severity: Optional[str]) -> str:
-    sev = normalize_severity(severity)
+    severity = normalize_severity(severity)
 
-    if sev == "high" or avg_savings_ms >= 500:
+    if severity == "high" or avg_savings_ms >= 500:
         return "high"
-
-    if sev == "medium" or avg_savings_ms >= 150:
+    if severity == "medium" or avg_savings_ms >= 150:
         return "medium"
-
     return "low"
 
 
@@ -129,21 +108,12 @@ def infer_affected_metric(title: str, category: str) -> str:
 
     if "lcp" in text or "largest contentful paint" in text or "image" in text:
         return "LCP"
-
-    if (
-        "tbt" in text
-        or "javascript" in text
-        or "js" in text
-        or "main thread" in text
-    ):
+    if "tbt" in text or "javascript" in text or "js" in text or "main thread" in text:
         return "TBT"
-
     if "cls" in text or "layout shift" in text:
         return "CLS"
-
     if "fcp" in text or "render-blocking" in text or "css" in text:
         return "FCP"
-
     if "ttfb" in text or "server response" in text:
         return "TTFB"
 
@@ -159,15 +129,10 @@ def build_patch_template(title: str, category: str) -> dict:
             "target_file": "server/cache-config or backend route handler",
             "change_type": "server_config",
             "before": "No explicit cache policy or slow backend response path.",
-            "after": "Add CDN/server caching, optimize backend query, and reduce TTFB for HTML document.",
+            "after": "Add CDN/server caching, optimize backend query, and reduce TTFB.",
         }
 
-    if (
-        "unused javascript" in text
-        or "legacy javascript" in text
-        or "js" in text
-        or "javascript" in text
-    ):
+    if "unused javascript" in text or "legacy javascript" in text or "javascript" in text or "js" in text:
         return {
             "summary": "Reduce JavaScript payload using code splitting and modern bundle output.",
             "target_file": "next.config.js / package build config / page component imports",
@@ -185,12 +150,7 @@ def build_patch_template(title: str, category: str) -> dict:
             "after": "Inline critical CSS, defer non-critical CSS, and remove unused CSS rules.",
         }
 
-    if (
-        "image" in text
-        or "next-gen" in text
-        or "properly size" in text
-        or "offscreen" in text
-    ):
+    if "image" in text or "next-gen" in text or "properly size" in text or "offscreen" in text:
         return {
             "summary": "Optimize images using responsive sizes, lazy loading, and WebP/AVIF.",
             "target_file": "image component / product card / hero section",
@@ -213,7 +173,7 @@ def build_patch_template(title: str, category: str) -> dict:
         "target_file": "target source/config file",
         "change_type": "performance_optimization",
         "before": None,
-        "after": "Apply the recommended optimization and verify with Lighthouse rerun.",
+        "after": "Apply recommended optimization and verify with Lighthouse rerun.",
     }
 
 
@@ -227,14 +187,12 @@ def get_existing_columns(cursor, table_name: str) -> set:
         """,
         (table_name,),
     )
-
     return {row[0] for row in cursor.fetchall()}
 
 
 def db_value(value: Any):
     if isinstance(value, (dict, list)):
         return Json(value)
-
     return value
 
 
@@ -259,241 +217,146 @@ def safe_insert(cursor, table_name: str, data: dict, returning: str = "id"):
     return cursor.fetchone()[0]
 
 
-# ── N1: Get latest metrics + aggregated opportunities ──────────────────
+def extract_json(raw_text: str) -> dict:
+    raw_text = raw_text.strip()
+
+    if raw_text.startswith("```"):
+        raw_text = raw_text.split("```")[1]
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:]
+        raw_text = raw_text.strip()
+
+    try:
+        return json.loads(raw_text)
+    except Exception:
+        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+        if not match:
+            raise
+        return json.loads(match.group(0))
+
+
+# ─────────────────────────────────────────────
+# N1 — Get metrics + rank opportunities
+# ─────────────────────────────────────────────
 
 def get_metrics(state: AgentState) -> AgentState:
-    """
-    N1 purpose:
-    - If test_id is provided:
-        directly analyze that failed Lighthouse audit.
-    - Otherwise:
-        use latest 3-run average for same URL/page/device.
-    - Detect failed metrics.
-    - Aggregate and rank Lighthouse opportunities.
-    """
-
-    print("\n[N1] Getting metrics...")
+    print("\n[N1] Getting metrics and opportunities by test_id...")
 
     test_id = state.get("test_id")
-    url = state.get("url")
-    page_type = state.get("page_type")
-    device_type = state.get("device_type")
     max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
+
+    if not test_id:
+        print("  ❌ test_id is required. Listener must resolve it first.")
+        return {**state, "should_end": True}
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # ─────────────────────────────────────────────────────────────
-    # MODE 1: Direct failed audit analysis using test_id
-    # ─────────────────────────────────────────────────────────────
-
-    if test_id:
-        cursor.execute(
-            """
-            SELECT
-                test_id,
-                url,
-                page_type,
-                device_type,
-                lcp_ms,
-                tbt_ms,
-                cls_score,
-                performance_score,
-                timestamp,
-                created_at,
-                run_number
-            FROM lighthouse_runs
-            WHERE test_id = %s
-            """,
-            (test_id,),
-        )
-
-        row = cursor.fetchone()
-
-        if not row:
-            conn.close()
-            print(f"  ⚠️ No lighthouse_run found for test_id={test_id}")
-            return {**state, "should_end": True}
-
-        (
-            selected_test_id,
+    cursor.execute(
+        """
+        SELECT
+            test_id,
             url,
             page_type,
             device_type,
-            lcp,
-            tbt,
-            cls,
-            perf,
-            timestamp,
-            created_at,
-            run_number,
-        ) = row
+            lcp_ms,
+            tbt_ms,
+            cls_score,
+            performance_score,
+            fcp_ms,
+            si_ms,
+            tti_ms,
+            ttfb_ms,
+            inp_ms
+        FROM lighthouse_runs
+        WHERE test_id = %s
+        """,
+        (test_id,),
+    )
 
-        runs = [
-            (
-                selected_test_id,
-                lcp,
-                tbt,
-                cls,
-                perf,
-                timestamp,
-                created_at,
-                run_number,
-            )
-        ]
+    row = cursor.fetchone()
 
-    # ─────────────────────────────────────────────────────────────
-    # MODE 2: Use latest 3 runs by URL/page/device
-    # ─────────────────────────────────────────────────────────────
-
-    else:
-        if not url or not page_type or not device_type:
-            conn.close()
-            print("  ⚠️ Missing url/page_type/device_type and no test_id provided")
-            return {**state, "should_end": True}
-
-        url = url.rstrip("/")
-
-        cursor.execute(
-            """
-            WITH candidate_runs AS (
-                SELECT
-                    test_id,
-                    lcp_ms,
-                    tbt_ms,
-                    cls_score,
-                    performance_score,
-                    timestamp,
-                    created_at,
-                    DATE(COALESCE(timestamp, created_at)) AS run_date,
-                    run_number
-                FROM lighthouse_runs
-                WHERE TRIM(TRAILING '/' FROM url) = %s
-                  AND page_type = %s
-                  AND device_type = %s
-            ),
-            latest_day AS (
-                SELECT MAX(run_date) AS run_date
-                FROM candidate_runs
-            )
-            SELECT
-                test_id,
-                lcp_ms,
-                tbt_ms,
-                cls_score,
-                performance_score,
-                timestamp,
-                created_at,
-                run_number
-            FROM candidate_runs
-            WHERE run_date = (SELECT run_date FROM latest_day)
-            ORDER BY run_number ASC NULLS LAST, created_at DESC
-            LIMIT 3
-            """,
-            (url, page_type, device_type),
-        )
-
-        runs = cursor.fetchall()
-
-    # ─────────────────────────────────────────────────────────────
-
-    if not runs:
+    if not row:
         conn.close()
-        print("  ⚠️ No Lighthouse runs found")
+        print(f"  ❌ No lighthouse_runs row found for test_id={test_id}")
         return {**state, "should_end": True}
 
-    test_ids = [r[0] for r in runs]
-
-    lcp_values = [r[1] for r in runs if r[1] is not None]
-    tbt_values = [r[2] for r in runs if r[2] is not None]
-    cls_values = [r[3] for r in runs if r[3] is not None]
-    perf_values = [r[4] for r in runs if r[4] is not None]
-
-    avg_lcp = sum(lcp_values) / len(lcp_values) if lcp_values else 0
-    avg_tbt = sum(tbt_values) / len(tbt_values) if tbt_values else 0
-    avg_cls = sum(cls_values) / len(cls_values) if cls_values else 0
-    avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
-
-    # ─────────────────────────────────────────────────────────────
-    # Detect failed metrics
-    # ─────────────────────────────────────────────────────────────
+    (
+        selected_test_id,
+        url,
+        page_type,
+        device_type,
+        lcp_ms,
+        tbt_ms,
+        cls_score,
+        performance_score,
+        fcp_ms,
+        si_ms,
+        tti_ms,
+        ttfb_ms,
+        inp_ms,
+    ) = row
 
     failed_metrics = []
 
-    if avg_perf < 90:
+    if performance_score is not None and performance_score < 90:
         failed_metrics.append("performance_score")
-
-    if avg_lcp > 2500:
+    if lcp_ms is not None and lcp_ms > 2500:
         failed_metrics.append("LCP")
-
-    if avg_tbt > 200:
+    if tbt_ms is not None and tbt_ms > 200:
         failed_metrics.append("TBT")
-
-    if avg_cls > 0.1:
+    if cls_score is not None and cls_score > 0.1:
         failed_metrics.append("CLS")
-
-    print(f"  ✅ Failed metrics: {failed_metrics}")
+    if inp_ms is not None and inp_ms > 200:
+        failed_metrics.append("INP")
 
     if not failed_metrics:
         conn.close()
-        print("  ✅ No failed metrics detected")
+        print("  ✅ No failed metric detected. Agent stops.")
         return {**state, "should_end": True}
 
-    # ─────────────────────────────────────────────────────────────
-    # Confidence calculation
-    # ─────────────────────────────────────────────────────────────
-
-    failed_lcp_runs = [v for v in lcp_values if v > 2500]
-
-    if len(failed_lcp_runs) >= 3:
-        confidence = "high"
-    elif len(failed_lcp_runs) == 2:
-        confidence = "medium"
-    else:
-        confidence = "low"
+    confidence = "high" if len(failed_metrics) >= 2 else "medium"
 
     metrics = {
-        "avg_lcp_ms": round(avg_lcp, 2),
-        "avg_tbt_ms": round(avg_tbt, 2),
-        "avg_cls_score": round(avg_cls, 4),
-        "avg_performance": round(avg_perf, 1),
+        "test_ids": [selected_test_id],
+        "run_count": 1,
+        "avg_lcp_ms": round(float(lcp_ms), 2) if lcp_ms is not None else None,
+        "avg_tbt_ms": round(float(tbt_ms), 2) if tbt_ms is not None else None,
+        "avg_cls_score": round(float(cls_score), 4) if cls_score is not None else None,
+        "avg_performance": round(float(performance_score), 1) if performance_score is not None else None,
+        "fcp_ms": round(float(fcp_ms), 2) if fcp_ms is not None else None,
+        "si_ms": round(float(si_ms), 2) if si_ms is not None else None,
+        "tti_ms": round(float(tti_ms), 2) if tti_ms is not None else None,
+        "ttfb_ms": round(float(ttfb_ms), 2) if ttfb_ms is not None else None,
+        "inp_ms": round(float(inp_ms), 2) if inp_ms is not None else None,
         "failed_metrics": failed_metrics,
-        "test_ids": test_ids,
-        "run_count": len(runs),
     }
-
-    print(f"  ✅ Selected test_ids: {test_ids}")
-    print(f"  ✅ LCP avg: {metrics['avg_lcp_ms']}ms")
-    print(f"  ✅ TBT avg: {metrics['avg_tbt_ms']}ms")
-    print(f"  ✅ CLS avg: {metrics['avg_cls_score']}")
-    print(f"  ✅ Score avg: {metrics['avg_performance']}")
-    print(f"  ✅ Confidence: {confidence}")
-
-    # ─────────────────────────────────────────────────────────────
-    # Aggregate opportunities
-    # ─────────────────────────────────────────────────────────────
 
     cursor.execute(
         """
         SELECT
-            MIN(lo.id) AS id,
-            MIN(lo.opportunity_id) AS opportunity_id,
+            lo.id,
+            lo.opportunity_id,
             lo.title,
-            MAX(lo.description) AS description,
-            AVG(lo.savings_ms)::int AS avg_savings,
-            MAX(lo.severity) AS severity,
-            MAX(lo.category) AS category,
-            COUNT(*) AS frequency
+            lo.description,
+            COALESCE(lo.savings_ms, 0)::int AS savings_ms,
+            lo.severity,
+            lo.category
         FROM lighthouse_opportunities lo
-        WHERE lo.test_id = ANY(%s)
+        WHERE lo.test_id = %s
           AND COALESCE(lo.savings_ms, 0) > 0
-        GROUP BY LOWER(TRIM(lo.title)), lo.title
         ORDER BY
-            COUNT(*) DESC,
-            AVG(lo.savings_ms) DESC
+            COALESCE(lo.savings_ms, 0) DESC,
+            CASE lo.severity
+                WHEN 'high' THEN 3
+                WHEN 'medium' THEN 2
+                WHEN 'low' THEN 1
+                ELSE 2
+            END DESC,
+            lo.created_at DESC
         LIMIT %s
         """,
-        (test_ids, max_opportunities),
+        (selected_test_id, max_opportunities),
     )
 
     rows = cursor.fetchall()
@@ -502,38 +365,48 @@ def get_metrics(state: AgentState) -> AgentState:
     opportunities = []
 
     for row in rows:
-        avg_savings = int(row[4] or 0)
-        severity = normalize_severity(row[5])
-        category = row[6] or "performance"
-        frequency = int(row[7] or 1)
+        opp_id, opportunity_id, title, description, savings_ms, severity, category = row
 
-        opportunities.append(
-            {
-                "id": row[0],
-                "opportunity_id": row[1],
-                "title": row[2],
-                "description": row[3],
-                "avg_savings_ms": avg_savings,
-                "severity": severity,
-                "category": category,
-                "frequency": frequency,
-                "affected_metric": infer_affected_metric(row[2], category),
-            }
-        )
+        severity = normalize_severity(severity)
+        category = category or "performance"
+        affected_metric = infer_affected_metric(title, category)
+        priority_level = priority_from_savings(int(savings_ms or 0), severity)
 
-    print(f"  ✅ Aggregated opportunities: {len(opportunities)}")
+        opportunities.append({
+            "id": opp_id,
+            "opportunity_id": opportunity_id,
+            "title": title,
+            "description": description,
+            "avg_savings_ms": int(savings_ms or 0),
+            "severity": severity,
+            "category": category,
+            "frequency": 1,
+            "affected_metric": affected_metric,
+            "priority_level": priority_level,
+        })
+
+    print(f"  ✅ test_id: {selected_test_id}")
+    print(f"  ✅ URL: {url}")
+    print(f"  ✅ Page: {page_type}")
+    print(f"  ✅ Device: {device_type}")
+    print(f"  ✅ Failed metrics: {failed_metrics}")
+    print(f"  ✅ Opportunities selected: {len(opportunities)}")
 
     for opp in opportunities:
         print(
             f"     - {opp['title']} | "
             f"{opp['avg_savings_ms']}ms | "
-            f"freq {opp['frequency']}/{len(runs)} | "
+            f"{opp['priority_level']} | "
             f"{opp['affected_metric']}"
         )
 
+    if not opportunities:
+        print("  ❌ No opportunities found. Run ETL first.")
+        return {**state, "should_end": True}
+
     return {
         **state,
-        "test_id": test_id,
+        "test_id": selected_test_id,
         "url": url,
         "page_type": page_type,
         "device_type": device_type,
@@ -541,98 +414,109 @@ def get_metrics(state: AgentState) -> AgentState:
         "opportunities": opportunities,
         "confidence": confidence,
         "opp_index": 0,
-        "should_end": len(opportunities) == 0,
+        "should_end": False,
     }
-# ── N2 ───────────────────────────────────────────────────────────────────────
 
-def sort_opportunities(state: AgentState) -> AgentState:
-    print("\n[N2] Picking opportunity...")
 
-    opportunities = state["opportunities"]
-    opp_index = state["opp_index"]
+# ─────────────────────────────────────────────
+# N2 — Pick priority opportunity
+# ─────────────────────────────────────────────
+
+def pick_opportunity(state: AgentState) -> AgentState:
+    print("\n[N2] Picking highest-priority opportunity...")
+
+    opportunities = state.get("opportunities", [])
+    opp_index = state.get("opp_index", 0)
 
     if opp_index >= len(opportunities):
-        print("  ✅ All opportunities processed")
+        print("  ✅ All selected opportunities processed")
         return {**state, "should_end": True}
 
     current_opp = opportunities[opp_index]
 
     print(
         f"  ✅ [{opp_index + 1}/{len(opportunities)}] "
-        f"{current_opp['title']} "
-        f"({current_opp['avg_savings_ms']}ms, "
-        f"{current_opp['affected_metric']})"
+        f"{current_opp['title']} | "
+        f"{current_opp['avg_savings_ms']}ms | "
+        f"{current_opp['priority_level']} | "
+        f"{current_opp['affected_metric']}"
     )
 
     return {**state, "current_opp": current_opp}
 
 
-# ── N3 ───────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# N3 — Search RAG through rag_service
+# ─────────────────────────────────────────────
 
 def search_rag(state: AgentState) -> AgentState:
-    print("\n[N3] Searching RAG...")
+    print("\n[N3] Searching RAG through rag_service...")
 
     opp = state["current_opp"]
-    model = get_embed_model()
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    q1 = f"How to fix {opp['title']} for {opp['affected_metric']}"
 
-    def search(query, top_k=3):
-        vec = model.encode(query, normalize_embeddings=True).tolist()
-
-        cursor.execute(
-            """
-            SELECT
-                title,
-                content,
-                doc_type,
-                1 - (embedding <=> %s::vector) AS similarity
-            FROM rag_documents
-            ORDER BY embedding <=> %s::vector
-            LIMIT %s
-            """,
-            (str(vec), str(vec), top_k),
-        )
-
-        return cursor.fetchall()
-
-    q1 = f"How to fix {opp['title']}"
     q2 = (
-        f"{opp['title']} "
-        f"{state['page_type']} page "
-        f"{state['device_type']} "
-        f"{opp['affected_metric']} "
-        f"Korean e-commerce optimization"
+        f"{opp['title']} {state.get('page_type')} page "
+        f"{state.get('device_type')} Korean e-commerce "
+        f"competitor benchmark Core Web Vitals"
     )
 
-    results = search(q1) + search(q2)
-    conn.close()
+    try:
+        docs = []
+        seen_titles = set()
 
-    seen = set()
-    docs = []
+        for query in [q1, q2]:
+            response = requests.post(
+                f"{RAG_SERVICE_URL}/search",
+                json={
+                    "query": query,
+                    "top_k": 3,
+                },
+                timeout=120,
+            )
 
-    for row in results:
-        title, content, doc_type, similarity = row
-        if title not in seen:
-            seen.add(title)
-            docs.append(row)
+            data = response.json()
 
-    formatted = []
-    for i, (title, content, doc_type, similarity) in enumerate(docs[:5], 1):
-        formatted.append(f"[Doc {i}] {title}\n{content}")
+            if response.status_code != 200 or data.get("status") != "success":
+                raise RuntimeError(data)
 
-    rag_context = "\n\n".join(formatted)
+            for doc in data.get("results", []):
+                title = doc.get("title")
 
-    print(f"  ✅ RAG docs: {len(docs[:5])}")
+                if title in seen_titles:
+                    continue
+
+                seen_titles.add(title)
+                docs.append(doc)
+
+        formatted = []
+
+        for i, doc in enumerate(docs[:5], 1):
+            formatted.append(
+                f"[Doc {i}] {doc.get('title')}\n"
+                f"Type: {doc.get('doc_type')}\n"
+                f"Similarity: {round(float(doc.get('similarity', 0)), 4)}\n"
+                f"{doc.get('content')}"
+            )
+
+        rag_context = "\n\n".join(formatted)
+
+        print(f"  ✅ RAG docs selected: {len(docs[:5])}")
+
+    except Exception as e:
+        print(f"  ⚠️ RAG service search failed: {e}")
+        rag_context = ""
 
     return {**state, "rag_context": rag_context}
 
 
-# ── N4 ───────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# N4 — Assess risk
+# ─────────────────────────────────────────────
 
 def assess_risk(state: AgentState) -> AgentState:
-    print("\n[N4] Assessing risk...")
+    print("\n[N4] Assessing fix risk...")
 
     opp = state["current_opp"]
 
@@ -645,31 +529,35 @@ def assess_risk(state: AgentState) -> AgentState:
 
     if "server" in category or "server response" in title:
         risk_score += 4
-        risk_details["category"] = "server config (+4)"
-    elif "js" in category or "javascript" in category or "javascript" in title:
+        risk_details["category"] = "server/backend config change (+4)"
+    elif "js" in category or "javascript" in title:
         risk_score += 2
-        risk_details["category"] = "javascript change (+2)"
+        risk_details["category"] = "javascript bundle change (+2)"
     elif "css" in category or "css" in title:
         risk_score += 1
         risk_details["category"] = "css change (+1)"
     elif "image" in category or "image" in title:
         risk_score += 1
-        risk_details["category"] = "image change (+1)"
+        risk_details["category"] = "image optimization change (+1)"
     else:
         risk_score += 1
         risk_details["category"] = f"{category or 'other'} (+1)"
 
     if severity == "high":
         risk_score += 2
-        risk_details["severity"] = "high (+2)"
+        risk_details["severity"] = "high opportunity severity (+2)"
     elif severity == "medium":
         risk_score += 1
-        risk_details["severity"] = "medium (+1)"
+        risk_details["severity"] = "medium opportunity severity (+1)"
+
+    risk_details["failed_metrics"] = state["metrics"].get("failed_metrics", [])
+    risk_details["staged_self_healing"] = (
+        "Only this priority fix should be applied first, then re-audit."
+    )
 
     risk_score = min(risk_score, 10)
 
     print(f"  ✅ Risk score: {risk_score}/10")
-    print(f"  ✅ Risk details: {risk_details}")
 
     return {
         **state,
@@ -678,60 +566,80 @@ def assess_risk(state: AgentState) -> AgentState:
     }
 
 
-# ── N5 ───────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# N5 — Generate Fix Plan
+# ─────────────────────────────────────────────
 
 def generate_fix(state: AgentState) -> AgentState:
-    print("\n[N5] Generating fix...")
+    print("\n[N5] Generating Fix Plan with Qwen...")
 
     opp = state["current_opp"]
     metrics = state["metrics"]
-    rag_context = state["rag_context"]
+    rag_context = state.get("rag_context", "")
     patch_template = build_patch_template(opp["title"], opp["category"])
 
     prompt = f"""
-You are a web performance expert for Korean e-commerce.
+You are a senior web performance optimization engineer for Korean e-commerce.
 
-Page URL: {state['url']}
-Page type: {state['page_type']}
-Device: {state['device_type']}
+Generate ONE staged self-healing Fix Plan.
+Important rule:
+- Do NOT suggest fixing every issue at once.
+- Only fix the selected highest-priority opportunity first.
+- After this fix, the system will re-run Lighthouse and compare before/after scores.
 
-Current Performance:
-- LCP: {metrics['avg_lcp_ms']}ms
-- TBT: {metrics['avg_tbt_ms']}ms
-- CLS: {metrics['avg_cls_score']}
-- Performance Score: {metrics['avg_performance']}
+Target audit:
+- test_id: {state.get("test_id")}
+- URL: {state.get("url")}
+- Page type: {state.get("page_type")}
+- Device: {state.get("device_type")}
 
-Issue:
-- Title: {opp['title']}
-- Description: {opp.get('description', '')}
-- Avg savings: {opp['avg_savings_ms']}ms
-- Frequency: {opp.get('frequency', 1)}/{metrics['run_count']} runs
-- Category: {opp['category']}
-- Severity: {opp['severity']}
-- Affected metric: {opp['affected_metric']}
+Current failed metrics:
+{json.dumps(metrics.get("failed_metrics", []), indent=2)}
 
-RAG Context:
+Current metrics:
+- Performance score: {metrics.get("avg_performance")}
+- LCP: {metrics.get("avg_lcp_ms")}ms
+- TBT: {metrics.get("avg_tbt_ms")}ms
+- CLS: {metrics.get("avg_cls_score")}
+- INP: {metrics.get("inp_ms")}ms
+- TTFB: {metrics.get("ttfb_ms")}ms
+
+Selected priority opportunity:
+- Title: {opp.get("title")}
+- Description: {opp.get("description")}
+- Estimated savings: {opp.get("avg_savings_ms")}ms
+- Severity: {opp.get("severity")}
+- Category: {opp.get("category")}
+- Affected metric: {opp.get("affected_metric")}
+- Priority: {opp.get("priority_level")}
+
+Risk:
+- Risk score: {state.get("risk_score")}/10
+- Risk details: {json.dumps(state.get("risk_details", {}), ensure_ascii=False)}
+
+RAG context:
 {rag_context}
 
 Return ONLY valid JSON:
 {{
   "action": "specific one-sentence fix action",
-  "reasoning": "why this fix improves the metric",
+  "reasoning": "why this one fix should be applied first",
   "patch_code": {{
     "summary": "short patch summary",
     "before": "before example or null",
     "after": "after example or null"
   }},
   "problem_summary": "short dashboard-friendly problem summary",
-  "impact_if_not_fixed": "what happens if ignored",
-  "impact_if_fixed": "expected improvement",
+  "impact_if_not_fixed": "impact if ignored",
+  "impact_if_fixed": "expected improvement after this staged fix",
   "ux_improvement": "user experience benefit",
   "seo_impact": "SEO/Core Web Vitals benefit",
-  "priority_level": "high/medium/low",
-  "estimated_improvement": {opp['avg_savings_ms']},
-  "affected_metric": "{opp['affected_metric']}",
+  "priority_level": "{opp.get("priority_level")}",
+  "estimated_improvement": {opp.get("avg_savings_ms")},
+  "affected_metric": "{opp.get("affected_metric")}",
   "target_file": "likely file/config area",
-  "change_type": "server_config/javascript_optimization/css_optimization/image_optimization/network_optimization/performance_optimization"
+  "change_type": "server_config/javascript_optimization/css_optimization/image_optimization/network_optimization/performance_optimization",
+  "next_step_after_patch": "rerun Lighthouse and compare new score with old_score"
 }}
 """
 
@@ -739,32 +647,25 @@ Return ONLY valid JSON:
         response = client.chat.completions.create(
             model=QWEN_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
+            max_tokens=1200,
             temperature=0.1,
         )
 
         raw = response.choices[0].message.content.strip()
+        fix_rec = extract_json(raw)
 
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        fix_rec = json.loads(raw)
-        print(f"  ✅ Fix generated: {fix_rec.get('action', '')[:80]}")
+        print(f"  ✅ Qwen fix generated: {fix_rec.get('action', '')[:90]}")
 
     except Exception as e:
         print(f"  ⚠️ Qwen failed: {e}")
-        print("  → Using dashboard-ready fallback fix plan")
-
-        priority = priority_from_savings(opp["avg_savings_ms"], opp["severity"])
+        print("  → Using fallback staged Fix Plan")
 
         fix_rec = {
             "action": f"Fix {opp['title']} to improve {opp['affected_metric']}",
-            "reasoning": opp.get("description") or (
-                f"This recommendation targets {opp['affected_metric']} "
-                f"and is estimated to save about {opp['avg_savings_ms']}ms."
+            "reasoning": (
+                f"This is the highest-priority opportunity for the current failed audit. "
+                f"It targets {opp['affected_metric']} and is estimated to save "
+                f"about {opp['avg_savings_ms']}ms."
             ),
             "patch_code": {
                 "summary": patch_template["summary"],
@@ -778,42 +679,44 @@ Return ONLY valid JSON:
             ),
             "impact_if_fixed": f"Expected improvement: about {opp['avg_savings_ms']}ms saved.",
             "ux_improvement": "Users can see and interact with the page faster.",
-            "seo_impact": "Improves Lighthouse/Core Web Vitals signals that can support SEO quality.",
-            "priority_level": priority,
+            "seo_impact": "Improves Lighthouse/Core Web Vitals quality signals.",
+            "priority_level": opp.get("priority_level", "medium"),
             "estimated_improvement": opp["avg_savings_ms"],
             "affected_metric": opp["affected_metric"],
             "target_file": patch_template["target_file"],
             "change_type": patch_template["change_type"],
+            "next_step_after_patch": "rerun Lighthouse and compare new score with old_score",
         }
 
-    # Safety defaults if Qwen returns incomplete JSON
     fix_rec.setdefault("patch_code", patch_template)
     fix_rec.setdefault("problem_summary", opp["title"])
-    fix_rec.setdefault("priority_level", priority_from_savings(opp["avg_savings_ms"], opp["severity"]))
+    fix_rec.setdefault("priority_level", opp.get("priority_level", "medium"))
     fix_rec.setdefault("estimated_improvement", opp["avg_savings_ms"])
     fix_rec.setdefault("affected_metric", opp["affected_metric"])
     fix_rec.setdefault("target_file", patch_template["target_file"])
     fix_rec.setdefault("change_type", patch_template["change_type"])
+    fix_rec.setdefault(
+        "next_step_after_patch",
+        "rerun Lighthouse and compare new score with old_score",
+    )
 
     return {**state, "fix_recommendation": fix_rec}
 
 
-# ── N6 ───────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# N6 — Save Fix Plan
+# ─────────────────────────────────────────────
 
 def save_fix_plan(state: AgentState) -> AgentState:
-    print("\n[N6] Saving fix plan...")
+    print("\n[N6] Saving Fix Plan...")
 
     fix_rec = state["fix_recommendation"]
     opp = state["current_opp"]
     metrics = state["metrics"]
 
-    # Phase 1: always wait for human review.
-    # Actual patch application is Phase 2.
-    patch_status = "pending_review"
-
     fix_plan_data = {
-        "thread_id": str(uuid.uuid4()),
-        "test_id": metrics["test_ids"][0],
+        "thread_id": state.get("thread_id") or str(uuid.uuid4()),
+        "test_id": state["test_id"],
         "opportunity_id": opp["id"],
         "action": fix_rec.get("action", ""),
         "reasoning": fix_rec.get("reasoning", ""),
@@ -825,16 +728,31 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "seo_impact": fix_rec.get("seo_impact"),
         "priority_level": fix_rec.get("priority_level", "medium"),
         "estimated_improvement": fix_rec.get("estimated_improvement", 0),
-        "old_score": metrics["avg_performance"],
-        "total_risk_score": state["risk_score"],
-        "risk_details": state["risk_details"],
-        "confidence_level": state["confidence"],
-        "patch_status": patch_status,
+        "old_score": metrics.get("avg_performance"),
+        "total_risk_score": state.get("risk_score", 0),
+        "risk_details": state.get("risk_details", {}),
+        "confidence_level": state.get("confidence", "medium"),
+        "patch_status": "patch_generated",
         "attempt_count": 0,
-        "attempt_history": [],
-        "affected_metric": fix_rec.get("affected_metric", opp.get("affected_metric")),
-        "target_file": fix_rec.get("target_file"),
-        "change_type": fix_rec.get("change_type", "modification"),
+        "attempt_history": [
+            {
+                "event": "fix_plan_generated",
+                "test_id": state["test_id"],
+                "opportunity_id": opp["id"],
+                "next_step": fix_rec.get("next_step_after_patch"),
+            }
+        ],
+        "branch_name": state.get("pr_branch"),
+    }
+
+    change_data = {
+        "target_file": fix_rec.get("target_file", "unknown"),
+        "line_start": None,
+        "line_end": None,
+        "original_code": None,
+        "suggested_code": json.dumps(fix_rec.get("patch_code"), ensure_ascii=False),
+        "change_type": fix_rec.get("change_type", "performance_optimization"),
+        "change_reason": fix_rec.get("reasoning", ""),
     }
 
     if state.get("dry_run"):
@@ -843,7 +761,7 @@ def save_fix_plan(state: AgentState) -> AgentState:
         return {
             **state,
             "fix_plan_id": None,
-            "opp_index": state["opp_index"] + 1,
+            "opp_index": state.get("opp_index", 0) + 1,
         }
 
     conn = get_db_connection()
@@ -856,8 +774,20 @@ def save_fix_plan(state: AgentState) -> AgentState:
             data=fix_plan_data,
             returning="id",
         )
-        conn.commit()
 
+        change_data["fix_plan_id"] = fix_plan_id
+
+        try:
+            safe_insert(
+                cursor=cursor,
+                table_name="fix_plan_changes",
+                data=change_data,
+                returning="id",
+            )
+        except Exception as change_error:
+            print(f"  ⚠️ fix_plan_changes skipped: {change_error}")
+
+        conn.commit()
         print(f"  ✅ Saved fix_plan id={fix_plan_id}")
 
     except Exception as e:
@@ -871,27 +801,25 @@ def save_fix_plan(state: AgentState) -> AgentState:
     return {
         **state,
         "fix_plan_id": fix_plan_id,
-        "opp_index": state["opp_index"] + 1,
+        "opp_index": state.get("opp_index", 0) + 1,
     }
 
 
-# ── Routing ──────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# Routing
+# ─────────────────────────────────────────────
 
 def route_after_n1(state: AgentState) -> str:
-    if state.get("should_end"):
-        return "end"
-    return "sort_opportunities"
+    return "end" if state.get("should_end") else "pick_opportunity"
 
 
 def route_after_n2(state: AgentState) -> str:
-    if state.get("should_end"):
-        return "end"
-    return "search_rag"
+    return "end" if state.get("should_end") else "search_rag"
 
 
 def route_after_n6(state: AgentState) -> str:
-    if state["opp_index"] < len(state["opportunities"]):
-        return "sort_opportunities"
+    if state.get("opp_index", 0) < len(state.get("opportunities", [])):
+        return "pick_opportunity"
     return "end"
 
 
@@ -899,7 +827,7 @@ def build_agent():
     graph = StateGraph(AgentState)
 
     graph.add_node("get_metrics", get_metrics)
-    graph.add_node("sort_opportunities", sort_opportunities)
+    graph.add_node("pick_opportunity", pick_opportunity)
     graph.add_node("search_rag", search_rag)
     graph.add_node("assess_risk", assess_risk)
     graph.add_node("generate_fix", generate_fix)
@@ -911,13 +839,13 @@ def build_agent():
         "get_metrics",
         route_after_n1,
         {
-            "sort_opportunities": "sort_opportunities",
+            "pick_opportunity": "pick_opportunity",
             "end": END,
         },
     )
 
     graph.add_conditional_edges(
-        "sort_opportunities",
+        "pick_opportunity",
         route_after_n2,
         {
             "search_rag": "search_rag",
@@ -933,7 +861,7 @@ def build_agent():
         "save_fix_plan",
         route_after_n6,
         {
-            "sort_opportunities": "sort_opportunities",
+            "pick_opportunity": "pick_opportunity",
             "end": END,
         },
     )
@@ -941,78 +869,45 @@ def build_agent():
     return graph.compile()
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# CLI Test
+# ─────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Luminara Remediation Agent — Phase 1"
+        description="Luminara Remediation Agent — Staged Self-Healing MVP"
     )
 
-    parser.add_argument(
-        "--test-id",
-        type=int,
-        help="Specific failed Lighthouse test_id to analyze"
-    )
-    parser.add_argument("--url", help="URL to analyze")
-    parser.add_argument(
-        "--page-type",
-        default="main",
-        choices=["main", "product", "cart", "category"],
-    )
-    parser.add_argument(
-        "--device-type",
-        default="desktop",
-        choices=["mobile", "desktop"],
-    )
-    parser.add_argument(
-        "--max-opportunities",
-        type=int,
-        default=MAX_OPPORTUNITIES,
-        help="Max unique fix plans to generate. Default: 5",
-    )
+    parser.add_argument("--test-id", type=int, required=True)
+    parser.add_argument("--max-opportunities", type=int, default=MAX_OPPORTUNITIES)
     parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
 
-    if not args.test_id and not args.url:
-        print("Usage:")
-        print("  python3 agent.py --test-id 68 --max-opportunities 3 --dry-run")
-        print(
-            '  python3 agent.py --url "https://www.decathlon.co.kr/" '
-            "--page-type main --device-type desktop --max-opportunities 3 --dry-run"
-        )
-        return
-
     agent = build_agent()
 
     print("=" * 55)
-    print("REMEDIATION AGENT — Phase 1")
+    print("REMEDIATION AGENT — Staged Self-Healing MVP")
     print("=" * 55)
-    print(f"URL:    {args.url}")
-    print(f"Page:   {args.page_type}")
-    print(f"Device: {args.device_type}")
-    print(f"Max:    {args.max_opportunities} unique opportunities")
+    print(f"test_id: {args.test_id}")
+    print(f"max_opportunities: {args.max_opportunities}")
     if args.dry_run:
-        print("MODE:   DRY RUN")
+        print("MODE: DRY RUN")
     print("=" * 55)
 
-    result = agent.invoke(
-        {
-            "test_id": args.test_id,
-            "url": args.url,
-            "page_type": args.page_type,
-            "device_type": args.device_type,
-            "dry_run": args.dry_run,
-            "max_opportunities": args.max_opportunities,
-            "should_end": False,
-            "opp_index": 0,
-        }
-    )
+    result = agent.invoke({
+        "test_id": args.test_id,
+        "dry_run": args.dry_run,
+        "max_opportunities": args.max_opportunities,
+        "should_end": False,
+        "opp_index": 0,
+    })
 
     print("=" * 55)
     print("✅ Done")
-    print(f"Confidence: {result.get('confidence')}")
-    print(f"Processed:  {result.get('opp_index', 0)} opportunities")
+    print(f"test_id:    {result.get('test_id')}")
+    print(f"confidence: {result.get('confidence')}")
+    print(f"processed:  {result.get('opp_index', 0)} opportunities")
     print("=" * 55)
 
 
