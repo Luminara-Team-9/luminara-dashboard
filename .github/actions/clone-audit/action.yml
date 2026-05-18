@@ -125,10 +125,19 @@ runs:
       run: |
         # SRE FIX: No Python script needed. Use the Playwright CLI directly.
         # This prevents all indentation issues.
+        #singularity exec \
+        #  --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+        #  ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
+        #  playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
+
+        echo "Running Playwright diagnostics against port ${{ env.TWIN_PORT }}..."
+        
         singularity exec \
+          --env TWIN_PORT=${{ env.TWIN_PORT }} \
           --env PLAYWRIGHT_BROWSERS_PATH=/usr/lib/playwright \
+          --bind ${{ github.workspace }}/4_automation_tests:/workspace \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
-          playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
+          python3 /workspace/clone_debug.py
 
     - name: 📦 Upload Debug Artifacts
       if: failure()
