@@ -405,7 +405,7 @@ def embed_competitor_benchmarks(cursor, model):
                lcp_ms, tbt_ms, cls_score,
                performance_score
         FROM lighthouse_runs
-        WHERE site_type = 'decathlon'
+        WHERE site_type IN ('target', 'decathlon')
         ORDER BY created_at DESC
         LIMIT 10
     """)
@@ -442,9 +442,18 @@ def embed_competitor_benchmarks(cursor, model):
             if dec_page != comp_page or dec_device != comp_device:
                 continue
 
-            lcp_diff   = (dec_lcp or 0) - (comp_lcp or 0)
-            tbt_diff   = (dec_tbt or 0) - (comp_tbt or 0)
-            score_diff = (dec_score or 0) - (comp_score or 0)
+            dec_lcp = float(dec_lcp or 0)
+            comp_lcp = float(comp_lcp or 0)
+
+            dec_tbt = float(dec_tbt or 0)
+            comp_tbt = float(comp_tbt or 0)
+
+            dec_score = float(dec_score or 0)
+            comp_score = float(comp_score or 0)
+
+            lcp_diff = dec_lcp - comp_lcp
+            tbt_diff = dec_tbt - comp_tbt
+            score_diff = dec_score - comp_score
 
             content = (
                 f"Decathlon Korea {dec_page} page ({dec_device}) "
