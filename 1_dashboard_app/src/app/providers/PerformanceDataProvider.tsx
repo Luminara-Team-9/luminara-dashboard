@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import type { PerformanceApiResponse } from '@/shared/lib/types';
 
-const DEFAULT_REFRESH_INTERVAL_MS = 30_000;
+const DEFAULT_REFRESH_INTERVAL_MS = 5_000;
 
 function getRefreshIntervalMs(): number {
   const raw = process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS;
