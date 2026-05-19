@@ -1,6 +1,5 @@
 'use client';
 
-// TODO: lazy load product images to improve LCP score
 import { useEffect } from 'react';
 import { init, trackViews } from 'swetrix';
 
