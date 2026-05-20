@@ -6,10 +6,10 @@ const { Client } = pg;
 const RESULTS_DIR = '/abr/coss41/shared_workspace/phoo_workspace/codebase/luminara-dashboard/4_automation_tests/lighthouse-runner/results';
 
 const client = new Client({
-  host:     '/tmp',
-  user:     'lumin_admin',
-  password: 'lumin_postgres',
-  database: 'core_db',
+  host: process.env.POSTGRES_HOST || '/pg_socket',
+  user: process.env.POSTGRES_USER || 'lumin_admin',
+  password: process.env.POSTGRES_PASSWORD,
+  database: process.env.POSTGRES_DB || 'core_db',
 });
 
 const PAGES = [

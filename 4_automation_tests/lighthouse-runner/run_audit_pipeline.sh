@@ -1,36 +1,44 @@
 #!/bin/bash
 # Luminara Audit Pipeline - Phoo
-# Runs Lighthouse on all pages and inserts
-# results into core_db automatically
+# Runs Lighthouse on all pages and inserts results into core_db.
+# LHCI upload is handled separately by lighthouserc.js:
+#   npx @lhci/cli autorun
 
 set -e  # stop if any command fails
 
-RESULTS_DIR="/abr/coss41/shared_workspace/phoo_workspace/codebase/luminara-dashboard/4_automation_tests/lighthouse-runner/results"
+PROJECT_ROOT="/abr/coss41/shared_workspace/phoo_workspace/codebase/luminara-dashboard"
+RESULTS_DIR="$PROJECT_ROOT/4_automation_tests/lighthouse-runner/results"
 SIF="/abr/coss41/shared_workspace/images_dev/infrastructure_audit_ephemeral_dev.sif"
 NODE="/abr/coss41/.nvm/versions/node/v20.20.2/bin/node"
-INSERT_SCRIPT="/abr/coss41/shared_workspace/phoo_workspace/codebase/luminara-dashboard/4_automation_tests/lighthouse-runner/insert_results.js"
+INSERT_SCRIPT="$PROJECT_ROOT/4_automation_tests/lighthouse-runner/insert_results.js"
 WORKSPACE="/abr/coss41/shared_workspace/phoo_workspace/codebase"
 
 echo "Luminara Audit Pipeline Starting"
 
+# Make sure results folder exists
+mkdir -p "$RESULTS_DIR"
+
 # Clean old results
 echo "Cleaning old results..."
-rm -f $RESULTS_DIR/*.json
+rm -f "$RESULTS_DIR"/*.json
 
 # run_audit: name, url, run number
 run_audit() {
   local name=$1
   local url=$2
   local run=$3
+
   echo "  Running: $name run $run"
-  singularity exec $SIF lighthouse "$url" \
+
+  singularity exec "$SIF" lighthouse "$url" \
     --chrome-flags="--headless --no-sandbox --disable-gpu" \
     --output=json \
-    --output-path="$RESULTS_DIR/${name}_run${run}.json" \
+    --output-path="$RESULTS_DIR/${name}_run${run}_raw.json" \
     --only-categories=performance,accessibility,best-practices,seo \
     --preset=desktop \
     --no-enable-error-reporting \
     2>/dev/null
+
   echo "  Done: $name run $run"
 }
 
@@ -60,7 +68,6 @@ echo "Decathlon pages done!"
 echo ""
 echo "Auditing Competitor pages..."
 
-# FIX: removed ssg, added underarmour and fila to match thesis competitors
 run_audit "nike"        "https://www.nike.com/kr" 1
 run_audit "nike"        "https://www.nike.com/kr" 2
 run_audit "nike"        "https://www.nike.com/kr" 3
@@ -80,8 +87,9 @@ echo ""
 echo "Inserting results into core_db..."
 
 singularity exec \
-  --bind $WORKSPACE:/workspace \
+  --bind "$WORKSPACE:/workspace" \
   instance://luminara_db_postgres \
-  $NODE $INSERT_SCRIPT
+  "$NODE" "$INSERT_SCRIPT"
 
+echo "Database insert complete!"
 echo "Pipeline Complete!"
