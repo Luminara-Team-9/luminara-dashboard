@@ -65,7 +65,7 @@ jobs:
         if: failure()
         run: |
           echo "❌ Audit Failed! Triggering Remediation Daemon..."
-          curl -X POST http://localhost:5000/api/trigger-agent \
+          curl -X POST http://localhost:9010/api/trigger-agent \
             -H "Content-Type: application/json" \
             -d '{
               "pr_branch": "${{ github.head_ref }}",
