@@ -88,7 +88,7 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         raise PatchGenerationError(f"Failed to parse JSON: {e}\n{text}") from e
 
 
-def compact_snippet(snippet: str, limit: int = 3500) -> str:
+def compact_snippet(snippet: str, limit: int = 1200) -> str:
     """Keep source snippet small enough for prompt."""
     if len(snippet) <= limit:
         return snippet
@@ -100,7 +100,7 @@ def build_source_context_text(source_context: Dict[str, Any]) -> str:
     """Convert source_context.py output into prompt text."""
     parts = []
 
-    for i, item in enumerate(source_context.get("candidate_files", []), 1):
+    for i, item in enumerate(source_context.get("candidate_files", [])[:3], 1):
         parts.append(
             f"""
 [SOURCE_FILE_{i}]
@@ -371,7 +371,7 @@ def generate_patch_from_source(
                     "role": "system",
                     "content": (
                         "You generate safe code patches only from provided source snippets. "
-                        "You must return JSON only."
+                        "Return one compact JSON object only. No markdown."
                     ),
                 },
                 {
@@ -380,6 +380,7 @@ def generate_patch_from_source(
                 },
             ],
             temperature=0.1,
+            max_tokens=2048,
         )
 
         raw = response.choices[0].message.content
