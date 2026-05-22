@@ -165,6 +165,8 @@ Strict rules:
 - Do NOT modify unrelated logic.
 - Prefer the smallest safe patch.
 - If no safe exact patch can be generated from the provided snippets, return:
+- original_code must be a real code block, not only a URL or string literal.
+- For image fixes, original_code should include the full <img ... /> JSX element when possible.
 
 {{
   "auto_applicable": false,
@@ -185,6 +187,41 @@ Patch guidance:
   - usually return auto_applicable=false unless config code is clearly present.
 """
 
+def looks_like_real_code_block(original_code: str) -> bool:
+    """
+    Reject patches that replace only a raw URL/string literal.
+
+    We only allow source-aware patches that replace actual JSX/TS/JS/CSS code blocks.
+    For image fixes, original_code should normally include an <img ... /> tag
+    or a meaningful JSX block, not only an image URL.
+    """
+    if not original_code:
+        return False
+
+    text = original_code.strip()
+
+    # Reject raw URL-only replacement.
+    if text.startswith("http://") or text.startswith("https://"):
+        return False
+
+    # Reject very short string-only values.
+    if len(text) < 20 and "<" not in text and "=" not in text:
+        return False
+
+    # Prefer actual code-like patterns.
+    code_markers = [
+        "<img",
+        "<Image",
+        "src=",
+        "className=",
+        "style=",
+        "return (",
+        "const ",
+        "function ",
+        "export ",
+    ]
+
+    return any(marker in text for marker in code_markers)
 
 def validate_patch_against_context(
     patch_result: Dict[str, Any],
@@ -229,6 +266,9 @@ def validate_patch_against_context(
             continue
 
         if not original_code or not suggested_code:
+            continue
+
+        if not looks_like_real_code_block(original_code):
             continue
 
         snippet = source_by_path[target_file].get("snippet", "")
@@ -291,6 +331,9 @@ def validate_patch_against_files(
         suggested_code = patch.get("suggested_code")
 
         if not target_file or not original_code or not suggested_code:
+            continue
+
+        if not looks_like_real_code_block(original_code):
             continue
 
         file_path = (repo_root / target_file).resolve()
