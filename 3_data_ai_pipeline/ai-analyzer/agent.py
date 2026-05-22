@@ -235,6 +235,83 @@ def extract_json(raw_text: str) -> dict:
         return json.loads(match.group(0))
 
 
+
+def normalize_auto_patch_fix(fix_rec: dict) -> dict:
+    """
+    Normalize Qwen output for realistic RA patch application.
+
+    Realistic rule:
+    - If exact file-level patches exist, keep them.
+    - If patch is vague/summary-only/server-config-only, mark as manual review.
+    """
+    patches = fix_rec.get("patches", [])
+
+    if not isinstance(patches, list):
+        patches = []
+
+    valid_patches = []
+
+    vague_targets = {
+        "unknown",
+        "target source/config file",
+        "server configuration files",
+        "server configuration files (e.g., redis configuration file)",
+        "server/cache-config or backend route handler",
+        "image component / product card / hero section",
+        "global css / component css / build css pipeline",
+        "next.config.js / package build config / page component imports",
+        "web server config / cdn config",
+        "likely file/config area",
+    }
+
+    for patch in patches:
+        if not isinstance(patch, dict):
+            continue
+
+        target_file = (patch.get("target_file") or "").strip()
+        original_code = patch.get("original_code")
+        suggested_code = patch.get("suggested_code")
+
+        if not target_file:
+            continue
+
+        if target_file.lower() in vague_targets:
+            continue
+
+        if not original_code or not suggested_code:
+            continue
+
+        valid_patches.append({
+            "target_file": target_file,
+            "original_code": original_code,
+            "suggested_code": suggested_code,
+            "change_type": patch.get("change_type", "code_replace"),
+            "change_reason": patch.get(
+                "change_reason",
+                fix_rec.get("reasoning", "")
+            ),
+        })
+
+    fix_rec["patches"] = valid_patches
+
+    if valid_patches:
+        fix_rec["auto_applicable"] = True
+        fix_rec.setdefault("manual_review_reason", None)
+    else:
+        fix_rec["auto_applicable"] = False
+        fix_rec["patches"] = []
+        fix_rec["manual_review_reason"] = fix_rec.get(
+            "manual_review_reason"
+        ) or (
+            "No exact file-level patch was generated. "
+            "The recommendation is useful for review, but it cannot be safely "
+            "auto-applied until target_file, original_code, and suggested_code "
+            "are available."
+        )
+
+    return fix_rec
+
+
 # ─────────────────────────────────────────────
 # N1 — Get metrics + rank opportunities
 # ─────────────────────────────────────────────
@@ -622,13 +699,9 @@ RAG context:
 
 Return ONLY valid JSON:
 {{
+  "auto_applicable": true,
   "action": "specific one-sentence fix action",
   "reasoning": "why this one fix should be applied first",
-  "patch_code": {{
-    "summary": "short patch summary",
-    "before": "before example or null",
-    "after": "after example or null"
-  }},
   "problem_summary": "short dashboard-friendly problem summary",
   "impact_if_not_fixed": "impact if ignored",
   "impact_if_fixed": "expected improvement after this staged fix",
@@ -637,10 +710,29 @@ Return ONLY valid JSON:
   "priority_level": "{opp.get("priority_level")}",
   "estimated_improvement": {opp.get("avg_savings_ms")},
   "affected_metric": "{opp.get("affected_metric")}",
-  "target_file": "likely file/config area",
-  "change_type": "server_config/javascript_optimization/css_optimization/image_optimization/network_optimization/performance_optimization",
-  "next_step_after_patch": "rerun Lighthouse and compare new score with old_score"
+  "patches": [
+    {{
+      "target_file": "real source file path only, for example src/components/Hero.tsx",
+      "original_code": "exact code block that already exists in the target file",
+      "suggested_code": "complete replacement code block",
+      "change_type": "code_replace",
+      "change_reason": "why this code change improves the selected metric"
+    }}
+  ],
+  "manual_review_reason": null,
+  "next_step_after_patch": "apply patch in Agent_Workspace, run build test, then rerun Lighthouse and compare new score with old_score"
 }}
+
+Rules for patches:
+- Do NOT return vague target_file values like "server configuration files", "image component", or "target source/config file".
+- Do NOT return summary-only patches.
+- original_code must be an exact existing code block from the target file.
+- suggested_code must be real code that can replace original_code.
+- If the selected opportunity requires Redis, CDN, server architecture, environment variables, or files not visible from the available context, set:
+  "auto_applicable": false,
+  "patches": [],
+  "manual_review_reason": "explain why this cannot be safely auto-applied yet"
+- Never invent file paths or fake code.
 """
 
     try:
@@ -661,17 +753,13 @@ Return ONLY valid JSON:
         print("  → Using fallback staged Fix Plan")
 
         fix_rec = {
+            "auto_applicable": False,
             "action": f"Fix {opp['title']} to improve {opp['affected_metric']}",
             "reasoning": (
                 f"This is the highest-priority opportunity for the current failed audit. "
                 f"It targets {opp['affected_metric']} and is estimated to save "
                 f"about {opp['avg_savings_ms']}ms."
             ),
-            "patch_code": {
-                "summary": patch_template["summary"],
-                "before": patch_template["before"],
-                "after": patch_template["after"],
-            },
             "problem_summary": opp["title"],
             "impact_if_not_fixed": (
                 f"{opp['affected_metric']} may remain poor, causing slower page load "
@@ -683,22 +771,28 @@ Return ONLY valid JSON:
             "priority_level": opp.get("priority_level", "medium"),
             "estimated_improvement": opp["avg_savings_ms"],
             "affected_metric": opp["affected_metric"],
-            "target_file": patch_template["target_file"],
-            "change_type": patch_template["change_type"],
+            "patches": [],
+            "manual_review_reason": (
+                "Qwen failed or the available context is not enough to generate an exact "
+                "file-level patch. This Fix Plan should be reviewed manually or regenerated "
+                "after source code context is available."
+            ),
             "next_step_after_patch": "rerun Lighthouse and compare new score with old_score",
         }
 
-    fix_rec.setdefault("patch_code", patch_template)
+    fix_rec.setdefault("auto_applicable", False)
+    fix_rec.setdefault("patches", [])
+    fix_rec.setdefault("manual_review_reason", None)
     fix_rec.setdefault("problem_summary", opp["title"])
     fix_rec.setdefault("priority_level", opp.get("priority_level", "medium"))
     fix_rec.setdefault("estimated_improvement", opp["avg_savings_ms"])
     fix_rec.setdefault("affected_metric", opp["affected_metric"])
-    fix_rec.setdefault("target_file", patch_template["target_file"])
-    fix_rec.setdefault("change_type", patch_template["change_type"])
     fix_rec.setdefault(
         "next_step_after_patch",
         "rerun Lighthouse and compare new score with old_score",
     )
+
+    fix_rec = normalize_auto_patch_fix(fix_rec)
 
     return {**state, "fix_recommendation": fix_rec}
 
@@ -720,7 +814,11 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "opportunity_id": opp["id"],
         "action": fix_rec.get("action", ""),
         "reasoning": fix_rec.get("reasoning", ""),
-        "patch_code": fix_rec.get("patch_code"),
+        "patch_code": {
+            "auto_applicable": fix_rec.get("auto_applicable", False),
+            "patches": fix_rec.get("patches", []),
+            "manual_review_reason": fix_rec.get("manual_review_reason"),
+        },
         "problem_summary": fix_rec.get("problem_summary"),
         "impact_if_not_fixed": fix_rec.get("impact_if_not_fixed"),
         "impact_if_fixed": fix_rec.get("impact_if_fixed"),
@@ -745,15 +843,7 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "branch_name": state.get("pr_branch"),
     }
 
-    change_data = {
-        "target_file": fix_rec.get("target_file", "unknown"),
-        "line_start": None,
-        "line_end": None,
-        "original_code": None,
-        "suggested_code": json.dumps(fix_rec.get("patch_code"), ensure_ascii=False),
-        "change_type": fix_rec.get("change_type", "performance_optimization"),
-        "change_reason": fix_rec.get("reasoning", ""),
-    }
+    patches = fix_rec.get("patches", []) or []
 
     if state.get("dry_run"):
         print("  🔍 DRY RUN — not saving")
@@ -775,17 +865,33 @@ def save_fix_plan(state: AgentState) -> AgentState:
             returning="id",
         )
 
-        change_data["fix_plan_id"] = fix_plan_id
+        if patches:
+            for patch in patches:
+                change_data = {
+                    "fix_plan_id": fix_plan_id,
+                    "target_file": patch.get("target_file", "unknown"),
+                    "line_start": None,
+                    "line_end": None,
+                    "original_code": patch.get("original_code"),
+                    "suggested_code": patch.get("suggested_code"),
+                    "change_type": patch.get("change_type", "code_replace"),
+                    "change_reason": patch.get(
+                        "change_reason",
+                        fix_rec.get("reasoning", "")
+                    ),
+                }
 
-        try:
-            safe_insert(
-                cursor=cursor,
-                table_name="fix_plan_changes",
-                data=change_data,
-                returning="id",
-            )
-        except Exception as change_error:
-            print(f"  ⚠️ fix_plan_changes skipped: {change_error}")
+                try:
+                    safe_insert(
+                        cursor=cursor,
+                        table_name="fix_plan_changes",
+                        data=change_data,
+                        returning="id",
+                    )
+                except Exception as change_error:
+                    print(f"  ⚠️ fix_plan_changes skipped: {change_error}")
+        else:
+            print("  ⚠️ No auto-applicable patches generated. Saved Fix Plan only.")
 
         conn.commit()
         print(f"  ✅ Saved fix_plan id={fix_plan_id}")
