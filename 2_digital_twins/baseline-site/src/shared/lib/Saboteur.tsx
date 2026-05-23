@@ -2,23 +2,27 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+//git error
 
 export function CpuSpike() {
   const pathname = usePathname(); // 1. Tracks the current URL
 
   useEffect(() => {
     let targetTbt = 0;
+    const BASE_NEXTJS_TBT = 150;
 
     // UPDATED to match the real site's TBT metrics!
-    if (pathname === '/') targetTbt = 1465;
-    else if (pathname.includes('/cart')) targetTbt = 600;
-    // Keep category and PDP around 600-800 until we get their real Lighthouse jsons
+    if (pathname === '/') targetTbt = 1600;
+    else if (pathname.includes('/category')) targetTbt = 1600;
+    else if (pathname.includes('/product')) targetTbt = 2600;
+    else if (pathname.includes('/cart')) targetTbt = 1400;
     else targetTbt = 600;
 
-    if (targetTbt === 0) return;
+    if (targetTbt <= BASE_NEXTJS_TBT) return;
     // 2. This now runs every time the pathname changes!
+    const blockDuration = targetTbt - BASE_NEXTJS_TBT;
     const start = performance.now();
-    while (performance.now() - start < 180) {
+    while (performance.now() - start < blockDuration) {
       Math.random() * Math.random();
     }
   }, [pathname]);
@@ -26,27 +30,76 @@ export function CpuSpike() {
   return null;
 }
 
-export function LayoutShiftBomb() {
+// ==========================================
+// CLS OPTION 1: THE LATE ANNOUNCEMENT BAR
+// ==========================================
+// Mimics a slow third-party marketing script loading in late
+export function LateAnnouncementSaboteur() {
   const pathname = usePathname();
-  const [shift, setShift] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    setShift(false); // Reset the shift on new page
-    const timer = setTimeout(() => setShift(true), 1500);
+    setShowBanner(false); // Reset on navigation
+
+    // Wait 1.5 seconds, then suddenly pop the banner in
+    const timer = setTimeout(() => setShowBanner(true), 1500);
     return () => clearTimeout(timer);
-  }, [pathname]); // Runs on every navigation
+  }, [pathname]);
 
-  if (!shift) return null;
+  if (!showBanner) return null;
 
+  // This renders visually like a normal Decathlon banner, but because it
+  // pops in late and has position: relative, it pushes the ENTIRE site down!
   return (
     <div
       style={{
         width: '100%',
-        height: '350px',
-        backgroundColor: 'transparent',
+        height: '45px', // Adjust this height to fine-tune the CLS score penalty
+        backgroundColor: '#0055ff', // Standard Decathlon Blue
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '14px',
+        fontWeight: 'bold',
         position: 'relative',
-        pointerEvents: 'none',
-        zIndex: -1,
+        zIndex: 50,
+      }}
+    >
+      무료 배송! 50,000원 이상 구매 시 (Free Shipping over ₩50,000)
+    </div>
+  );
+}
+
+// ==========================================
+// CLS OPTION 2: WEB FONT FOUT (Flash of Unstyled Text)
+// ==========================================
+// Mimics custom fonts loading in late and changing text spacing
+export function FontShiftSaboteur() {
+  const pathname = usePathname();
+  const [fontLoaded, setFontLoaded] = useState(false);
+
+  useEffect(() => {
+    setFontLoaded(false);
+    // Trigger the font "swap" 1 second after page load
+    const timer = setTimeout(() => setFontLoaded(true), 1000);
+    return () => clearTimeout(timer);
+  }, [pathname]);
+
+  if (!fontLoaded) return null;
+
+  // We inject a global style that slightly widens the text.
+  // This causes paragraphs to re-wrap and buttons to resize, generating CLS!
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: `
+      body {
+        letter-spacing: 0.5px !important;
+        word-spacing: 1px !important;
+        line-height: 1.6 !important;
+      }
+    `,
       }}
     />
   );

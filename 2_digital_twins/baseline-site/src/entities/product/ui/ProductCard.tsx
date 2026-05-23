@@ -1,5 +1,5 @@
 'use client';
-
+//git error
 import { useState, useEffect } from 'react';
 import type { Product } from '../model/types';
 import Link from 'next/link';
@@ -172,7 +172,7 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
             marginBottom: reviewsLoaded ? '4px' : '0px',
           }}
         >
-          ⭐⭐⭐⭐⭐ <span style={{ color: '#9ca3af', marginLeft: '4px' }}>(4.8)</span>
+          ⭐⭐⭐ <span style={{ color: '#9ca3af', marginLeft: '4px' }}>(4.8)</span>
         </div>
 
         {/* Brand */}
