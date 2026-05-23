@@ -126,26 +126,48 @@ function normalizeBrand(row) {
   const lower = name.toLowerCase();
   if (lower === 'nike') return 'Nike Korea';
   if (lower === 'ssg') return 'SSG';
+  if (lower === 'fila') return 'Fila';
+  if (lower === 'underarmour' || lower === 'under armour' || lower === 'under-armour') return 'Under Armour';
+  if (lower === 'unknown') return 'Unknown Site';
   return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function pageTypeFromUrl(url) {
+  const value = String(url ?? '').toLowerCase();
+  let pageType = 'main';
+  if (value.includes('/cart')) pageType = 'cart';
+  else if (value.includes('/checkout') || value.includes('/payment')) pageType = 'checkout';
+  else if (value.includes('/products/') || value.includes('/p/')) pageType = 'product';
+  else if (value.includes('/c/') || value.includes('category')) pageType = 'category';
+
+  return pageType;
 }
 
 function classifyUrl(url) {
   const value = String(url ?? '').toLowerCase();
+  const pageType = pageTypeFromUrl(value);
+
+  if (value.includes('decathlon.co.kr') || value.includes('decathlon.com')) {
+    return { site_type: 'decathlon', competitor_name: null, page_type: pageType };
+  }
 
   if (value.includes('nike.com')) {
-    return { site_type: 'competitor', competitor_name: 'nike', page_type: 'nike' };
+    return { site_type: 'competitor', competitor_name: 'nike', page_type: pageType };
   }
 
   if (value.includes('ssg.com')) {
-    return { site_type: 'competitor', competitor_name: 'ssg', page_type: 'ssg' };
+    return { site_type: 'competitor', competitor_name: 'ssg', page_type: pageType };
   }
 
-  let pageType = 'main';
-  if (value.includes('/cart')) pageType = 'cart';
-  else if (value.includes('/products/') || value.includes('/p/')) pageType = 'product';
-  else if (value.includes('/c/') || value.includes('category')) pageType = 'category';
+  if (value.includes('fila.co.kr') || value.includes('fila.com')) {
+    return { site_type: 'competitor', competitor_name: 'fila', page_type: pageType };
+  }
 
-  return { site_type: 'decathlon', competitor_name: null, page_type: pageType };
+  if (value.includes('underarmour.co.kr') || value.includes('underarmour.com')) {
+    return { site_type: 'competitor', competitor_name: 'underarmour', page_type: pageType };
+  }
+
+  return { site_type: 'competitor', competitor_name: 'unknown', page_type: pageType };
 }
 
 function normalizePage(pageType) {
@@ -184,15 +206,24 @@ function metricKeyFromText(...values) {
   return 'tbt';
 }
 
+function metricItem(rawValue, target, formatter = (value) => round(value)) {
+  const available = hasMeasuredValue(rawValue);
+  return {
+    value: available ? formatter(rawValue) : 0,
+    available,
+    ...target,
+  };
+}
+
 function buildMetrics(row) {
   return {
-    lcp: { value: msToSeconds(row.lcp_ms), ...METRIC_TARGETS.lcp },
-    cls: { value: round(row.cls_score, 3), ...METRIC_TARGETS.cls },
-    inp: { value: round(row.inp_ms), ...METRIC_TARGETS.inp },
-    tbt: { value: round(row.tbt_ms), ...METRIC_TARGETS.tbt },
-    fcp: { value: msToSeconds(row.fcp_ms), ...METRIC_TARGETS.fcp },
-    speedIndex: { value: msToSeconds(row.si_ms), ...METRIC_TARGETS.speedIndex },
-    assetSize: { value: round(row.page_size_kb), ...METRIC_TARGETS.assetSize },
+    lcp: metricItem(row.lcp_ms, METRIC_TARGETS.lcp, msToSeconds),
+    cls: metricItem(row.cls_score, METRIC_TARGETS.cls, (value) => round(value, 3)),
+    inp: metricItem(row.inp_ms, METRIC_TARGETS.inp),
+    tbt: metricItem(row.tbt_ms, METRIC_TARGETS.tbt),
+    fcp: metricItem(row.fcp_ms, METRIC_TARGETS.fcp, msToSeconds),
+    speedIndex: metricItem(row.si_ms, METRIC_TARGETS.speedIndex, msToSeconds),
+    assetSize: metricItem(row.page_size_kb, METRIC_TARGETS.assetSize),
   };
 }
 
@@ -227,6 +258,44 @@ function normalizeIsp(value) {
   return String(value || '통신사 미상');
 }
 
+function hasMeasuredValue(value) {
+  return value !== null && value !== undefined && value !== '';
+}
+
+function shouldUseBenchmarkRow(current, candidate) {
+  if (!current) return true;
+
+  const currentIsMain = current.page_type === 'main';
+  const candidateIsMain = candidate.page_type === 'main';
+  if (currentIsMain !== candidateIsMain) return candidateIsMain;
+
+  const currentHasSeo = hasMeasuredValue(current.seo_score);
+  const candidateHasSeo = hasMeasuredValue(candidate.seo_score);
+  if (currentHasSeo !== candidateHasSeo) return candidateHasSeo;
+
+  return new Date(candidate.timestamp).getTime() > new Date(current.timestamp).getTime();
+}
+
+function normalizeClickHouseUtc(value) {
+  if (!value) return null;
+  const raw = String(value);
+  if (raw.includes('T')) return raw.endsWith('Z') ? raw : raw + 'Z';
+  return raw.replace(' ', 'T') + 'Z';
+}
+
+function formatKoreanDateTime(value) {
+  const iso = normalizeClickHouseUtc(value);
+  if (!iso) return null;
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(iso));
+}
+
 
 function getEventCount(eventRows, eventName) {
   const aliases = CUSTOM_EVENT_ALIASES[eventName] ?? [eventName];
@@ -235,26 +304,79 @@ function getEventCount(eventRows, eventName) {
     .reduce((sum, row) => sum + toNumber(row.events), 0);
 }
 
-function buildCustomJourney(summary, eventRows) {
-  const pageViews = toNumber(summary.sessions);
+function getEventSessions(eventRows, eventName) {
+  const aliases = CUSTOM_EVENT_ALIASES[eventName] ?? [eventName];
+  return eventRows
+    .filter((row) => aliases.includes(row.event_name))
+    .reduce((sum, row) => sum + toNumber(row.sessions || row.events), 0);
+}
+
+function buildPathBasedJourney(summary, pageRows) {
+  const totalSessions = toNumber(summary.sessions) || toNumber(summary.page_views);
+  if (totalSessions === 0) return { userJourney: [], sessionPaths: [] };
+
+  const productSessions = pageRows
+    .filter((row) => String(row.path || '').startsWith('/product/'))
+    .reduce((max, row) => Math.max(max, toNumber(row.sessions)), 0);
+  const cartSessions = pageRows
+    .filter((row) => row.path === '/cart')
+    .reduce((max, row) => Math.max(max, toNumber(row.sessions)), 0);
+
+  const steps = [
+    { step: '사이트 진입', sessions: totalSessions, pageType: 'main' },
+    { step: '상품 상세 조회', sessions: Math.min(totalSessions, productSessions), pageType: 'product' },
+    { step: '장바구니', sessions: Math.min(productSessions || totalSessions, cartSessions), pageType: 'checkout' },
+    { step: '구매 완료', sessions: 0, pageType: 'checkout' },
+  ].filter((step, index) => index === 0 || step.sessions > 0 || step.step === '구매 완료');
+
+  let previous = steps[0]?.sessions ?? 0;
+  const userJourney = steps.map((step, index) => {
+    const sessions = index === 0 ? step.sessions : Math.min(previous, step.sessions);
+    const dropoffRate = previous > 0 && index > 0 ? round(((previous - sessions) / previous) * 100, 1) : 0;
+    previous = sessions;
+    return {
+      ...step,
+      sessions,
+      dropoffRate,
+      avgTime: index === 0 ? round(toNumber(summary.avg_page_load) / 1000, 1) : 0,
+    };
+  });
+
+  const sessionPaths = pageRows.slice(0, 4).map((row, index) => {
+    const path = String(row.path || '/');
+    const isProduct = path.startsWith('/product/');
+    const isCart = path === '/cart';
+    return {
+      id: 'rum-path-' + index + '-' + path.replace(/[^a-z0-9]+/gi, '-'),
+      name: isProduct ? '상품 상세 방문 경로' : isCart ? '장바구니 방문 경로' : path === '/' ? '메인 방문 경로' : '페이지 방문 경로',
+      source: 'Swetrix pageview',
+      device: 'Desktop',
+      sessions: toNumber(row.sessions),
+      share: totalSessions > 0 ? round((toNumber(row.sessions) / totalSessions) * 100, 1) : 0,
+      outcome: 'dropoff',
+      lastStep: isProduct ? '상품 상세 조회' : isCart ? '장바구니' : '페이지 조회',
+      path: [
+        { step: '사이트 진입', event: 'pageview', pageType: 'main' },
+        { step: isProduct ? '상품 상세 조회' : isCart ? '장바구니' : path === '/' ? '메인 페이지' : '페이지 조회', event: path, pageType: isProduct ? 'product' : isCart ? 'checkout' : 'main' },
+      ],
+    };
+  });
+
+  return { userJourney, sessionPaths };
+}
+
+function buildCustomJourney(summary, eventRows, pageRows = []) {
+  const pageViews = toNumber(summary.page_views);
+  const totalSessions = toNumber(summary.sessions) || pageViews;
   const hasCustomEvents = eventRows.some((row) => row.event_name && row.event_name !== "page_view");
 
   if (!hasCustomEvents) {
-    return {
-      userJourney: pageViews > 0 ? [{
-        step: "페이지뷰",
-        sessions: pageViews,
-        dropoffRate: 0,
-        avgTime: round(toNumber(summary.avg_page_load) / 1000, 1),
-        pageType: "main",
-      }] : [],
-      sessionPaths: [],
-    };
+    return buildPathBasedJourney(summary, pageRows);
   }
 
-  let previous = Math.max(pageViews, getEventCount(eventRows, "page_view"));
+  let previous = Math.max(totalSessions, getEventSessions(eventRows, "page_view"));
   const userJourney = CUSTOM_EVENT_FLOW.map((item, index) => {
-    const rawCount = index === 0 ? previous : getEventCount(eventRows, item.event);
+    const rawCount = index === 0 ? previous : getEventSessions(eventRows, item.event);
     const sessions = index === 0 ? previous : Math.min(previous, rawCount);
     const dropoffRate = previous > 0 && index > 0 ? round(((previous - sessions) / previous) * 100, 1) : 0;
     previous = sessions;
@@ -268,15 +390,15 @@ function buildCustomJourney(summary, eventRows) {
     };
   }).filter((step, index) => index === 0 || step.sessions > 0);
 
-  const totalSessions = userJourney[0]?.sessions ?? 0;
-  const purchases = getEventCount(eventRows, "purchase");
+  const journeyTotalSessions = userJourney[0]?.sessions ?? 0;
+  const purchases = getEventSessions(eventRows, "purchase");
   const lastStep = userJourney.at(-1);
-  const sessionPaths = totalSessions > 0 && userJourney.length > 1 ? [{
+  const sessionPaths = journeyTotalSessions > 0 && userJourney.length > 1 ? [{
     id: "custom-event-main-flow",
     name: "주요 구매 여정",
     source: "Swetrix custom event",
     device: "Desktop",
-    sessions: totalSessions,
+    sessions: journeyTotalSessions,
     share: 100,
     outcome: purchases > 0 ? "purchase" : "dropoff",
     lastStep: lastStep?.step ?? "사이트 진입",
@@ -420,7 +542,10 @@ async function fetchLatestLighthouseRows(pool) {
         jsonb_array_length(COALESCE(r.lhr::jsonb #> '{audits,network-requests,details,items}', '[]'::jsonb)) AS total_requests,
         ROW_NUMBER() OVER (
           PARTITION BY r.url
-          ORDER BY r.representative DESC, r."createdAt" DESC
+          ORDER BY
+            (r.lhr::jsonb #>> '{categories,seo,score}') IS NOT NULL DESC,
+            r.representative DESC,
+            r."createdAt" DESC
         ) AS row_rank
       FROM runs r
     )
@@ -470,12 +595,16 @@ async function fetchRumData(options = {}) {
   const { clause: timeClause, label: periodLabel } = buildRumTimeFilter(options);
   const projectList = projectIds.map(sqlString).join(', ');
   const customEventList = [...new Set(CUSTOM_EVENT_FLOW.flatMap((item) => CUSTOM_EVENT_ALIASES[item.event] ?? [item.event]))].map(sqlString).join(", ");
+  const purchaseEventList = CUSTOM_EVENT_ALIASES.purchase.map(sqlString).join(", ");
 
   try {
     const [summaryRows, deviceRows, regionalRows, pageRows, eventRows] = await Promise.all([
       queryClickHouse(`
         SELECT
-          countIf(type = 'pageview') AS sessions,
+          uniqExactIf(psid, type = 'pageview' AND psid IS NOT NULL) AS sessions,
+          countIf(type = 'pageview') AS page_views,
+          uniqExactIf(psid, event_name IN (${purchaseEventList}) AND psid IS NOT NULL) AS purchase_sessions,
+          countIf(event_name IN (${purchaseEventList})) AS purchase_events,
           countIf(type = 'performance') AS performance_events,
           avgIf(pageLoad, type = 'performance' AND pageLoad > 0) AS avg_page_load,
           max(created) AS latest_event
@@ -486,7 +615,9 @@ async function fetchRumData(options = {}) {
       queryClickHouse(`
         SELECT
           dv AS device,
-          countIf(type = 'pageview') AS sessions,
+          uniqExactIf(psid, type = 'pageview' AND psid IS NOT NULL) AS sessions,
+          countIf(type = 'pageview') AS page_views,
+          uniqExactIf(psid, event_name IN (${purchaseEventList}) AND psid IS NOT NULL) AS purchase_sessions,
           avgIf(pageLoad, type = 'performance' AND pageLoad > 0) AS avg_page_load
         FROM ${CLICKHOUSE_EVENTS_TABLE}
         WHERE pid IN (${projectList})
@@ -499,7 +630,8 @@ async function fetchRumData(options = {}) {
         SELECT
           rg AS region,
           isp,
-          countIf(type = 'pageview') AS sessions,
+          uniqExactIf(psid, type = 'pageview' AND psid IS NOT NULL) AS sessions,
+          countIf(type = 'pageview') AS page_views,
           avgIf(pageLoad, type = 'performance' AND pageLoad > 0) AS avg_page_load
         FROM ${CLICKHOUSE_EVENTS_TABLE}
         WHERE pid IN (${projectList})
@@ -512,7 +644,8 @@ async function fetchRumData(options = {}) {
       queryClickHouse(`
         SELECT
           pg AS path,
-          countIf(type = 'pageview') AS sessions,
+          uniqExactIf(psid, type = 'pageview' AND psid IS NOT NULL) AS sessions,
+          countIf(type = 'pageview') AS page_views,
           avgIf(pageLoad, type = 'performance' AND pageLoad > 0) AS avg_page_load,
           quantileIf(0.75)(pageLoad, type = 'performance' AND pageLoad > 0) AS p75_page_load
         FROM ${CLICKHOUSE_EVENTS_TABLE}
@@ -527,6 +660,7 @@ async function fetchRumData(options = {}) {
         SELECT
           event_name,
           count() AS events,
+          uniqExactIf(psid, psid IS NOT NULL) AS sessions,
           max(created) AS latest_event
         FROM ${CLICKHOUSE_EVENTS_TABLE}
         WHERE pid IN (${projectList})
@@ -540,26 +674,35 @@ async function fetchRumData(options = {}) {
 
     const summary = summaryRows[0] ?? {};
     const sessions = toNumber(summary.sessions);
+    const purchaseSessions = toNumber(summary.purchase_sessions);
     const latestEvent = summary.latest_event || null;
-    const customJourney = buildCustomJourney(summary, eventRows);
+    const latestEventIso = normalizeClickHouseUtc(latestEvent);
+    const latestEventLabel = formatKoreanDateTime(latestEvent);
+    const customJourney = buildCustomJourney(summary, eventRows, pageRows);
 
     return {
       businessMetrics: {
         trafficSessions: {
           sessions,
           source: `Swetrix RUM (${projectIds.length} projects)`,
-          period: latestEvent ? `${periodLabel} · 최근 접속 기록 ${latestEvent}` : periodLabel,
+          period: latestEventLabel ? `${periodLabel} · 최근 접속 기록 ${latestEventLabel}` : periodLabel,
           confidence: 'measured',
         },
         deviceSegments: deviceRows.map((row) => ({
           device: normalizeDevice(row.device),
           sessions: toNumber(row.sessions),
-          purchases: 0,
+          purchases: toNumber(row.purchase_sessions),
           revenue: 0,
-          conversionRate: 0,
+          conversionRate: toNumber(row.sessions) > 0 ? round((toNumber(row.purchase_sessions) / toNumber(row.sessions)) * 100, 1) : 0,
           bounceRate: 0,
           averageOrderValue: 0,
         })),
+        conversionRate: {
+          value: sessions > 0 ? round((purchaseSessions / sessions) * 100, 1) : 0,
+          source: 'Swetrix purchase custom event',
+          period: periodLabel,
+          isProxy: false,
+        },
       },
       rum: {
         regionalData: regionalRows.map((row) => {
@@ -580,7 +723,7 @@ async function fetchRumData(options = {}) {
           avgPageLoad: round(row.avg_page_load, 0),
           p75PageLoad: round(row.p75_page_load, 0),
         })),
-        latestCollectedAt: latestEvent || undefined,
+        latestCollectedAt: latestEventIso || undefined,
       },
     };
   } catch (error) {
@@ -603,8 +746,11 @@ export async function getDashboardPerformanceData(pool, options = {}) {
   const benchmarkSeed = new Map();
 
   latestRows.forEach((row) => {
+    if (row.site_type === 'competitor' && row.competitor_name === 'unknown') return;
+
     const brand = normalizeBrand(row);
-    if (!benchmarkSeed.has(brand) || row.page_type === 'main') {
+    const existing = benchmarkSeed.get(brand);
+    if (shouldUseBenchmarkRow(existing, row)) {
       benchmarkSeed.set(brand, row);
     }
   });

@@ -43,6 +43,7 @@ const SUMMARY_STEP_LABEL: Record<string, string> = {
   검색: '상품 검색',
   '검색/목록': '상품 탐색',
   '사이트 진입': '사이트 진입',
+  '방문 세션': '방문 세션',
   '상품 탐색': '상품 탐색',
   '상품 상세': '상품 상세',
   '상품 상세 조회': '상품 상세 조회',
@@ -73,6 +74,19 @@ function getPathLastMetrics(
   targetBrand: string,
 ): JourneyPageMetrics['metrics'] | null {
   return getPageMetrics(pageMetrics, targetBrand, getPathLastStep(pattern).pageType);
+}
+
+function getReadableEvent(event: string): string {
+  if (event === 'pageview') return '페이지 조회';
+  if (event === '/') return '메인 페이지';
+  if (event === '/cart') return '장바구니';
+  if (event === '/login') return '로그인';
+  if (event === '/s/our-stores') return '매장 찾기';
+  if (event.startsWith('/product/')) {
+    const productId = event.split('/').filter(Boolean).at(-1);
+    return productId ? `상품 상세 ${productId}` : '상품 상세';
+  }
+  return event;
 }
 
 function getReadableResult(
@@ -147,8 +161,10 @@ export function UserJourney() {
   const targetBrand = data.benchmarks.find((benchmark) => benchmark.isTarget)?.brand ?? '';
   const pageMetrics = data.pageMetrics as JourneyPageMetrics[];
   const totalSessions = userJourney[0]?.sessions ?? 0;
-  const purchases = userJourney.at(-1)?.sessions ?? 0;
-  const purchaseRate = calcConversionRatePercent(purchases, totalSessions);
+  const devicePurchases = data.businessMetrics?.deviceSegments?.reduce((sum, device) => sum + device.purchases, 0) ?? 0;
+  const channelPurchases = data.businessMetrics?.acquisitionChannels?.reduce((sum, channel) => sum + channel.purchases, 0) ?? 0;
+  const purchases = devicePurchases + channelPurchases;
+  const purchaseRate = data.businessMetrics?.conversionRate?.value ?? calcConversionRatePercent(purchases, totalSessions);
   const dropoffPaths = allSessionPaths.filter((path) => path.outcome === 'dropoff');
   const topPath = sessionPaths[0];
   const dropoffRanking = userJourney
@@ -240,7 +256,7 @@ export function UserJourney() {
               sessionPaths.map((pattern, pathIndex) => {
                 const metrics = getPathLastMetrics(pattern, pageMetrics, targetBrand);
                 const readableResult = getReadableResult(pattern, metrics);
-                const eventFlow = pattern.path.map((step) => step.event).join(' -> ');
+                const eventFlow = pattern.path.map((step) => getReadableEvent(step.event)).join(' -> ');
 
                 return (
                   <article key={pattern.id} className={styles.path_card}>

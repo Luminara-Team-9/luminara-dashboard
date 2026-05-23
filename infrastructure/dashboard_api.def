@@ -21,6 +21,8 @@ From: node:24-slim
 
 %environment
     export PORT=${PORT:-4000}
+    export DASHBOARD_API_HOST=${DASHBOARD_API_HOST:-0.0.0.0}
+    export DASHBOARD_API_PORT=${DASHBOARD_API_PORT:-$PORT}
     export NODE_ENV=production
     
     # SRE FIX: Isolate pnpm caching to prevent home directory disk friction
@@ -73,7 +75,7 @@ From: node:24-slim
     echo "------------------------------------------------"
 
     # Route execution context straight to the compiled output directory
-    cd /workspace/5_backend_api
+    cd /workspace/5_backend_api/api-server
     
     # Fallback checking for necessary infrastructure links
     if [ -z "$DATABASE_URL" ]; then
@@ -81,7 +83,7 @@ From: node:24-slim
     fi
 
     # Execute utilizing the local node binary map
-    exec pnpm start --port ${PORT} --hostname 0.0.0.0
+    exec node src/server.js
 
 %help
     Luminara Core Data API Gateway

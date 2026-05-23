@@ -12,8 +12,8 @@
 ## 진단 점수
 
 ```text
-gapRatio = max(0, current - target) / target
-score = clamp(0, 100, 100 - gapRatio * 55)
+normalizedRatio = lower-is-better ? target / current : current / target
+score = target met ? 100 : clamp(0, 100 * normalizedRatio^0.85, 100)
 ```
 
 Lighthouse 원점수가 아니라, 목표 대비 초과 폭을 대시보드에서 비교하기 쉽게 바꾼 내부 판단 점수다.

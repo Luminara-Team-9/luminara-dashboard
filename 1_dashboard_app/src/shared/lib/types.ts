@@ -238,6 +238,7 @@ export interface MetricItem {
   unit: string;
   target: number;
   label: string;
+  available?: boolean;
 }
 
 export interface ResourceEfficiency {
