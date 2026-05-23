@@ -245,8 +245,8 @@ export function ExecutiveSummary() {
               <span className={styles.basis_badge}>추정</span>
             </div>
             <span className={styles.card_value}>{carbon.savedGrams}g</span>
-            <span className={styles.card_sub}>페이지뷰당 CO₂ 절감 가능</span>
-            <span className={styles.card_note}>현재 {carbon.gramsPerPageView}g/pageview 기준</span>
+            <span className={styles.card_sub}>목표 전송량 기준 CO₂ 절감 가능</span>
+            <span className={styles.card_note}>현재 {carbon.gramsPerPageView}g → 목표 {carbon.targetGramsPerPageView}g/pageview</span>
           </div>
         </div>
       </div>
