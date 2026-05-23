@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+//git error
 
 export function CpuSpike() {
   const pathname = usePathname(); // 1. Tracks the current URL

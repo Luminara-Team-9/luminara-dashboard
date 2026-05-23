@@ -1,4 +1,5 @@
 'use client';
+//git error
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';

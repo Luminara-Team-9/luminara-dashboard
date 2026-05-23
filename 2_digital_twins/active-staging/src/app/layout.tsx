@@ -6,6 +6,8 @@ import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/
 import { SwetrixTracker } from '@/shared/analytics/SwetrixTracker';
 import { ChatWidget } from '@/widgets/chat/ui/ChatWidget';
 
+//git error
+
 // Inject the authentic Decathlon Font
 const roboto = Roboto({
   weight: ['400', '500', '700', '900'],

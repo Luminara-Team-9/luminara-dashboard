@@ -1,5 +1,5 @@
 'use client';
-
+//git error
 import { useState, useEffect } from 'react';
 import type { Product } from '../model/types';
 import Link from 'next/link';
