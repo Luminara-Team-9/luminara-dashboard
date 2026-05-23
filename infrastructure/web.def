@@ -25,6 +25,7 @@ From: node:24-slim
 %environment
     export PORT=${PORT:-3001}
     export NODE_ENV=production
+    export DASHBOARD_PERFORMANCE_API_URL=${DASHBOARD_PERFORMANCE_API_URL:-http://127.0.0.1:4000/dashboard/performance}
     export PNPM_HOME="/tmp/pnpm"
     export PATH="$PNPM_HOME:$PATH"
 

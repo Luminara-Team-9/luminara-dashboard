@@ -61,7 +61,7 @@ export const ESTIMATION_FORMULAS: Record<string, FormulaMeta> = {
   metricHealthScore: {
     id: 'metricHealthScore',
     title: '진단 점수',
-    formula: 'score = clamp(0, 100, 100 - (gap / target) * 55)',
+    formula: 'score = target met ? 100 : clamp(0, 100 * normalizedRatio^0.85, 100)',
     confidence: 'internal_model',
     references: ['webVitals', 'cwvThresholdMethod'],
     caution: 'Lighthouse 원점수가 아니라 목표 대비 초과 폭을 0~100으로 정규화한 대시보드 판단 점수입니다.',
@@ -179,7 +179,14 @@ export function calcMetricGapRatio(current: number, target: number, higherIsBett
 }
 
 export function calcMetricHealthScore(current: number, target: number, higherIsBetter: boolean): number {
-  return Math.round(clamp(0, 100 - calcMetricGapRatio(current, target, higherIsBetter) * 55, 100));
+  if (target <= 0 || !Number.isFinite(current)) return 0;
+  if (higherIsBetter ? current >= target : current <= target) return 100;
+
+  const normalizedRatio = higherIsBetter
+    ? safeDivide(Math.max(0, current), target)
+    : safeDivide(target, Math.max(current, 0.0001));
+
+  return Math.round(clamp(0, 100 * normalizedRatio ** 0.85, 100));
 }
 
 export function calcPriorityScore(params: {

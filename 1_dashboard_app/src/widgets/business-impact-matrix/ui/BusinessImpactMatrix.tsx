@@ -118,6 +118,12 @@ function formatChange(value: number): string {
   return `${value > 0 ? '▲' : '▼'} ${Math.abs(value)}점`;
 }
 
+type MetricValue = { value: number; target: number; available?: boolean };
+
+function isMetricAvailable(metric: MetricValue | undefined): metric is MetricValue {
+  return Boolean(metric && metric.available !== false && Number.isFinite(metric.value));
+}
+
 function getBenchmarkPosition(
   benchmarks: NonNullable<ReturnType<typeof usePerformanceData>['data']>['benchmarks'],
   metricKey: string,
@@ -127,7 +133,7 @@ function getBenchmarkPosition(
   const rows = benchmarks
     .map((benchmark) => {
       const metric = benchmark.metrics[metricKey as keyof typeof benchmark.metrics];
-      return metric ? { brand: benchmark.brand, value: metric.value } : null;
+      return isMetricAvailable(metric) ? { brand: benchmark.brand, value: metric.value } : null;
     })
     .filter((item): item is { brand: string; value: number } => item != null)
     .sort((a, b) => higherIsBetter ? b.value - a.value : a.value - b.value);
@@ -187,8 +193,8 @@ export function BusinessImpactMatrix() {
   const baselineConversionRate = data.businessMetrics?.conversionRate?.value ?? 0;
 
   const rows = METRICS.map((metric) => {
-    const current = (decathlon.metrics as Record<string, { value: number; target: number }>)[metric.key];
-    if (!current) return null;
+    const current = (decathlon.metrics as Record<string, MetricValue>)[metric.key];
+    if (!isMetricAvailable(current)) return null;
 
     const score = getScore(current.value, current.target, metric.higherIsBetter);
     const position = getBenchmarkPosition(data.benchmarks, metric.key, targetBrand, metric.higherIsBetter);
@@ -229,9 +235,16 @@ export function BusinessImpactMatrix() {
 
   const lcp = decathlon.metrics.lcp;
   const inp = decathlon.metrics.inp;
+  const tbt = decathlon.metrics.tbt;
   const cls = decathlon.metrics.cls;
+  const responseMetric = isMetricAvailable(inp) ? inp : tbt;
+  const responseMetricKey = isMetricAvailable(inp) ? 'inp' : 'tbt';
+  const responseMetricLabel = isMetricAvailable(inp) ? `INP ${inp.value}ms` : `TBT ${tbt.value}ms`;
+  const responseArea = isMetricAvailable(inp)
+    ? '전환 여정 · 장바구니/결제 조작감'
+    : 'INP 미수집 · TBT로 스크립트 반응성 대리 진단';
   const speedScore = getScore(lcp.value, lcp.target, false);
-  const responseScore = getScore(inp.value, inp.target, false);
+  const responseScore = getScore(responseMetric.value, responseMetric.target, false);
   const stabilityScore = getScore(cls.value, cls.target, false);
   const seoScore = decathlon.scores.seo;
   const failCount = rows.filter((row) => row.score < 90).length;
@@ -252,12 +265,12 @@ export function BusinessImpactMatrix() {
     {
       label: '반응성',
       value: responseScore,
-      metric: `INP ${inp.value}ms`,
-      area: '전환 여정 · 장바구니/결제 조작감',
+      metric: responseMetricLabel,
+      area: responseArea,
       change: (() => {
-        const trend = getTrendValue(data, 'inp');
+        const trend = getTrendValue(data, responseMetricKey);
         if (!trend) return null;
-        return getScore(trend.current, inp.target, false) - getScore(trend.previous, inp.target, false);
+        return getScore(trend.current, responseMetric.target, false) - getScore(trend.previous, responseMetric.target, false);
       })(),
     },
     {

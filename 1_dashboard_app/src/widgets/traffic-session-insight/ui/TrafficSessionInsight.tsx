@@ -44,6 +44,20 @@ function getChannelSourceNote(channel: string): string {
   return '유입 경로';
 }
 
+function getPagePathLabel(path: string): string {
+  if (path === '/') return '메인 페이지';
+  if (path === '/cart') return '장바구니';
+  if (path === '/login') return '로그인';
+  if (path === '/s/our-stores') return '매장 찾기';
+  if (path.startsWith('/product/')) {
+    const productId = path.split('/').filter(Boolean).at(-1);
+    return productId ? `상품 상세 · ${productId}` : '상품 상세';
+  }
+  if (path.startsWith('/search')) return '검색 결과';
+  if (path.startsWith('/category/')) return '카테고리';
+  return path || '경로 미상';
+}
+
 export function TrafficSessionInsight() {
   const { data, loading, error } = usePerformanceData();
 
@@ -68,12 +82,11 @@ export function TrafficSessionInsight() {
   const period = traffic?.period ?? '기간 미설정';
   const source = traffic?.source ?? '내부 로그/주문 데이터 필요';
   const averageOrderValue = traffic?.averageOrderValue ?? 0;
-  const basePurchaseSessions = data.rum.userJourney.at(-1)?.sessions ?? 0;
   const channels = data.businessMetrics?.acquisitionChannels ?? [];
   const devices = data.businessMetrics?.deviceSegments?.filter((device) => device.device !== 'Tablet') ?? [];
   const channelPurchases = channels.reduce((sum, channel) => sum + channel.purchases, 0);
   const devicePurchases = devices.reduce((sum, device) => sum + device.purchases, 0);
-  const purchaseSessions = channelPurchases || devicePurchases || basePurchaseSessions;
+  const purchaseSessions = channelPurchases + devicePurchases;
   const conversionRate = data.businessMetrics?.conversionRate?.value ?? calcConversionRatePercent(purchaseSessions, sessions);
   const revenue = sumRevenue(channels) || sumRevenue(devices) || calcRevenue(purchaseSessions, averageOrderValue);
   const pagePerformance = data.rum.pagePerformance ?? [];
@@ -83,6 +96,7 @@ export function TrafficSessionInsight() {
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
+        second: "2-digit",
       })
     : null;
   const changeText =
@@ -144,7 +158,7 @@ export function TrafficSessionInsight() {
           <div className={styles.page_perf_list}>
             {pagePerformance.map((page) => (
               <article key={page.path} className={styles.page_perf_row}>
-                <strong>{page.path}</strong>
+                <strong>{getPagePathLabel(page.path)}</strong>
                 <span>{formatCompactCount(page.sessions)} 세션</span>
                 <span>평균 {formatInteger(page.avgPageLoad)}ms</span>
                 <span>p75 {page.p75PageLoad != null ? `${formatInteger(page.p75PageLoad)}ms` : "-"}</span>
