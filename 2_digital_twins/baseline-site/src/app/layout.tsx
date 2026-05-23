@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Roboto } from 'next/font/google';
 import './styles/globals.css';
 // DELETED: The phantom LegacyPerformanceWrapper import
-import { CpuSpike, LayoutShiftBomb } from '@/shared/lib/Saboteur';
+import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/lib/Saboteur';
 import { SwetrixTracker } from '@/shared/analytics/SwetrixTracker';
 import { ChatWidget } from '@/widgets/chat/ui/ChatWidget';
 
@@ -40,6 +40,9 @@ export default function RootLayout({
       <body className="antialiased font-sans">
         {/* Our Sabotage Components listening to the router */}
         <CpuSpike />
+        <FontShiftSaboteur />
+        <LateAnnouncementSaboteur />
+
         <SwetrixTracker />
         <ChatWidget />
 
