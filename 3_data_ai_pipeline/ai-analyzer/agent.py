@@ -4,6 +4,7 @@ import json
 import uuid
 import argparse
 from typing import TypedDict, Optional, Any
+from statistics import median
 
 import psycopg2
 import requests
@@ -34,7 +35,7 @@ RAG_SERVICE_URL = os.getenv(
 )
 
 # Staged self-healing: fix top 1 first by default
-MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "1"))
+MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "3"))
 
 client = OpenAI(
     base_url=QWEN_BASE_URL,
@@ -55,9 +56,25 @@ def get_db_connection():
 class AgentState(TypedDict, total=False):
     test_id: int
 
+    # Trigger mode:
+    # - "test_id": listener provides one test_id, agent resolves sibling 3 runs.
+    # - "audit_group": listener provides playwright_run_id + page/device group.
+    mode: Optional[str]
+
+    # 3-run audit group identity.
+    playwright_run_id: Optional[int]
+    site_type: Optional[str]
+    network_profile: Optional[str]
+
     url: str
     page_type: str
     device_type: str
+
+    # Stable 3-run group metadata.
+    supporting_test_ids: list
+    representative_test_id: Optional[int]
+    group_key: Optional[str]
+    run_frequency: int
 
     pr_branch: Optional[str]
     target_dir: Optional[str]
@@ -80,10 +97,9 @@ class AgentState(TypedDict, total=False):
 
     fix_recommendation: dict
     fix_plan_id: Optional[int]
+    fix_plan_ids: list
 
     should_end: bool
-
-
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
@@ -311,31 +327,132 @@ def normalize_auto_patch_fix(fix_rec: dict) -> dict:
 
     return fix_rec
 
+def is_failed_run(row: dict) -> bool:
+    """
+    Return True if one Lighthouse run fails any main performance threshold.
+    """
+    return (
+        (row.get("performance_score") is not None and row["performance_score"] < 90)
+        or (row.get("lcp_ms") is not None and row["lcp_ms"] > 2500)
+        or (row.get("tbt_ms") is not None and row["tbt_ms"] > 200)
+        or (row.get("cls_score") is not None and row["cls_score"] > 0.1)
+        or (row.get("inp_ms") is not None and row["inp_ms"] > 200)
+    )
 
-# ─────────────────────────────────────────────
-# N1 — Get metrics + rank opportunities
-# ─────────────────────────────────────────────
 
-def get_metrics(state: AgentState) -> AgentState:
-    print("\n[N1] Getting metrics and opportunities by test_id...")
+def median_or_none(values):
+    """
+    Median is safer than average for Lighthouse repeated runs.
+    One noisy run will not distort the group metric too much.
+    """
+    clean = [float(v) for v in values if v is not None]
 
-    test_id = state.get("test_id")
-    max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
+    if not clean:
+        return None
 
-    if not test_id:
-        print("  ❌ test_id is required. Listener must resolve it first.")
-        return {**state, "should_end": True}
+    return round(float(median(clean)), 2)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
+def median_cls_or_none(values):
+    """
+    CLS needs 4 decimal places.
+    """
+    clean = [float(v) for v in values if v is not None]
+
+    if not clean:
+        return None
+
+    return round(float(median(clean)), 4)
+
+
+def severity_rank(severity: Optional[str]) -> int:
+    """
+    Convert severity text to rank for sorting.
+    """
+    severity = normalize_severity(severity)
+
+    if severity == "high":
+        return 3
+
+    if severity == "medium":
+        return 2
+
+    return 1
+
+
+def rows_to_run_dicts(rows) -> list:
+    """
+    Convert lighthouse_runs SQL rows into dicts.
+    Used by both test_id mode and audit_group mode.
+    """
+    result = []
+
+    for row in rows:
+        (
+            test_id,
+            playwright_run_id,
+            url,
+            site_type,
+            page_type,
+            device_type,
+            network_profile,
+            run_number,
+            lcp_ms,
+            tbt_ms,
+            cls_score,
+            performance_score,
+            fcp_ms,
+            si_ms,
+            tti_ms,
+            ttfb_ms,
+            inp_ms,
+        ) = row
+
+        result.append({
+            "test_id": test_id,
+            "playwright_run_id": playwright_run_id,
+            "url": url,
+            "site_type": site_type,
+            "page_type": page_type,
+            "device_type": device_type,
+            "network_profile": network_profile,
+            "run_number": run_number,
+            "lcp_ms": lcp_ms,
+            "tbt_ms": tbt_ms,
+            "cls_score": cls_score,
+            "performance_score": performance_score,
+            "fcp_ms": fcp_ms,
+            "si_ms": si_ms,
+            "tti_ms": tti_ms,
+            "ttfb_ms": ttfb_ms,
+            "inp_ms": inp_ms,
+        })
+
+    return result
+
+
+def get_group_runs_from_test_id(cursor, test_id: int) -> list:
+    """
+    Transitional mode.
+
+    Input:
+    - one test_id
+
+    Behavior:
+    - find that run's playwright_run_id + site/page/device
+    - find sibling runs from the same group
+    """
     cursor.execute(
         """
         SELECT
             test_id,
+            playwright_run_id,
             url,
+            site_type,
             page_type,
             device_type,
+            network_profile,
+            run_number,
             lcp_ms,
             tbt_ms,
             cls_score,
@@ -351,18 +468,20 @@ def get_metrics(state: AgentState) -> AgentState:
         (test_id,),
     )
 
-    row = cursor.fetchone()
+    base = cursor.fetchone()
 
-    if not row:
-        conn.close()
-        print(f"  ❌ No lighthouse_runs row found for test_id={test_id}")
-        return {**state, "should_end": True}
+    if not base:
+        return []
 
     (
-        selected_test_id,
+        base_test_id,
+        playwright_run_id,
         url,
+        site_type,
         page_type,
         device_type,
+        network_profile,
+        run_number,
         lcp_ms,
         tbt_ms,
         cls_score,
@@ -372,47 +491,185 @@ def get_metrics(state: AgentState) -> AgentState:
         tti_ms,
         ttfb_ms,
         inp_ms,
-    ) = row
-
-    failed_metrics = []
-
-    if performance_score is not None and performance_score < 90:
-        failed_metrics.append("performance_score")
-    if lcp_ms is not None and lcp_ms > 2500:
-        failed_metrics.append("LCP")
-    if tbt_ms is not None and tbt_ms > 200:
-        failed_metrics.append("TBT")
-    if cls_score is not None and cls_score > 0.1:
-        failed_metrics.append("CLS")
-    if inp_ms is not None and inp_ms > 200:
-        failed_metrics.append("INP")
-
-    if not failed_metrics:
-        conn.close()
-        print("  ✅ No failed metric detected. Agent stops.")
-        return {**state, "should_end": True}
-
-    confidence = "high" if len(failed_metrics) >= 2 else "medium"
-
-    metrics = {
-        "test_ids": [selected_test_id],
-        "run_count": 1,
-        "avg_lcp_ms": round(float(lcp_ms), 2) if lcp_ms is not None else None,
-        "avg_tbt_ms": round(float(tbt_ms), 2) if tbt_ms is not None else None,
-        "avg_cls_score": round(float(cls_score), 4) if cls_score is not None else None,
-        "avg_performance": round(float(performance_score), 1) if performance_score is not None else None,
-        "fcp_ms": round(float(fcp_ms), 2) if fcp_ms is not None else None,
-        "si_ms": round(float(si_ms), 2) if si_ms is not None else None,
-        "tti_ms": round(float(tti_ms), 2) if tti_ms is not None else None,
-        "ttfb_ms": round(float(ttfb_ms), 2) if ttfb_ms is not None else None,
-        "inp_ms": round(float(inp_ms), 2) if inp_ms is not None else None,
-        "failed_metrics": failed_metrics,
-    }
+    ) = base
 
     cursor.execute(
         """
         SELECT
+            test_id,
+            playwright_run_id,
+            url,
+            site_type,
+            page_type,
+            device_type,
+            network_profile,
+            run_number,
+            lcp_ms,
+            tbt_ms,
+            cls_score,
+            performance_score,
+            fcp_ms,
+            si_ms,
+            tti_ms,
+            ttfb_ms,
+            inp_ms
+        FROM lighthouse_runs
+        WHERE playwright_run_id = %s
+          AND site_type = %s
+          AND page_type = %s
+          AND device_type = %s
+        ORDER BY run_number ASC, test_id ASC
+        """,
+        (playwright_run_id, site_type, page_type, device_type),
+    )
+
+    return rows_to_run_dicts(cursor.fetchall())
+
+
+def get_group_runs_from_audit_group(
+    cursor,
+    playwright_run_id: int,
+    site_type: str,
+    page_type: str,
+    device_type: str,
+) -> list:
+    """
+    Production mode.
+
+    Input:
+    - playwright_run_id
+    - site_type
+    - page_type
+    - device_type
+
+    Behavior:
+    - find the exact 3-run group
+    """
+    cursor.execute(
+        """
+        SELECT
+            test_id,
+            playwright_run_id,
+            url,
+            site_type,
+            page_type,
+            device_type,
+            network_profile,
+            run_number,
+            lcp_ms,
+            tbt_ms,
+            cls_score,
+            performance_score,
+            fcp_ms,
+            si_ms,
+            tti_ms,
+            ttfb_ms,
+            inp_ms
+        FROM lighthouse_runs
+        WHERE playwright_run_id = %s
+          AND site_type = %s
+          AND page_type = %s
+          AND device_type = %s
+        ORDER BY run_number ASC, test_id ASC
+        """,
+        (playwright_run_id, site_type, page_type, device_type),
+    )
+
+    return rows_to_run_dicts(cursor.fetchall())
+
+
+def choose_representative_test_id(group_runs: list) -> int:
+    """
+    Choose one representative test_id for fix_plans.test_id.
+
+    Rule:
+    - worst performance_score first
+    - if tie, highest LCP
+    """
+    sorted_runs = sorted(
+        group_runs,
+        key=lambda r: (
+            r.get("performance_score") if r.get("performance_score") is not None else 999,
+            -(r.get("lcp_ms") or 0),
+        ),
+    )
+
+    return sorted_runs[0]["test_id"]
+
+
+def aggregate_failed_metrics(group_runs: list) -> tuple[list, dict]:
+    """
+    Stable failed metric = failed in at least 2 of 3 runs.
+    """
+    counts = {
+        "performance_score": 0,
+        "LCP": 0,
+        "TBT": 0,
+        "CLS": 0,
+        "INP": 0,
+    }
+
+    for row in group_runs:
+        if row.get("performance_score") is not None and row["performance_score"] < 90:
+            counts["performance_score"] += 1
+
+        if row.get("lcp_ms") is not None and row["lcp_ms"] > 2500:
+            counts["LCP"] += 1
+
+        if row.get("tbt_ms") is not None and row["tbt_ms"] > 200:
+            counts["TBT"] += 1
+
+        if row.get("cls_score") is not None and row["cls_score"] > 0.1:
+            counts["CLS"] += 1
+
+        if row.get("inp_ms") is not None and row["inp_ms"] > 200:
+            counts["INP"] += 1
+
+    stable_failed = [
+        metric
+        for metric, count in counts.items()
+        if count >= 2
+    ]
+
+    return stable_failed, counts
+
+
+def confidence_from_group(group_runs: list) -> str:
+    """
+    Confidence based on how many runs failed.
+    """
+    failed_count = sum(1 for row in group_runs if is_failed_run(row))
+
+    if failed_count >= 3:
+        return "high"
+
+    if failed_count == 2:
+        return "medium"
+
+    return "low"
+
+
+def get_stable_opportunities(
+    cursor,
+    test_ids: list,
+    max_opportunities: int,
+) -> list:
+    """
+    Select stable Lighthouse opportunities.
+
+    Stable opportunity:
+    - same opportunity appears in at least 2 out of 3 runs
+
+    Ranking:
+    - frequency across 3 runs
+    - average savings_ms
+    - severity
+    """
+    cursor.execute(
+        """
+        SELECT
             lo.id,
+            lo.test_id,
             lo.opportunity_id,
             lo.title,
             lo.description,
@@ -420,81 +677,264 @@ def get_metrics(state: AgentState) -> AgentState:
             lo.severity,
             lo.category
         FROM lighthouse_opportunities lo
-        WHERE lo.test_id = %s
+        WHERE lo.test_id = ANY(%s)
           AND COALESCE(lo.savings_ms, 0) > 0
-        ORDER BY
-            COALESCE(lo.savings_ms, 0) DESC,
-            CASE lo.severity
-                WHEN 'high' THEN 3
-                WHEN 'medium' THEN 2
-                WHEN 'low' THEN 1
-                ELSE 2
-            END DESC,
-            lo.created_at DESC
-        LIMIT %s
         """,
-        (selected_test_id, max_opportunities),
+        (test_ids,),
     )
 
     rows = cursor.fetchall()
-    conn.close()
+    grouped = {}
+
+    for row in rows:
+        (
+            row_id,
+            test_id,
+            opportunity_id,
+            title,
+            description,
+            savings_ms,
+            severity,
+            category,
+        ) = row
+
+        key = opportunity_id or title
+
+        if key not in grouped:
+            grouped[key] = {
+                "ids": [],
+                "test_ids": set(),
+                "opportunity_id": opportunity_id,
+                "title": title,
+                "description": description,
+                "savings_values": [],
+                "severity_values": [],
+                "category": category or "performance",
+            }
+
+        grouped[key]["ids"].append(row_id)
+        grouped[key]["test_ids"].add(test_id)
+        grouped[key]["savings_values"].append(int(savings_ms or 0))
+        grouped[key]["severity_values"].append(normalize_severity(severity))
 
     opportunities = []
 
-    for row in rows:
-        opp_id, opportunity_id, title, description, savings_ms, severity, category = row
+    for item in grouped.values():
+        frequency = len(item["test_ids"])
 
-        severity = normalize_severity(severity)
-        category = category or "performance"
-        affected_metric = infer_affected_metric(title, category)
-        priority_level = priority_from_savings(int(savings_ms or 0), severity)
+        # Stable opportunity rule: at least 2 out of 3 runs.
+        if frequency < 2:
+            continue
+
+        avg_savings = int(
+            sum(item["savings_values"]) / max(len(item["savings_values"]), 1)
+        )
+
+        severity = sorted(
+            item["severity_values"],
+            key=severity_rank,
+            reverse=True,
+        )[0]
+
+        affected_metric = infer_affected_metric(
+            item["title"],
+            item["category"],
+        )
+
+        priority_level = priority_from_savings(avg_savings, severity)
 
         opportunities.append({
-            "id": opp_id,
-            "opportunity_id": opportunity_id,
-            "title": title,
-            "description": description,
-            "avg_savings_ms": int(savings_ms or 0),
+            "id": item["ids"][0],
+            "opportunity_id": item["opportunity_id"],
+            "title": item["title"],
+            "description": item["description"],
+            "avg_savings_ms": avg_savings,
             "severity": severity,
-            "category": category,
-            "frequency": 1,
+            "category": item["category"],
+            "frequency": frequency,
+            "supporting_test_ids": sorted(list(item["test_ids"])),
             "affected_metric": affected_metric,
             "priority_level": priority_level,
         })
 
-    print(f"  ✅ test_id: {selected_test_id}")
-    print(f"  ✅ URL: {url}")
-    print(f"  ✅ Page: {page_type}")
-    print(f"  ✅ Device: {device_type}")
-    print(f"  ✅ Failed metrics: {failed_metrics}")
-    print(f"  ✅ Opportunities selected: {len(opportunities)}")
+    opportunities.sort(
+        key=lambda opp: (
+            opp["frequency"],
+            opp["avg_savings_ms"],
+            severity_rank(opp["severity"]),
+        ),
+        reverse=True,
+    )
 
-    for opp in opportunities:
-        print(
-            f"     - {opp['title']} | "
-            f"{opp['avg_savings_ms']}ms | "
-            f"{opp['priority_level']} | "
-            f"{opp['affected_metric']}"
+    return opportunities[:max_opportunities]
+
+# ─────────────────────────────────────────────
+# N1 — Get metrics + rank opportunities
+# ─────────────────────────────────────────────
+
+def get_metrics(state: AgentState) -> AgentState:
+    print("\n[N1] Getting 3-run stable metrics and opportunities...")
+
+    mode = state.get("mode") or "test_id"
+    test_id = state.get("test_id")
+    max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        if mode == "audit_group":
+            playwright_run_id = state.get("playwright_run_id")
+            site_type = state.get("site_type") or "decathlon"
+            page_type = state.get("page_type")
+            device_type = state.get("device_type")
+
+            if not playwright_run_id or not page_type or not device_type:
+                print("  ❌ audit_group mode requires playwright_run_id, page_type, device_type")
+                return {**state, "should_end": True}
+
+            group_runs = get_group_runs_from_audit_group(
+                cursor=cursor,
+                playwright_run_id=playwright_run_id,
+                site_type=site_type,
+                page_type=page_type,
+                device_type=device_type,
+            )
+
+        else:
+            if not test_id:
+                print("  ❌ test_id is required in test_id mode.")
+                return {**state, "should_end": True}
+
+            group_runs = get_group_runs_from_test_id(
+                cursor=cursor,
+                test_id=test_id,
+            )
+
+        if len(group_runs) < 3:
+            print(f"  ❌ Stable group requires 3 runs, found {len(group_runs)}")
+            return {
+                **state,
+                "should_end": True,
+                "confidence": "low",
+            }
+
+        # Keep exactly first 3 ordered runs for stable group.
+        group_runs = group_runs[:3]
+
+        supporting_test_ids = [row["test_id"] for row in group_runs]
+        representative_test_id = choose_representative_test_id(group_runs)
+
+        first = group_runs[0]
+        playwright_run_id = first["playwright_run_id"]
+        site_type = first["site_type"]
+        page_type = first["page_type"]
+        device_type = first["device_type"]
+        url = first["url"]
+        network_profile = first.get("network_profile")
+
+        confidence = confidence_from_group(group_runs)
+
+        if confidence == "low":
+            print("  ❌ Only 0/1 failed runs in the 3-run group. Agent stops.")
+            return {
+                **state,
+                "should_end": True,
+                "confidence": confidence,
+            }
+
+        failed_metrics, failed_metric_counts = aggregate_failed_metrics(group_runs)
+
+        if not failed_metrics:
+            print("  ✅ No stable failed metric across 3 runs. Agent stops.")
+            return {
+                **state,
+                "should_end": True,
+                "confidence": confidence,
+            }
+
+        metrics = {
+            "test_ids": supporting_test_ids,
+            "representative_test_id": representative_test_id,
+            "run_count": len(group_runs),
+
+            # Median values are safer than single-run values.
+            "avg_lcp_ms": median_or_none([r.get("lcp_ms") for r in group_runs]),
+            "avg_tbt_ms": median_or_none([r.get("tbt_ms") for r in group_runs]),
+            "avg_cls_score": median_cls_or_none([r.get("cls_score") for r in group_runs]),
+            "avg_performance": median_or_none([r.get("performance_score") for r in group_runs]),
+
+            "fcp_ms": median_or_none([r.get("fcp_ms") for r in group_runs]),
+            "si_ms": median_or_none([r.get("si_ms") for r in group_runs]),
+            "tti_ms": median_or_none([r.get("tti_ms") for r in group_runs]),
+            "ttfb_ms": median_or_none([r.get("ttfb_ms") for r in group_runs]),
+            "inp_ms": median_or_none([r.get("inp_ms") for r in group_runs]),
+
+            "failed_metrics": failed_metrics,
+            "failed_metric_counts": failed_metric_counts,
+        }
+
+        opportunities = get_stable_opportunities(
+            cursor=cursor,
+            test_ids=supporting_test_ids,
+            max_opportunities=max_opportunities,
         )
 
-    if not opportunities:
-        print("  ❌ No opportunities found. Run ETL first.")
-        return {**state, "should_end": True}
+        if not opportunities:
+            print("  ❌ No stable opportunities found across 3 runs.")
+            return {
+                **state,
+                "should_end": True,
+                "confidence": confidence,
+            }
 
-    return {
-        **state,
-        "test_id": selected_test_id,
-        "url": url,
-        "page_type": page_type,
-        "device_type": device_type,
-        "metrics": metrics,
-        "opportunities": opportunities,
-        "confidence": confidence,
-        "opp_index": 0,
-        "should_end": False,
-    }
+        group_key = f"{playwright_run_id}_{site_type}_{page_type}_{device_type}"
 
+        print(f"  ✅ mode: {mode}")
+        print(f"  ✅ playwright_run_id: {playwright_run_id}")
+        print(f"  ✅ group_key: {group_key}")
+        print(f"  ✅ supporting_test_ids: {supporting_test_ids}")
+        print(f"  ✅ representative_test_id: {representative_test_id}")
+        print(f"  ✅ URL: {url}")
+        print(f"  ✅ Page: {page_type}")
+        print(f"  ✅ Device: {device_type}")
+        print(f"  ✅ Confidence: {confidence}")
+        print(f"  ✅ Stable failed metrics: {failed_metrics}")
+        print(f"  ✅ Stable opportunities selected: {len(opportunities)}")
 
+        for opp in opportunities:
+            print(
+                f"     - {opp['title']} | "
+                f"freq={opp['frequency']}/3 | "
+                f"{opp['avg_savings_ms']}ms | "
+                f"{opp['priority_level']} | "
+                f"{opp['affected_metric']}"
+            )
+
+        return {
+            **state,
+            "mode": mode,
+            "test_id": representative_test_id,
+            "representative_test_id": representative_test_id,
+            "supporting_test_ids": supporting_test_ids,
+            "playwright_run_id": playwright_run_id,
+            "site_type": site_type,
+            "page_type": page_type,
+            "device_type": device_type,
+            "network_profile": network_profile,
+            "url": url,
+            "group_key": group_key,
+            "run_frequency": len(group_runs),
+            "metrics": metrics,
+            "opportunities": opportunities,
+            "confidence": confidence,
+            "opp_index": 0,
+            "fix_plan_ids": state.get("fix_plan_ids", []),
+            "should_end": False,
+        }
+
+    finally:
+        conn.close()
 # ─────────────────────────────────────────────
 # N2 — Pick priority opportunity
 # ─────────────────────────────────────────────
@@ -628,8 +1068,26 @@ def assess_risk(state: AgentState) -> AgentState:
         risk_details["severity"] = "medium opportunity severity (+1)"
 
     risk_details["failed_metrics"] = state["metrics"].get("failed_metrics", [])
+
+    # 3-run stable group metadata for dashboard traceability.
+    risk_details["group_key"] = state.get("group_key")
+    risk_details["playwright_run_id"] = state.get("playwright_run_id")
+    risk_details["supporting_test_ids"] = state.get("supporting_test_ids", [])
+    risk_details["representative_test_id"] = state.get("representative_test_id")
+    risk_details["run_frequency"] = state.get("run_frequency", 1)
+    risk_details["failed_metric_counts"] = state.get("metrics", {}).get(
+        "failed_metric_counts",
+        {},
+    )
+
+    # Queue metadata.
+    risk_details["queue_rank"] = state.get("opp_index", 0) + 1
+    risk_details["total_queue_items"] = len(state.get("opportunities", []))
+    risk_details["aggregation_method"] = "3-run stable group"
+
     risk_details["staged_self_healing"] = (
-        "Only this priority fix should be applied first, then re-audit."
+        "This Fix Plan is part of a ranked queue. "
+        "Apply one patch, re-run build and Lighthouse, then move to the next queued item."
     )
 
     risk_score = min(risk_score, 10)
@@ -808,17 +1266,67 @@ def save_fix_plan(state: AgentState) -> AgentState:
     opp = state["current_opp"]
     metrics = state["metrics"]
 
+    queue_rank = state.get("opp_index", 0) + 1
+    total_queue_items = len(state.get("opportunities", []))
+
+    patches = fix_rec.get("patches", []) or []
+    has_patch = bool(fix_rec.get("auto_applicable") and patches)
+
+    # Queue rule:
+    # - First auto-applicable plan waits for human review.
+    # - Later auto-applicable plans wait in queue.
+    # - Non-patchable plans require human review.
+    if has_patch:
+        patch_status = "pending_review" if queue_rank == 1 else "queued"
+    else:
+        patch_status = "requires_human_review"
+
+    base_thread_id = state.get("thread_id") or str(uuid.uuid4())
+    unique_thread_id = f"{base_thread_id}_{queue_rank}"
+
+    patch_code = {
+        "auto_applicable": fix_rec.get("auto_applicable", False),
+        "patches": patches,
+        "manual_review_reason": fix_rec.get("manual_review_reason"),
+    }
+
+    risk_details = state.get("risk_details", {}) or {}
+
+    # Make sure queue/group data is also available in risk_details
+    # even if assess_risk did not set it for some reason.
+    risk_details.setdefault("group_key", state.get("group_key"))
+    risk_details.setdefault("playwright_run_id", state.get("playwright_run_id"))
+    risk_details.setdefault("supporting_test_ids", state.get("supporting_test_ids", []))
+    risk_details.setdefault("representative_test_id", state.get("representative_test_id"))
+    risk_details.setdefault("run_frequency", state.get("run_frequency", 1))
+    risk_details.setdefault("queue_rank", queue_rank)
+    risk_details.setdefault("total_queue_items", total_queue_items)
+    risk_details.setdefault("aggregation_method", "3-run stable group")
+
+    attempt_event = {
+        "event": "fix_plan_generated",
+        "test_id": state["test_id"],
+        "representative_test_id": state.get("representative_test_id"),
+        "supporting_test_ids": state.get("supporting_test_ids", []),
+        "playwright_run_id": state.get("playwright_run_id"),
+        "group_key": state.get("group_key"),
+        "queue_rank": queue_rank,
+        "total_queue_items": total_queue_items,
+        "opportunity_id": opp["id"],
+        "lighthouse_opportunity_id": opp.get("opportunity_id"),
+        "patch_status": patch_status,
+        "auto_applicable": fix_rec.get("auto_applicable", False),
+        "next_step": fix_rec.get("next_step_after_patch"),
+    }
+
     fix_plan_data = {
-        "thread_id": state.get("thread_id") or str(uuid.uuid4()),
+        # Existing columns
+        "thread_id": unique_thread_id,
         "test_id": state["test_id"],
         "opportunity_id": opp["id"],
         "action": fix_rec.get("action", ""),
         "reasoning": fix_rec.get("reasoning", ""),
-        "patch_code": {
-            "auto_applicable": fix_rec.get("auto_applicable", False),
-            "patches": fix_rec.get("patches", []),
-            "manual_review_reason": fix_rec.get("manual_review_reason"),
-        },
+        "patch_code": patch_code,
         "problem_summary": fix_rec.get("problem_summary"),
         "impact_if_not_fixed": fix_rec.get("impact_if_not_fixed"),
         "impact_if_fixed": fix_rec.get("impact_if_fixed"),
@@ -828,22 +1336,26 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "estimated_improvement": fix_rec.get("estimated_improvement", 0),
         "old_score": metrics.get("avg_performance"),
         "total_risk_score": state.get("risk_score", 0),
-        "risk_details": state.get("risk_details", {}),
+        "risk_details": risk_details,
         "confidence_level": state.get("confidence", "medium"),
-        "patch_status": "patch_generated",
+        "patch_status": patch_status,
         "attempt_count": 0,
-        "attempt_history": [
-            {
-                "event": "fix_plan_generated",
-                "test_id": state["test_id"],
-                "opportunity_id": opp["id"],
-                "next_step": fix_rec.get("next_step_after_patch"),
-            }
-        ],
+        "attempt_history": [attempt_event],
         "branch_name": state.get("pr_branch"),
-    }
 
-    patches = fix_rec.get("patches", []) or []
+        # New production-ready columns
+        "playwright_run_id": state.get("playwright_run_id"),
+        "group_key": state.get("group_key"),
+        "page_type": state.get("page_type"),
+        "device_type": state.get("device_type"),
+        "site_type": state.get("site_type"),
+        "supporting_test_ids": state.get("supporting_test_ids", []),
+        "queue_rank": queue_rank,
+        "total_queue_items": total_queue_items,
+        "run_frequency": state.get("run_frequency", 1),
+        "build_status": "not_run",
+        "audit_status": "not_run",
+    }
 
     if state.get("dry_run"):
         print("  🔍 DRY RUN — not saving")
@@ -851,11 +1363,13 @@ def save_fix_plan(state: AgentState) -> AgentState:
         return {
             **state,
             "fix_plan_id": None,
+            "fix_plan_ids": state.get("fix_plan_ids", []),
             "opp_index": state.get("opp_index", 0) + 1,
         }
 
     conn = get_db_connection()
     cursor = conn.cursor()
+    fix_plan_id = None
 
     try:
         fix_plan_id = safe_insert(
@@ -870,8 +1384,8 @@ def save_fix_plan(state: AgentState) -> AgentState:
                 change_data = {
                     "fix_plan_id": fix_plan_id,
                     "target_file": patch.get("target_file", "unknown"),
-                    "line_start": None,
-                    "line_end": None,
+                    "line_start": patch.get("line_start"),
+                    "line_end": patch.get("line_end"),
                     "original_code": patch.get("original_code"),
                     "suggested_code": patch.get("suggested_code"),
                     "change_type": patch.get("change_type", "code_replace"),
@@ -879,22 +1393,27 @@ def save_fix_plan(state: AgentState) -> AgentState:
                         "change_reason",
                         fix_rec.get("reasoning", "")
                     ),
+
+                    # New columns if they exist.
+                    "apply_status": "pending",
+                    "backup_path": None,
                 }
 
-                try:
-                    safe_insert(
-                        cursor=cursor,
-                        table_name="fix_plan_changes",
-                        data=change_data,
-                        returning="id",
-                    )
-                except Exception as change_error:
-                    print(f"  ⚠️ fix_plan_changes skipped: {change_error}")
+                safe_insert(
+                    cursor=cursor,
+                    table_name="fix_plan_changes",
+                    data=change_data,
+                    returning="id",
+                )
         else:
             print("  ⚠️ No auto-applicable patches generated. Saved Fix Plan only.")
 
         conn.commit()
-        print(f"  ✅ Saved fix_plan id={fix_plan_id}")
+        print(
+            f"  ✅ Saved fix_plan id={fix_plan_id} "
+            f"| status={patch_status} "
+            f"| queue_rank={queue_rank}/{total_queue_items}"
+        )
 
     except Exception as e:
         conn.rollback()
@@ -904,12 +1423,17 @@ def save_fix_plan(state: AgentState) -> AgentState:
     finally:
         conn.close()
 
+    fix_plan_ids = state.get("fix_plan_ids", [])
+
+    if fix_plan_id:
+        fix_plan_ids.append(fix_plan_id)
+
     return {
         **state,
         "fix_plan_id": fix_plan_id,
+        "fix_plan_ids": fix_plan_ids,
         "opp_index": state.get("opp_index", 0) + 1,
     }
-
 
 # ─────────────────────────────────────────────
 # Routing
