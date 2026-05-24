@@ -36,38 +36,34 @@ export function CpuSpike() {
 // Mimics a slow third-party marketing script loading in late
 export function LateAnnouncementSaboteur() {
   const pathname = usePathname();
-  const [showBanner, setShowBanner] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    setShowBanner(false); // Reset on navigation
-
-    // Wait 3.5 seconds, then suddenly pop the banner in
-    const timer = setTimeout(() => setShowBanner(true), 3500);
+    setIsExpanded(false);
+    // Trigger the expansion at 3.5s
+    const timer = setTimeout(() => setIsExpanded(true), 3500);
     return () => clearTimeout(timer);
   }, [pathname]);
 
-  if (!showBanner) return null;
-
-  // This renders visually like a normal Decathlon banner, but because it
-  // pops in late and has position: relative, it pushes the ENTIRE site down!
   return (
     <div
       style={{
         width: '100%',
-        height: '45px', // Adjust this height to fine-tune the CLS score penalty
-        backgroundColor: '#0055ff', // Standard Decathlon Blue
-        transition: 'all 0.5s ease-in-out',
+        height: isExpanded ? '45px' : '0px', // Start at 0, grow to 45
+        backgroundColor: '#0055ff',
+        transition: 'height 0.5s ease-in-out', // Animate the height
+        overflow: 'hidden', // Keeps the content hidden until height > 0
         color: 'white',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '14px',
         fontWeight: 'bold',
-        position: 'relative',
-        zIndex: 50,
       }}
     >
-      무료 배송! 50,000원 이상 구매 시 (Free Shipping over ₩50,000)
+      {/* Content only appears when expanded */}
+      <span style={{ opacity: isExpanded ? 1 : 0, transition: 'opacity 0.5s' }}>
+        무료 배송! 50,000원 이상 구매 시
+      </span>
     </div>
   );
 }
