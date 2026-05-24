@@ -6,8 +6,6 @@ import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/
 import { SwetrixTracker } from '@/shared/analytics/SwetrixTracker';
 import { ChatWidget } from '@/widgets/chat/ui/ChatWidget';
 
-//git error
-
 // Inject the authentic Decathlon Font
 const roboto = Roboto({
   weight: ['400', '500', '700', '900'],
@@ -24,8 +22,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Decathlon Digital Twin (Active-Staging)',
-  description: 'Simulation after optimization',
+  title: 'Decathlon Digital Twin (Baseline)',
+  description: 'Performance baseline simulation',
   icons: {
     icon: 'https://contents.mediadecathlon.com/s871302/k$102f9e421beebaa21c81cd9f1a0e5b7c/favicon.ico',
   },
