@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-//git error
 
 export function CpuSpike() {
   const pathname = usePathname(); // 1. Tracks the current URL
@@ -109,6 +108,16 @@ export function FontShiftSaboteur() {
 // ==========================================
 export function HeavyLcpSaboteur() {
   const pathname = usePathname();
+  const [showImage, setShowImage] = useState(false);
+
+  useEffect(() => {
+    if (pathname !== '/') return;
+
+    // Wait 6 seconds after load to inject the image
+    // This prevents Lighthouse from timing out while pushing the LCP super late
+    const timer = setTimeout(() => setShowImage(true), 6000);
+    return () => clearTimeout(timer);
+  }, [pathname]);
 
   if (pathname !== '/') return null;
 
@@ -130,11 +139,13 @@ export function HeavyLcpSaboteur() {
         zIndex: 9999,
       }}
     >
-      <img
-        src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=8000&q=100"
-        alt="Ghost LCP Sabotage"
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-      />
+      {showImage && (
+        <img
+          src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=4000&q=100"
+          alt="Ghost LCP Sabotage"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      )}
     </div>
   );
 }
