@@ -2,15 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { Roboto } from 'next/font/google';
 import './styles/globals.css';
 // DELETED: The phantom LegacyPerformanceWrapper import
-import {
-  CpuSpike,
-  FontShiftSaboteur,
-  LateAnnouncementSaboteur,
-  CalibrationLogger,
-} from '@/shared/lib/Saboteur';
+import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/lib/Saboteur';
 import { SwetrixTracker } from '@/shared/analytics/SwetrixTracker';
 import { ChatWidget } from '@/widgets/chat/ui/ChatWidget';
-//git error
 
 // Inject the authentic Decathlon Font
 const roboto = Roboto({
@@ -44,7 +38,6 @@ export default function RootLayout({
     <html lang="ko" className={roboto.className}>
       {/* Apply font-sans to activate Roboto */}
       <body className="antialiased font-sans">
-        <CalibrationLogger />
         {/* Our Sabotage Components listening to the router */}
         <CpuSpike />
         <FontShiftSaboteur />

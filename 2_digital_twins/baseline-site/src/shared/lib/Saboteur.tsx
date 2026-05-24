@@ -104,27 +104,44 @@ export function FontShiftSaboteur() {
   );
 }
 
-export function CalibrationLogger() {
+// ==========================================
+// LCP OPTION: THE HEAVY HERO STARVATION
+// ==========================================
+export function HeavyLcpSaboteur() {
   const pathname = usePathname();
+  const [showLcp, setShowLcp] = useState(false);
 
   useEffect(() => {
-    // This logs once per route change
-    console.log(`[Lighthouse Calibration] Current Path: ${pathname}`);
+    if (pathname !== '/') {
+      setShowLcp(false);
+      return;
+    }
 
-    const BASE_NEXTJS_TBT = 150;
-    let targetTbt = 0;
-
-    if (pathname === '/') targetTbt = 1600 / 4;
-    else if (pathname.includes('/category')) targetTbt = 1600 / 4;
-    else if (pathname.includes('/product')) targetTbt = 2600 / 4;
-    else if (pathname.includes('/cart')) targetTbt = 1400 / 4;
-    else targetTbt = 600 / 4;
-
-    console.log(`[Lighthouse Calibration] TBT Target (Raw): ${targetTbt}ms`);
-    console.log(
-      `[Lighthouse Calibration] Thread Block Duration (Set): ${targetTbt - BASE_NEXTJS_TBT}ms`,
-    );
+    // We wait a massive 14 seconds after the page loads to finally request the image.
+    // Combined with the FCP delay, this will push the LCP timestamp perfectly into the ~15.6s range.
+    const timer = setTimeout(() => setShowLcp(true), 14000);
+    return () => clearTimeout(timer);
   }, [pathname]);
 
-  return null;
+  if (pathname !== '/') return null;
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '600px', // Massive area ensures Lighthouse flags THIS as the LCP element
+        backgroundColor: '#f3f4f6', // Subtle gray placeholder so it doesn't cause a CLS shift
+        position: 'relative',
+      }}
+    >
+      {showLcp && (
+        <img
+          // Fetching a massive, unoptimized 4K image to ensure download time is slow
+          src="https://images.unsplash.com/photo-1556817411-31ae72fa3ea8?w=4000&q=100"
+          alt="Unoptimized Marketing Banner"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      )}
+    </div>
+  );
 }
