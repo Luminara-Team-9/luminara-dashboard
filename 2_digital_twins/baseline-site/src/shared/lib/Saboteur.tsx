@@ -20,7 +20,7 @@ export function CpuSpike() {
 
     if (targetTbt <= BASE_NEXTJS_TBT) return;
     // 2. This now runs every time the pathname changes!
-    const blockDuration = targetTbt - BASE_NEXTJS_TBT;
+    const blockDuration = targetTbt - BASE_NEXTJS_TBT + 92.5;
     const start = performance.now();
     while (performance.now() - start < blockDuration) {
       Math.random() * Math.random();
@@ -56,6 +56,7 @@ export function LateAnnouncementSaboteur() {
         width: '100%',
         height: '45px', // Adjust this height to fine-tune the CLS score penalty
         backgroundColor: '#0055ff', // Standard Decathlon Blue
+        transition: 'all 0.5s ease-in-out',
         color: 'white',
         display: 'flex',
         alignItems: 'center',
