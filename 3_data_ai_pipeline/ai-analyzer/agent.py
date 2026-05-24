@@ -3,8 +3,9 @@ import re
 import json
 import uuid
 import argparse
-from typing import TypedDict, Optional, Any
+from pathlib import Path
 from statistics import median
+from typing import TypedDict, Optional, Any
 
 import psycopg2
 import requests
@@ -12,6 +13,10 @@ from psycopg2.extras import Json
 from dotenv import load_dotenv
 from openai import OpenAI
 from langgraph.graph import StateGraph, END
+
+from ra_runtime.git_workspace import prepare_workspace
+from ra_runtime.source_context import collect_source_context
+from ra_runtime.patch_generator import generate_patch_from_source
 
 load_dotenv()
 
@@ -94,6 +99,17 @@ class AgentState(TypedDict, total=False):
 
     risk_score: int
     risk_details: dict
+
+    # Source-aware patch generation state.
+    # source_context.py stores actual source snippets here.
+    source_context: dict
+
+    # patch_generator.py stores validated patch output here.
+    patch_result: dict
+
+    # Agent_Workspace paths created by git_workspace.py.
+    workspace_path: Optional[str]
+    repo_path: Optional[str]
 
     fix_recommendation: dict
     fix_plan_id: Optional[int]
@@ -1250,10 +1266,204 @@ Rules for patches:
         "rerun Lighthouse and compare new score with old_score",
     )
 
-    fix_rec = normalize_auto_patch_fix(fix_rec)
+    # IMPORTANT:
+    # generate_fix() is only responsible for the text-level Fix Plan:
+    # action, reasoning, impact, priority, and estimated improvement.
+    #
+    # Do NOT trust patches generated here because this prompt does not include
+    # actual source snippets from the repository.
+    #
+    # Real code patches will be generated later by:
+    # git_workspace.py → source_context.py → patch_generator.py
+    fix_rec["auto_applicable"] = False
+    fix_rec["patches"] = []
+    fix_rec["manual_review_reason"] = (
+        "Waiting for source-aware patch generation from actual repository code."
+    )
 
     return {**state, "fix_recommendation": fix_rec}
 
+
+# ─────────────────────────────────────────────
+# N5.5 — Generate source-aware patch
+# ─────────────────────────────────────────────
+
+def generate_source_patch(state: AgentState) -> AgentState:
+    """
+    Generate a real source-aware patch.
+
+    This node uses:
+    - git_workspace.py: clone/check out PR branch into Agent_Workspace
+    - source_context.py: collect real source snippets
+    - patch_generator.py: generate validated patch using actual source code
+
+    It overrides fix_recommendation["patches"] with validated patches only.
+    """
+    print("\n[N5.5] Generating source-aware patch from actual code...")
+
+    fix_rec = state.get("fix_recommendation", {})
+    opp = state.get("current_opp", {})
+    metrics = state.get("metrics", {})
+
+    pr_branch = state.get("pr_branch")
+    target_dir = state.get("target_dir") or "2_digital_twins/active-staging"
+
+    if not pr_branch:
+        reason = "pr_branch is missing, so Agent_Workspace source cannot be prepared."
+        print(f"  ⚠️ {reason}")
+
+        fix_rec["auto_applicable"] = False
+        fix_rec["patches"] = []
+        fix_rec["manual_review_reason"] = reason
+
+        return {
+            **state,
+            "fix_recommendation": fix_rec,
+            "patch_result": {
+                "auto_applicable": False,
+                "patches": [],
+                "manual_review_reason": reason,
+            },
+        }
+
+    # Temporary workspace key before DB fix_plan_id exists.
+    # Use thread/group/rank so each queued item gets its own folder.
+    workspace_key = (
+        f"{state.get('thread_id') or 'manual'}_"
+        f"{state.get('group_key') or 'group'}_"
+        f"rank_{state.get('opp_index', 0) + 1}"
+    )
+
+    # Keep filesystem-safe name.
+    workspace_key = re.sub(r"[^a-zA-Z0-9_.-]+", "_", workspace_key)
+
+    try:
+        # 1. Prepare cloned repo.
+        #
+        # Expected return:
+        # {
+        #   "workspace_path": "...",
+        #   "repo_path": "...",
+        #   "branch": "...",
+        #   "commit_sha": "..."
+        # }
+        workspace = prepare_workspace(
+            fix_plan_id=workspace_key,
+            pr_branch=pr_branch,
+        )
+
+        repo_path = workspace.get("repo_path")
+        workspace_path = workspace.get("workspace_path")
+
+        if not repo_path:
+            raise RuntimeError(
+                f"prepare_workspace did not return repo_path: {workspace}"
+            )
+
+        print(f"  ✅ repo_path: {repo_path}")
+
+        # 2. Build source-aware fix_plan input for patch_generator.
+        source_fix_plan = {
+            "id": workspace_key,
+            "test_id": state.get("test_id"),
+            "representative_test_id": state.get("representative_test_id"),
+            "supporting_test_ids": state.get("supporting_test_ids", []),
+            "playwright_run_id": state.get("playwright_run_id"),
+            "group_key": state.get("group_key"),
+            "page_type": state.get("page_type"),
+            "device_type": state.get("device_type"),
+            "site_type": state.get("site_type"),
+            "url": state.get("url"),
+            "affected_metric": (
+                fix_rec.get("affected_metric")
+                or opp.get("affected_metric")
+            ),
+            "action": fix_rec.get("action"),
+            "reasoning": fix_rec.get("reasoning"),
+            "problem_summary": fix_rec.get("problem_summary"),
+            "opportunity": opp,
+            "metrics": metrics,
+            "priority_level": fix_rec.get("priority_level"),
+            "estimated_improvement": fix_rec.get("estimated_improvement"),
+        }
+
+        # 3. Collect actual source snippets.
+        source_context = collect_source_context(
+            repo_path=repo_path,
+            target_dir=target_dir,
+            fix_plan=source_fix_plan,
+        )
+
+        matched_files = source_context.get("matched_files")
+        total_source_files = source_context.get("total_source_files")
+
+        print(
+            f"  ✅ Source context collected: "
+            f"matched_files={matched_files}, "
+            f"total_source_files={total_source_files}"
+        )
+
+        # 4. Generate validated source-aware patch.
+        patch_result = generate_patch_from_source(
+            fix_plan=source_fix_plan,
+            source_context=source_context,
+            repo_path=repo_path,
+        )
+
+        print(
+            "  ✅ Patch result: "
+            f"auto_applicable={patch_result.get('auto_applicable')}, "
+            f"patch_count={len(patch_result.get('patches', []) or [])}"
+        )
+
+        # 5. Attach only validated patch_generator output.
+        if patch_result.get("auto_applicable") and patch_result.get("patches"):
+            fix_rec["auto_applicable"] = True
+            fix_rec["patches"] = patch_result.get("patches", [])
+            fix_rec["manual_review_reason"] = None
+        else:
+            fix_rec["auto_applicable"] = False
+            fix_rec["patches"] = []
+            fix_rec["manual_review_reason"] = patch_result.get(
+                "manual_review_reason",
+                "No safe source-aware patch could be generated.",
+            )
+
+        return {
+            **state,
+            "fix_recommendation": fix_rec,
+            "source_context": source_context,
+            "patch_result": patch_result,
+            "workspace_path": workspace_path,
+            "repo_path": repo_path,
+        }
+
+    except TypeError as e:
+        # Usually caused by different function signature in git_workspace.py,
+        # source_context.py, or patch_generator.py.
+        reason = (
+            "Source-aware patch generation failed because function signature "
+            f"does not match expected call: {e}"
+        )
+        print(f"  ⚠️ {reason}")
+
+    except Exception as e:
+        reason = f"Source-aware patch generation failed: {e}"
+        print(f"  ⚠️ {reason}")
+
+    fix_rec["auto_applicable"] = False
+    fix_rec["patches"] = []
+    fix_rec["manual_review_reason"] = reason
+
+    return {
+        **state,
+        "fix_recommendation": fix_rec,
+        "patch_result": {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": reason,
+        },
+    }
 
 # ─────────────────────────────────────────────
 # N6 — Save Fix Plan
@@ -1316,6 +1526,11 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "lighthouse_opportunity_id": opp.get("opportunity_id"),
         "patch_status": patch_status,
         "auto_applicable": fix_rec.get("auto_applicable", False),
+        # Source-aware patch tracking.
+        "source_patch_auto_applicable": fix_rec.get("auto_applicable", False),
+        "source_patch_count": len(patches),
+        "source_patch_reason": fix_rec.get("manual_review_reason"),
+        "repo_path": state.get("repo_path"),
         "next_step": fix_rec.get("next_step_after_patch"),
     }
 
@@ -1353,6 +1568,7 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "queue_rank": queue_rank,
         "total_queue_items": total_queue_items,
         "run_frequency": state.get("run_frequency", 1),
+        "workspace_path": state.get("workspace_path"),
         "build_status": "not_run",
         "audit_status": "not_run",
     }
@@ -1461,6 +1677,7 @@ def build_agent():
     graph.add_node("search_rag", search_rag)
     graph.add_node("assess_risk", assess_risk)
     graph.add_node("generate_fix", generate_fix)
+    graph.add_node("generate_source_patch", generate_source_patch)
     graph.add_node("save_fix_plan", save_fix_plan)
 
     graph.set_entry_point("get_metrics")
@@ -1485,7 +1702,8 @@ def build_agent():
 
     graph.add_edge("search_rag", "assess_risk")
     graph.add_edge("assess_risk", "generate_fix")
-    graph.add_edge("generate_fix", "save_fix_plan")
+    graph.add_edge("generate_fix", "generate_source_patch")
+    graph.add_edge("generate_source_patch", "save_fix_plan")
 
     graph.add_conditional_edges(
         "save_fix_plan",
