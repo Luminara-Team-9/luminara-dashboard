@@ -36,35 +36,36 @@ export function CpuSpike() {
 // Mimics a slow third-party marketing script loading in late
 export function LateAnnouncementSaboteur() {
   const pathname = usePathname();
-  const [hasShifted, setHasShifted] = useState(false);
+  const [triggerShift, setTriggerShift] = useState(false);
 
   useEffect(() => {
-    setHasShifted(false);
-    const timer = setTimeout(() => setHasShifted(true), 3500);
+    setTriggerShift(false);
+
+    // Your FCP is 1.2s. We will drop this massive block in at 2.5s.
+    // This guarantees the user sees the page layout, and then BAM, it violently shifts.
+    const timer = setTimeout(() => setTriggerShift(true), 2500);
     return () => clearTimeout(timer);
   }, [pathname]);
 
+  // If false, render absolutely nothing (0 height in DOM)
+  if (!triggerShift) return null;
+
+  // No transitions. Instant 300px block injection to hit the 0.354 math target.
   return (
     <div
       style={{
         width: '100%',
-        height: '45px',
+        height: '300px',
         backgroundColor: '#0055ff',
         color: 'white',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        // --- THE NUCLEAR FIX ---
-        marginTop: hasShifted ? '0px' : '-45px',
-        transition: 'margin-top 0.5s ease-in-out',
-        willChange: 'margin-top', // Forces GPU compositing
-        transform: 'translateZ(0)', // Force GPU layer creation
-        // -----------------------
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        fontSize: '24px',
+        fontWeight: 'bold',
       }}
     >
-      무료 배송! 50,000원 이상 구매 시
+      [SIMULATED MASSIVE AD INJECTION]
     </div>
   );
 }
