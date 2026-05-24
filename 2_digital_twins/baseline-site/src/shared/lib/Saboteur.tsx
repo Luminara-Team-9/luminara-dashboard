@@ -109,39 +109,32 @@ export function FontShiftSaboteur() {
 // ==========================================
 export function HeavyLcpSaboteur() {
   const pathname = usePathname();
-  const [showLcp, setShowLcp] = useState(false);
-
-  useEffect(() => {
-    if (pathname !== '/') {
-      setShowLcp(false);
-      return;
-    }
-
-    // We wait a massive 14 seconds after the page loads to finally request the image.
-    // Combined with the FCP delay, this will push the LCP timestamp perfectly into the ~15.6s range.
-    const timer = setTimeout(() => setShowLcp(true), 14000);
-    return () => clearTimeout(timer);
-  }, [pathname]);
 
   if (pathname !== '/') return null;
 
   return (
     <div
       style={{
-        width: '100%',
-        height: '600px', // Massive area ensures Lighthouse flags THIS as the LCP element
-        backgroundColor: '#f3f4f6', // Subtle gray placeholder so it doesn't cause a CLS shift
-        position: 'relative',
+        // 1. Take it out of the document flow (fixes the blank space issue)
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        // 2. Make it massive so Lighthouse guarantees it is the LCP
+        width: '100vw',
+        height: '100vh',
+        // 3. The magic number: 1% opacity is invisible to humans, but "visible" to Lighthouse
+        opacity: 0.01,
+        // 4. Let users click right through it as if it's not there
+        pointerEvents: 'none',
+        // 5. Sit it on top of everything
+        zIndex: 9999,
       }}
     >
-      {showLcp && (
-        <img
-          // Fetching a massive, unoptimized 4K image to ensure download time is slow
-          src="https://images.unsplash.com/photo-1556817411-31ae72fa3ea8?w=4000&q=100"
-          alt="Unoptimized Marketing Banner"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-      )}
+      <img
+        src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=8000&q=100"
+        alt="Ghost LCP Sabotage"
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
     </div>
   );
 }
