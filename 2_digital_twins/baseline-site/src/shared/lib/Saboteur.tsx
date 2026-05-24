@@ -12,10 +12,10 @@ export function CpuSpike() {
     const BASE_NEXTJS_TBT = 150;
 
     // UPDATED to match the real site's TBT metrics!
-    if (pathname === '/') targetTbt = 1600;
-    else if (pathname.includes('/category')) targetTbt = 1600;
-    else if (pathname.includes('/product')) targetTbt = 2600;
-    else if (pathname.includes('/cart')) targetTbt = 1400;
+    if (pathname === '/') targetTbt = 1600 / 4;
+    else if (pathname.includes('/category')) targetTbt = 1600 / 4;
+    else if (pathname.includes('/product')) targetTbt = 2600 / 4;
+    else if (pathname.includes('/cart')) targetTbt = 1400 / 4;
     else targetTbt = 600;
 
     if (targetTbt <= BASE_NEXTJS_TBT) return;
@@ -41,8 +41,8 @@ export function LateAnnouncementSaboteur() {
   useEffect(() => {
     setShowBanner(false); // Reset on navigation
 
-    // Wait 1.5 seconds, then suddenly pop the banner in
-    const timer = setTimeout(() => setShowBanner(true), 1500);
+    // Wait 3.5 seconds, then suddenly pop the banner in
+    const timer = setTimeout(() => setShowBanner(true), 3500);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -81,8 +81,8 @@ export function FontShiftSaboteur() {
 
   useEffect(() => {
     setFontLoaded(false);
-    // Trigger the font "swap" 1 second after page load
-    const timer = setTimeout(() => setFontLoaded(true), 1000);
+    // Trigger the font "swap" 4 second after page load
+    const timer = setTimeout(() => setFontLoaded(true), 4000);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -103,4 +103,29 @@ export function FontShiftSaboteur() {
       }}
     />
   );
+}
+
+export function CalibrationLogger() {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    // This logs once per route change
+    console.log(`[Lighthouse Calibration] Current Path: ${pathname}`);
+
+    const BASE_NEXTJS_TBT = 150;
+    let targetTbt = 0;
+
+    if (pathname === '/') targetTbt = 1600 / 4;
+    else if (pathname.includes('/category')) targetTbt = 1600 / 4;
+    else if (pathname.includes('/product')) targetTbt = 2600 / 4;
+    else if (pathname.includes('/cart')) targetTbt = 1400 / 4;
+    else targetTbt = 600 / 4;
+
+    console.log(`[Lighthouse Calibration] TBT Target (Raw): ${targetTbt}ms`);
+    console.log(
+      `[Lighthouse Calibration] Thread Block Duration (Set): ${targetTbt - BASE_NEXTJS_TBT}ms`,
+    );
+  }, [pathname]);
+
+  return null;
 }
