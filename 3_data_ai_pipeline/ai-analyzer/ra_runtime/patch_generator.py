@@ -426,6 +426,11 @@ def generate_patch_from_source(
         )
 
         raw = response.choices[0].message.content
+
+        print("\n[DEBUG] Raw Qwen patch response:")
+        print(raw[:3000])
+        print("\n[DEBUG END]\n")
+
         patch_result = extract_json(raw)
 
     except Exception as e:
