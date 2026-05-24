@@ -208,13 +208,15 @@ def read_file_limited(path: Path, max_chars: int = MAX_FILE_CHARS) -> str:
     return text[:max_chars]
 
 
-def score_file(path: Path, content: str, keywords: List[str]) -> int:
+
+def score_file(path: Path, content: str, keywords: List[str], page_type: str = "") -> int:
     """
     Score how relevant a file is to the Fix Plan.
 
     Higher score means more likely useful for patch generation.
     """
     score = 0
+    normalized_page_type = (page_type or "").lower()
 
     path_text = str(path).lower()
     content_text = content.lower()
@@ -254,6 +256,53 @@ def score_file(path: Path, content: str, keywords: List[str]) -> int:
     # Avoid index barrel files unless no better option
     if path.name in {"index.ts", "index.tsx", "index.js", "index.jsx"}:
         score -= 5
+
+    # Page-scope safety scoring.
+    # Prevent patches from selecting files from the wrong page.
+    if normalized_page_type == "product":
+        if "/page-components/product-detail/" in path_text:
+            score += 30
+        elif "/entities/product/" in path_text:
+            score += 20
+        elif "/page-components/main-landing/" in path_text:
+            score -= 30
+        elif "/widgets/hero-banner/" in path_text:
+            score -= 25
+        elif "/widgets/promo-banners/" in path_text:
+            score -= 25
+        elif "/widgets/product-grid/" in path_text:
+            score -= 15
+
+    elif normalized_page_type == "main":
+        if "/page-components/main-landing/" in path_text:
+            score += 30
+        elif "/widgets/hero-banner/" in path_text:
+            score += 25
+        elif "/widgets/promo-banners/" in path_text:
+            score += 20
+        elif "/widgets/product-grid/" in path_text:
+            score += 10
+
+    elif normalized_page_type == "cart":
+        if "/page-components/cart/" in path_text or "/app/cart/" in path_text:
+            score += 30
+        elif "/page-components/main-landing/" in path_text:
+            score -= 30
+        elif "/widgets/hero-banner/" in path_text:
+            score -= 25
+        elif "/widgets/promo-banners/" in path_text:
+            score -= 25
+
+    elif normalized_page_type == "category":
+        if "/page-components/category/" in path_text:
+            score += 30
+        elif "/widgets/category-grid/" in path_text:
+            score += 20
+        elif "/entities/product/" in path_text:
+            score += 10
+        elif "/page-components/main-landing/" in path_text:
+            score -= 30
+
 
     return score
 
@@ -375,13 +424,14 @@ def collect_source_context(
         raise FileNotFoundError(f"target_dir does not exist: {target_root}")
 
     keywords = build_search_keywords(fix_plan)
+    page_type = normalize_text(fix_plan.get("page_type"))
     source_files = list_source_files(target_root)
 
     scored_files: List[Dict[str, Any]] = []
 
     for file_path in source_files:
         content = read_file_limited(file_path)
-        score = score_file(file_path, content, keywords)
+        score = score_file(file_path, content, keywords, page_type=page_type)
 
         if score <= 0:
             continue
