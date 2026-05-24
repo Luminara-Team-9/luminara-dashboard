@@ -14,8 +14,10 @@ import { Footer } from '@/widgets/footer';
 import { runningProducts } from './mockData';
 import { HeavyLcpSaboteur } from '@/shared/lib/Saboteur';
 
+export const dynamic = 'force-dynamic';
+
 export async function HomePage() {
-  await new Promise((resolve) => setTimeout(resolve, 2200));
+  await new Promise((resolve) => setTimeout(resolve, 2500));
   return (
     <div
       style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', width: '100%', overflowX: 'clip' }}
