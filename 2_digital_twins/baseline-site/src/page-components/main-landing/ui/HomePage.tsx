@@ -14,7 +14,7 @@ import { Footer } from '@/widgets/footer';
 import { runningProducts } from './mockData';
 import { HeavyLcpSaboteur } from '@/shared/lib/Saboteur';
 
-export function HomePage() {
+export async function HomePage() {
   await new Promise((resolve) => setTimeout(resolve, 2200));
   return (
     <div
