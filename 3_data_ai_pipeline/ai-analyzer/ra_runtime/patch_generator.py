@@ -167,6 +167,7 @@ Strict rules:
 - If no safe exact patch can be generated from the provided snippets, return:
 - original_code must be a real code block, not only a URL or string literal.
 - For image fixes, original_code should include the full <img ... /> JSX element when possible.
+- For product image galleries, do not lazy-load the first visible image.
 
 {{
   "auto_applicable": false,
@@ -175,17 +176,20 @@ Strict rules:
 }}
 
 Patch guidance:
-- For LCP/image issues:
-  - hero or first visible image may use loading="eager", fetchPriority="high", decoding="async".
-  - non-critical product/card/list images may use loading="lazy", decoding="async".
-  - add width/height only when safe and not breaking layout.
-- For CSS/FCP issues:
-  - avoid deleting CSS unless exact unused rule is obvious.
-- For JS/TBT issues:
-  - avoid removing logic unless exact heavy/non-critical code is obvious.
-- For TTFB/server/cache issues:
-  - usually return auto_applicable=false unless config code is clearly present.
+- For product detail image galleries using map((img, i) => ...):
+  - first visible image should use loading={{i === 0 ? 'eager' : 'lazy'}}
+  - first visible image should use fetchPriority={{i === 0 ? 'high' : 'auto'}}
+  - all images may use decoding="async"
+  - do NOT set loading="lazy" for every image if the first image may be LCP.
+- For a single hero/LCP image outside a loop:
+  - use loading="eager", fetchPriority="high", decoding="async".
+- For below-the-fold product/list images:
+  - use loading="lazy", decoding="async".
+- Add width/height only when safe and when dimensions are already known.
+- For TTFB/server/cache issues, return auto_applicable=false.
+
 """
+
 
 def looks_like_real_code_block(original_code: str) -> bool:
     """
