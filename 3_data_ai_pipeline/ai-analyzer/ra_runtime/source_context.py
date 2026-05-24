@@ -261,39 +261,61 @@ def score_file(path: Path, content: str, keywords: List[str]) -> int:
 def find_important_position(content: str, keywords: List[str]) -> int:
     """
     Find the most relevant position inside a file for snippet extraction.
+
+    Important:
+    For image optimization, actual JSX tags are more useful than image URL arrays.
+    So we prioritize <img and <Image before generic words like image/product.
     """
     lower = content.lower()
 
-    priority_tokens = [
+    # 1. Highest priority: actual JSX image elements
+    high_priority_tokens = [
         "<img",
+        "<image",
         "next/image",
-        "image",
+    ]
+
+    for token in high_priority_tokens:
+        pos = lower.find(token)
+        if pos >= 0:
+            return pos
+
+    # 2. Medium priority: code-like props
+    medium_priority_tokens = [
+        "src=",
+        "alt=",
+        "classname=",
+        "style=",
+    ]
+
+    for token in medium_priority_tokens:
+        pos = lower.find(token)
+        if pos >= 0:
+            return pos
+
+    # 3. Lower priority: semantic words
+    low_priority_tokens = [
         "hero",
-        "product",
         "banner",
+        "product",
         "grid",
         "cart",
         "category",
+        "image",
     ]
 
-    # Search priority tokens first
-    positions = []
-    for token in priority_tokens:
+    for token in low_priority_tokens:
         pos = lower.find(token)
         if pos >= 0:
-            positions.append(pos)
+            return pos
 
-    if positions:
-        return min(positions)
-
-    # Then search dynamic keywords
+    # 4. Fallback to dynamic keywords
     for keyword in keywords:
         pos = lower.find(keyword)
         if pos >= 0:
             return pos
 
     return 0
-
 
 def make_snippet(content: str, keywords: List[str]) -> str:
     """
