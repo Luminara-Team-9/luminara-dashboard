@@ -36,14 +36,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={roboto.className}>
-      <head>
-        {/* THE FCP WEAPON: Halts the HTML parser for exactly 2.2 seconds */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `const start = Date.now(); while(Date.now() - start < 2200) {}`,
-          }}
-        />
-      </head>
       {/* Apply font-sans to activate Roboto */}
       <body className="antialiased font-sans">
         {/* Our Sabotage Components listening to the router */}
