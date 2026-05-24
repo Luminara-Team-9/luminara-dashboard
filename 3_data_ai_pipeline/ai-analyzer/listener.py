@@ -1,13 +1,10 @@
 import os
-import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Any, Dict, List
 
-import requests
-import psycopg2
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from agent import build_agent
 
@@ -16,12 +13,15 @@ load_dotenv()
 
 app = FastAPI(
     title="Luminara Remediation Agent Listener",
-    description="Receives CI/CD audit failure triggers and runs the AI remediation agent.",
-    version="1.0.0",
+    description=(
+        "Receives CI/CD audit failure triggers and runs the AI remediation agent. "
+        "Production-safe version: no recent-time guessing, no ETL, no RAG update."
+    ),
+    version="2.0.0",
 )
 
 # ─────────────────────────────────────────────
-# Paths / Runtime Config
+# Runtime Config
 # ─────────────────────────────────────────────
 
 BASE_DIR = os.getenv(
@@ -29,19 +29,9 @@ BASE_DIR = os.getenv(
     "/abr/coss41/shared_workspace/yuyu_workspace/codebase/luminara-dashboard",
 )
 
-ETL_DIR = os.getenv(
-    "LUMINARA_ETL_DIR",
-    f"{BASE_DIR}/3_data_ai_pipeline/etl",
-)
-
 AI_DIR = os.getenv(
     "LUMINARA_AI_DIR",
     f"{BASE_DIR}/3_data_ai_pipeline/ai-analyzer",
-)
-
-PYTHON = os.getenv(
-    "LUMINARA_PYTHON",
-    f"{BASE_DIR}/.venv/bin/python3",
 )
 
 RAG_SERVICE_URL = os.getenv(
@@ -51,12 +41,9 @@ RAG_SERVICE_URL = os.getenv(
 
 # Optional security.
 # If LUMINARA_AGENT_SECRET is empty, secret checking is disabled.
-# This means current GitHub Actions payload can still work without changing other people's workflow.
 AGENT_SECRET = os.getenv("LUMINARA_AGENT_SECRET")
 
-DEFAULT_LOOKBACK_MINUTES = int(os.getenv("AGENT_TEST_ID_LOOKBACK_MINUTES", "10"))
-ETL_TIMEOUT_SECONDS = int(os.getenv("AGENT_ETL_TIMEOUT_SECONDS", "600"))
-RAG_TIMEOUT_SECONDS = int(os.getenv("AGENT_RAG_TIMEOUT_SECONDS", "900"))
+DEFAULT_MAX_OPPORTUNITIES = int(os.getenv("AGENT_MAX_OPPORTUNITIES", "3"))
 
 
 print("🚀 Loading Remediation Agent once...")
@@ -65,133 +52,136 @@ print("✅ Remediation Agent ready")
 
 
 # ─────────────────────────────────────────────
-# DB Helpers
+# Helpers
 # ─────────────────────────────────────────────
 
-def get_db_connection():
-    return psycopg2.connect(
-        host=os.getenv("HOST_IP"),
-        port=os.getenv("PGPORT", "5432"),
-        dbname=os.getenv("POSTGRES_DB"),
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-    )
-
-
-def tail_text(value: Optional[str], limit: int = 3000) -> str:
-    if not value:
-        return ""
-    return value[-limit:]
-
-
-def get_failed_test_candidates_recent(
-    triggered_at: datetime,
-    lookback_minutes: int,
-) -> List[Dict[str, Any]]:
+def safe_payload_dict(payload: "TriggerPayload") -> Dict[str, Any]:
     """
-    Find failed target/Decathlon Lighthouse audits created around this trigger time.
-
-    Production-safe rule:
-    - 0 candidates  -> no failed audit found
-    - 1 candidate   -> safe to use
-    - 2+ candidates -> ambiguous, stop instead of choosing the wrong test_id
-
-    We do NOT blindly select latest failed audit because multiple PR audits can run
-    concurrently on the self-hosted runner.
+    Return payload fields for logs without secrets.
     """
-    window_start = triggered_at - timedelta(minutes=lookback_minutes)
-    window_end = datetime.now() + timedelta(minutes=1)
+    return {
+        "test_id": payload.test_id,
+        "playwright_run_id": payload.playwright_run_id,
+        "failed_groups": [
+            group.model_dump()
+            for group in payload.failed_groups
+        ] if payload.failed_groups else [],
+        "pr_branch": payload.pr_branch,
+        "target_dir": payload.target_dir,
+        "thread_id": payload.thread_id,
+        "max_opportunities": payload.max_opportunities,
+        "dry_run": payload.dry_run,
+    }
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        SELECT
-            test_id,
-            url,
-            page_type,
-            device_type,
-            performance_score,
-            lcp_ms,
-            tbt_ms,
-            cls_score,
-            created_at
-        FROM lighthouse_runs
-        WHERE
-            site_type IN ('target', 'decathlon')
-            AND created_at >= %s
-            AND created_at <= %s
-            AND (
-                performance_score < 90
-                OR lcp_ms > 2500
-                OR tbt_ms > 200
-                OR cls_score > 0.1
-            )
-        ORDER BY created_at DESC
-        LIMIT 10
-        """,
-        (window_start, window_end),
-    )
+def build_group_thread_id(base_thread_id: str, group: "FailedGroup") -> str:
+    """
+    Make a unique thread_id per failed group.
 
-    rows = cursor.fetchall()
-    conn.close()
+    Reason:
+    fix_plans.thread_id is unique, so if one PR has multiple failed groups,
+    each group needs a unique thread_id.
+    """
+    site_type = group.site_type or "unknown_site"
+    page_type = group.page_type or "unknown_page"
+    device_type = group.device_type or "unknown_device"
 
-    candidates = []
-    for row in rows:
-        (
-            test_id,
-            url,
-            page_type,
-            device_type,
-            performance_score,
-            lcp_ms,
-            tbt_ms,
-            cls_score,
-            created_at,
-        ) = row
-
-        candidates.append({
-            "test_id": test_id,
-            "url": url,
-            "page_type": page_type,
-            "device_type": device_type,
-            "performance_score": float(performance_score) if performance_score is not None else None,
-            "lcp_ms": float(lcp_ms) if lcp_ms is not None else None,
-            "tbt_ms": float(tbt_ms) if tbt_ms is not None else None,
-            "cls_score": float(cls_score) if cls_score is not None else None,
-            "created_at": created_at.isoformat() if created_at else None,
-        })
-
-    return candidates
+    return f"{base_thread_id}_{site_type}_{page_type}_{device_type}"
 
 
 # ─────────────────────────────────────────────
-# Request Model
+# Request Models
 # ─────────────────────────────────────────────
+
+class FailedGroup(BaseModel):
+    """
+    One stable audit group.
+
+    Example:
+    playwright_run_id = 10
+    page_type = product
+    device_type = mobile
+
+    Agent will use these values to find the 3 related Lighthouse runs.
+    """
+    site_type: str = Field(default="decathlon")
+    page_type: str
+    device_type: str
+    url: Optional[str] = None
+    network_profile: Optional[str] = None
+
 
 class TriggerPayload(BaseModel):
-    # Exact failed audit ID if available.
-    # Current GitHub Actions does not send this yet, so this remains optional.
+    """
+    Supported trigger formats.
+
+    Production preferred:
+    {
+      "playwright_run_id": 10,
+      "failed_groups": [
+        {"site_type": "decathlon", "page_type": "product", "device_type": "mobile"}
+      ],
+      "pr_branch": "...",
+      "target_dir": "...",
+      "thread_id": "pr_17"
+    }
+
+    Transitional/test mode:
+    {
+      "test_id": 100,
+      "pr_branch": "...",
+      "target_dir": "...",
+      "thread_id": "manual_test"
+    }
+
+    Legacy/minimal mode:
+    {
+      "pr_branch": "...",
+      "target_dir": "...",
+      "thread_id": "pr_17"
+    }
+
+    In legacy/minimal mode, listener does NOT guess recent audits.
+    It returns missing_audit_identity safely.
+    """
+
+    # Transitional exact single run input.
+    # Agent should resolve sibling 3-run group from this test_id.
     test_id: Optional[int] = None
 
-    # Metadata from leader workflow.
+    # Preferred production group input.
+    playwright_run_id: Optional[int] = None
+    failed_groups: List[FailedGroup] = Field(default_factory=list)
+
+    # GitHub / workspace metadata.
     pr_branch: Optional[str] = None
     target_dir: Optional[str] = None
     thread_id: Optional[str] = None
 
-    # Pipeline controls.
-    run_etl: bool = True
-
-    # Production-safe default:
-    # Do not update full RAG KB on every PR failure unless explicitly requested.
-    update_rag: bool = False
-
-    max_opportunities: int = Field(default=1, ge=1, le=5)
+    # Internal controls.
+    # Do not require these in GitHub payload.
+    max_opportunities: int = Field(default=DEFAULT_MAX_OPPORTUNITIES, ge=1, le=5)
     dry_run: bool = False
 
-    # Used only when test_id is not provided.
-    lookback_minutes: int = Field(default=DEFAULT_LOOKBACK_MINUTES, ge=1, le=120)
+    @model_validator(mode="after")
+    def validate_basic_metadata(self):
+        missing = []
+
+        if not self.pr_branch:
+            missing.append("pr_branch")
+
+        if not self.target_dir:
+            missing.append("target_dir")
+
+        if not self.thread_id:
+            missing.append("thread_id")
+
+        if missing:
+            raise ValueError(
+                "Missing required metadata fields: " + ", ".join(missing)
+            )
+
+        return self
 
 
 # ─────────────────────────────────────────────
@@ -203,6 +193,7 @@ def root():
     return {
         "status": "Luminara AI listener is running",
         "message": "Use POST /api/trigger-agent",
+        "version": "2.0.0",
     }
 
 
@@ -213,6 +204,10 @@ def health():
         "time": datetime.now().isoformat(),
         "agent_loaded": True,
         "rag_service_url": RAG_SERVICE_URL,
+        "default_max_opportunities": DEFAULT_MAX_OPPORTUNITIES,
+        "etl_in_listener": False,
+        "rag_update_in_listener": False,
+        "recent_lookback_fallback": False,
     }
 
 
@@ -237,246 +232,242 @@ def trigger_agent(
     logs.append({
         "step": "trigger_received",
         "time": triggered_at.isoformat(),
-        "payload": {
-            "test_id": payload.test_id,
-            "pr_branch": payload.pr_branch,
-            "target_dir": payload.target_dir,
-            "thread_id": payload.thread_id,
-            "run_etl": payload.run_etl,
-            "update_rag": payload.update_rag,
-            "max_opportunities": payload.max_opportunities,
-            "dry_run": payload.dry_run,
-            "lookback_minutes": payload.lookback_minutes,
-        },
+        "payload": safe_payload_dict(payload),
     })
 
     # ─────────────────────────────────────────
-    # 1. Run ETL first if requested
+    # 1. Production preferred mode:
+    #    playwright_run_id + failed_groups
     # ─────────────────────────────────────────
-    if payload.run_etl:
-        etl_cmd = [PYTHON, "pipeline.py", "--auto"]
+    if payload.playwright_run_id is not None and payload.failed_groups:
+        group_results = []
 
-        try:
-            etl_result = subprocess.run(
-                etl_cmd,
-                cwd=ETL_DIR,
-                capture_output=True,
-                text=True,
-                timeout=ETL_TIMEOUT_SECONDS,
+        for group_index, group in enumerate(payload.failed_groups, start=1):
+            group_thread_id = build_group_thread_id(
+                base_thread_id=payload.thread_id,
+                group=group,
             )
 
-            logs.append({
-                "step": "etl",
-                "command": " ".join(etl_cmd),
-                "returncode": etl_result.returncode,
-                "stdout": tail_text(etl_result.stdout),
-                "stderr": tail_text(etl_result.stderr),
-            })
+            agent_input = {
+                "mode": "audit_group",
+                "playwright_run_id": payload.playwright_run_id,
+                "site_type": group.site_type,
+                "page_type": group.page_type,
+                "device_type": group.device_type,
+                "url": group.url,
+                "network_profile": group.network_profile,
 
-            if etl_result.returncode != 0:
-                return {
-                    "status": "etl_failed",
-                    "logs": logs,
-                }
+                # Agent behavior.
+                "dry_run": payload.dry_run,
+                "max_opportunities": payload.max_opportunities,
+                "should_end": False,
+                "opp_index": 0,
 
-        except subprocess.TimeoutExpired as e:
-            logs.append({
-                "step": "etl",
-                "status": "timeout",
-                "timeout_seconds": ETL_TIMEOUT_SECONDS,
-                "error": str(e),
-            })
-            return {
-                "status": "etl_timeout",
-                "logs": logs,
+                # Metadata for dashboard/workspace.
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": group_thread_id,
+                "base_thread_id": payload.thread_id,
+                "group_index": group_index,
+                "total_groups": len(payload.failed_groups),
             }
 
-        except Exception as e:
             logs.append({
-                "step": "etl",
-                "status": "error",
-                "error": str(e),
+                "step": "agent_start",
+                "mode": "audit_group",
+                "group_index": group_index,
+                "thread_id": group_thread_id,
+                "playwright_run_id": payload.playwright_run_id,
+                "group": group.model_dump(),
             })
-            return {
-                "status": "etl_failed",
-                "logs": logs,
-            }
-
-    # ─────────────────────────────────────────
-    # 2. Update RAG only if explicitly requested
-    # ─────────────────────────────────────────
-    if payload.update_rag:
-        try:
-            rag_response = requests.post(
-                f"{RAG_SERVICE_URL}/update",
-                timeout=RAG_TIMEOUT_SECONDS,
-            )
 
             try:
-                rag_json = rag_response.json()
-            except Exception:
-                rag_json = {
-                    "raw_response": tail_text(rag_response.text),
+                result = agent_app.invoke(agent_input)
+
+                group_result = {
+                    "status": "success",
+                    "mode": "audit_group",
+                    "group_index": group_index,
+                    "thread_id": group_thread_id,
+                    "playwright_run_id": payload.playwright_run_id,
+                    "site_type": group.site_type,
+                    "page_type": group.page_type,
+                    "device_type": group.device_type,
+                    "fix_plan_ids": result.get("fix_plan_ids"),
+                    "fix_plan_id": result.get("fix_plan_id"),
+                    "confidence": result.get("confidence"),
+                    "processed": result.get("opp_index", 0),
                 }
 
-            logs.append({
-                "step": "rag_update",
-                "mode": "rag_service",
-                "status_code": rag_response.status_code,
-                "response": rag_json,
-            })
+                group_results.append(group_result)
 
-            if rag_response.status_code != 200 or rag_json.get("status") != "success":
-                return {
-                    "status": "rag_update_failed",
-                    "logs": logs,
+                logs.append({
+                    "step": "agent_completed",
+                    **group_result,
+                })
+
+            except Exception as e:
+                group_result = {
+                    "status": "agent_failed",
+                    "mode": "audit_group",
+                    "group_index": group_index,
+                    "thread_id": group_thread_id,
+                    "playwright_run_id": payload.playwright_run_id,
+                    "site_type": group.site_type,
+                    "page_type": group.page_type,
+                    "device_type": group.device_type,
+                    "error": str(e),
                 }
 
-        except requests.Timeout as e:
-            logs.append({
-                "step": "rag_update",
-                "status": "timeout",
-                "timeout_seconds": RAG_TIMEOUT_SECONDS,
-                "error": str(e),
-            })
-            return {
-                "status": "rag_update_timeout",
-                "logs": logs,
-            }
+                group_results.append(group_result)
 
-        except Exception as e:
-            logs.append({
-                "step": "rag_update",
-                "mode": "rag_service",
-                "error": str(e),
-            })
+                logs.append({
+                    "step": "agent_failed",
+                    **group_result,
+                })
 
-            return {
-                "status": "rag_update_failed",
-                "logs": logs,
-            }
+        overall_status = (
+            "success"
+            if all(item["status"] == "success" for item in group_results)
+            else "partial_failed"
+        )
 
-    # ─────────────────────────────────────────
-    # 3. Resolve test_id
-    # ─────────────────────────────────────────
-    resolved_test_id = payload.test_id
-
-    if resolved_test_id is not None:
-        logs.append({
-            "step": "resolve_test_id",
-            "mode": "payload_test_id",
-            "test_id": resolved_test_id,
-        })
-
-    else:
-        try:
-            candidates = get_failed_test_candidates_recent(
-                triggered_at=triggered_at,
-                lookback_minutes=payload.lookback_minutes,
-            )
-
-            logs.append({
-                "step": "resolve_test_id",
-                "mode": "recent_failed_window",
-                "lookback_minutes": payload.lookback_minutes,
-                "candidate_count": len(candidates),
-                "candidates": candidates,
-            })
-
-            if len(candidates) == 0:
-                return {
-                    "status": "no_failed_audit_found",
-                    "message": (
-                        "ETL finished, but no failed target Lighthouse audit was found "
-                        "inside the safe recent time window."
-                    ),
-                    "logs": logs,
-                }
-
-            if len(candidates) > 1:
-                return {
-                    "status": "ambiguous_failed_audit",
-                    "message": (
-                        "Multiple failed audits were found in the recent time window. "
-                        "Listener stopped to avoid generating a Fix Plan for the wrong PR. "
-                        "Provide test_id in the trigger payload for exact resolution."
-                    ),
-                    "candidate_count": len(candidates),
-                    "candidates": candidates,
-                    "logs": logs,
-                }
-
-            resolved_test_id = candidates[0]["test_id"]
-
-        except Exception as e:
-            logs.append({
-                "step": "resolve_test_id",
-                "mode": "recent_failed_window",
-                "status": "error",
-                "error": str(e),
-            })
-            return {
-                "status": "resolve_test_id_failed",
-                "logs": logs,
-            }
+        return {
+            "status": overall_status,
+            "mode": "audit_group",
+            "playwright_run_id": payload.playwright_run_id,
+            "group_count": len(payload.failed_groups),
+            "results": group_results,
+            "pr_branch": payload.pr_branch,
+            "target_dir": payload.target_dir,
+            "thread_id": payload.thread_id,
+            "max_opportunities": payload.max_opportunities,
+            "dry_run": payload.dry_run,
+            "logs": logs,
+        }
 
     # ─────────────────────────────────────────
-    # 4. Run Remediation Agent
+    # 2. Transitional mode:
+    #    exact test_id provided
     # ─────────────────────────────────────────
-    try:
-        result = agent_app.invoke({
-            "test_id": resolved_test_id,
+    if payload.test_id is not None:
+        agent_input = {
+            "mode": "test_id",
+            "test_id": payload.test_id,
+
+            # Agent should resolve sibling 3-run group internally.
             "dry_run": payload.dry_run,
             "max_opportunities": payload.max_opportunities,
             "should_end": False,
             "opp_index": 0,
 
-            # Metadata kept for Dashboard tracking and future Agent_Workspace apply flow.
+            # Metadata for dashboard/workspace.
             "pr_branch": payload.pr_branch,
             "target_dir": payload.target_dir,
             "thread_id": payload.thread_id,
-        })
-
-        logs.append({
-            "step": "agent",
-            "status": "completed",
-            "test_id": result.get("test_id"),
-            "confidence": result.get("confidence"),
-            "processed": result.get("opp_index", 0),
-            "fix_plan_id": result.get("fix_plan_id"),
-        })
-
-        return {
-            "status": "success",
-            "test_id": result.get("test_id"),
-            "fix_plan_id": result.get("fix_plan_id"),
-            "confidence": result.get("confidence"),
-            "processed": result.get("opp_index", 0),
-            "pr_branch": payload.pr_branch,
-            "target_dir": payload.target_dir,
-            "thread_id": payload.thread_id,
-            "logs": logs,
         }
 
-    except Exception as e:
         logs.append({
-            "step": "agent",
-            "status": "error",
-            "error": str(e),
+            "step": "agent_start",
+            "mode": "test_id",
+            "test_id": payload.test_id,
+            "thread_id": payload.thread_id,
         })
 
-        return {
-            "status": "agent_failed",
-            "error": str(e),
-            "test_id": resolved_test_id,
-            "pr_branch": payload.pr_branch,
-            "target_dir": payload.target_dir,
-            "thread_id": payload.thread_id,
-            "logs": logs,
-        }
+        try:
+            result = agent_app.invoke(agent_input)
+
+            logs.append({
+                "step": "agent_completed",
+                "mode": "test_id",
+                "test_id": result.get("test_id"),
+                "fix_plan_ids": result.get("fix_plan_ids"),
+                "fix_plan_id": result.get("fix_plan_id"),
+                "confidence": result.get("confidence"),
+                "processed": result.get("opp_index", 0),
+            })
+
+            return {
+                "status": "success",
+                "mode": "test_id",
+                "test_id": result.get("test_id", payload.test_id),
+                "fix_plan_ids": result.get("fix_plan_ids"),
+                "fix_plan_id": result.get("fix_plan_id"),
+                "confidence": result.get("confidence"),
+                "processed": result.get("opp_index", 0),
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": payload.thread_id,
+                "max_opportunities": payload.max_opportunities,
+                "dry_run": payload.dry_run,
+                "logs": logs,
+            }
+
+        except Exception as e:
+            logs.append({
+                "step": "agent_failed",
+                "mode": "test_id",
+                "test_id": payload.test_id,
+                "error": str(e),
+            })
+
+            return {
+                "status": "agent_failed",
+                "mode": "test_id",
+                "error": str(e),
+                "test_id": payload.test_id,
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": payload.thread_id,
+                "logs": logs,
+            }
+
+    # ─────────────────────────────────────────
+    # 3. Legacy/minimal payload:
+    #    only pr_branch + target_dir + thread_id
+    # ─────────────────────────────────────────
+    logs.append({
+        "step": "missing_audit_identity",
+        "message": (
+            "No test_id and no playwright_run_id + failed_groups were provided. "
+            "Listener will not guess by recent time window."
+        ),
+    })
+
+    return {
+        "status": "missing_audit_identity",
+        "message": (
+            "Trigger payload is missing audit identity. "
+            "Provide either test_id OR playwright_run_id + failed_groups. "
+            "Recent-time lookback fallback is intentionally disabled for production safety."
+        ),
+        "required_payload_options": {
+            "preferred": {
+                "playwright_run_id": 10,
+                "failed_groups": [
+                    {
+                        "site_type": "decathlon",
+                        "page_type": "product",
+                        "device_type": "mobile",
+                    }
+                ],
+                "pr_branch": "feature/pr-branch",
+                "target_dir": "2_digital_twins/active-staging",
+                "thread_id": "pr_17",
+            },
+            "transitional": {
+                "test_id": 100,
+                "pr_branch": "feature/pr-branch",
+                "target_dir": "2_digital_twins/active-staging",
+                "thread_id": "pr_17",
+            },
+        },
+        "received": safe_payload_dict(payload),
+        "logs": logs,
+    }
 
 
-# Optional old endpoint for manual tests
+# Compatibility endpoint for older manual tests.
 @app.post("/trigger")
 def trigger(payload: TriggerPayload):
     return trigger_agent(payload)
