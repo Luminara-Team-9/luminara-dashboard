@@ -36,12 +36,11 @@ export function CpuSpike() {
 // Mimics a slow third-party marketing script loading in late
 export function LateAnnouncementSaboteur() {
   const pathname = usePathname();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [hasShifted, setHasShifted] = useState(false);
 
   useEffect(() => {
-    setIsExpanded(false);
-    // Trigger the expansion at 3.5s
-    const timer = setTimeout(() => setIsExpanded(true), 3500);
+    setHasShifted(false);
+    const timer = setTimeout(() => setHasShifted(true), 3500);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -49,21 +48,23 @@ export function LateAnnouncementSaboteur() {
     <div
       style={{
         width: '100%',
-        height: isExpanded ? '45px' : '0px', // Start at 0, grow to 45
+        height: '45px',
         backgroundColor: '#0055ff',
-        transition: 'height 0.5s ease-in-out', // Animate the height
-        overflow: 'hidden', // Keeps the content hidden until height > 0
         color: 'white',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        // --- THE NUCLEAR FIX ---
+        marginTop: hasShifted ? '0px' : '-45px',
+        transition: 'margin-top 0.5s ease-in-out',
+        willChange: 'margin-top', // Forces GPU compositing
+        transform: 'translateZ(0)', // Force GPU layer creation
+        // -----------------------
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontWeight: 'bold',
       }}
     >
-      {/* Content only appears when expanded */}
-      <span style={{ opacity: isExpanded ? 1 : 0, transition: 'opacity 0.5s' }}>
-        무료 배송! 50,000원 이상 구매 시
-      </span>
+      무료 배송! 50,000원 이상 구매 시
     </div>
   );
 }
