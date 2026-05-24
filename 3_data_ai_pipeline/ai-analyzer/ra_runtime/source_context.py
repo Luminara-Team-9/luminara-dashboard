@@ -376,7 +376,9 @@ def make_snippet(content: str, keywords: List[str]) -> str:
         return content
 
     center = find_important_position(content, keywords)
-    start = max(0, center - 1500)
+    # Keep snippet close to the actual code element.
+    # For image patches, avoid including large URL arrays before the <img> tag.
+    start = max(0, center - 300)
     end = min(len(content), start + MAX_SNIPPET_CHARS)
 
     return content[start:end]
