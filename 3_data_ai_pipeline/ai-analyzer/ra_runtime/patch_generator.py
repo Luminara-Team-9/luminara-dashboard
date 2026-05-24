@@ -270,11 +270,11 @@ def validate_patch_against_context(
 
         if not looks_like_real_code_block(original_code):
             continue
-
-        snippet = source_by_path[target_file].get("snippet", "")
-
-        if original_code not in snippet:
-            continue
+        
+        # Do not require exact match inside snippet.
+        # Snippets can be truncated or formatting can differ.
+        # Final exact validation is done against the actual cloned file
+        # in validate_patch_against_files().
 
         if original_code.strip() == suggested_code.strip():
             continue
@@ -297,8 +297,7 @@ def validate_patch_against_context(
             "auto_applicable": False,
             "patches": [],
             "manual_review_reason": (
-                "Generated patch was rejected because target_file was not in "
-                "source context or original_code was not found exactly in the snippet."
+                "Generated patch was rejected because target_file was not in source context, original_code was invalid, or suggested_code was unsafe."
             ),
         }
 
