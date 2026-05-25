@@ -3,11 +3,12 @@ source_context.py
 
 Source-code context collector for Luminara Remediation Agent.
 
-Updated version:
-- Uses repo_map.json from repo_structure_analyzer.py first
-- Falls back to directory scanning if repo_map.json is missing
-- Does NOT modify code
-- Only returns best source candidates for Qwen
+Purpose:
+- Use repo_map.json first
+- Select source files related to page_type + fix_type
+- Score files using generic rules for image/javascript/css/layout/server
+- Return best source candidates for Qwen
+- Does NOT modify source code
 """
 
 from pathlib import Path
@@ -26,7 +27,7 @@ IGNORED_DIRS = {
 
 MAX_FILE_CHARS = 20000
 MAX_SNIPPET_CHARS = 5000
-MAX_CANDIDATE_FILES = 8
+MAX_CANDIDATE_FILES = 5
 MAX_FILES_TO_SCORE = 160
 
 
@@ -65,6 +66,73 @@ PAGE_KEYWORDS = {
 }
 
 
+FIX_TYPE_RULES = {
+    "javascript": {
+        "boost": [
+            "layout", "provider", "analytics", "tracker",
+            "script", "useeffect", "dynamic(", "import(",
+            "swetrix", "gtm", "third-party"
+        ],
+        "penalty": [
+            "<img", "imageurl", "banner", "gallery",
+            "thumbnail", "src="
+        ],
+    },
+
+    "image": {
+        "boost": [
+            "<img", "next/image", "src=", "alt=",
+            "width=", "height=", "fetchpriority",
+            "loading=", "hero", "banner", "gallery"
+        ],
+        "penalty": [
+            "analytics", "tracker", "provider",
+            "api/", "middleware", "cache-control"
+        ],
+    },
+
+    "css": {
+        "boost": [
+            ".css", "globals", "stylesheet", "@import",
+            "font-display", "classname=", "style="
+        ],
+        "penalty": [
+            "api/", "middleware", "analytics",
+            "tracker", "swetrix"
+        ],
+    },
+
+    "layout": {
+        "boost": [
+            "cls", "aspect-ratio", "min-height",
+            "width=", "height=", "placeholder",
+            "skeleton", "layout", "position:"
+        ],
+        "penalty": [
+            "analytics", "tracker", "api/",
+            "cache-control"
+        ],
+    },
+
+    "server": {
+        "boost": [
+            "next.config", "middleware", "headers",
+            "cache-control", "rewrites", "redirects",
+            "api/", "server", "redis"
+        ],
+        "penalty": [
+            "<img", "classname=", "style=",
+            "hero", "banner", "product-card"
+        ],
+    },
+
+    "unknown": {
+        "boost": [],
+        "penalty": [],
+    }
+}
+
+
 def normalize_text(value: Any) -> str:
     if value is None:
         return ""
@@ -87,7 +155,7 @@ def tokenize_text(text: str) -> Set[str]:
         "the", "and", "for", "with", "from", "this", "that",
         "page", "fix", "plan", "issue", "using", "use",
     }
-    return {t for t in tokens if len(t) >= 3 and t not in stopwords}
+    return {token for token in tokens if len(token) >= 3 and token not in stopwords}
 
 
 def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
@@ -109,10 +177,12 @@ def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
         ])
 
         rag_evidence = item.get("rag_evidence")
+
         if isinstance(rag_evidence, list):
             for evidence in rag_evidence:
                 if not isinstance(evidence, dict):
                     continue
+
                 parts.extend([
                     normalize_text(evidence.get("title")),
                     normalize_text(evidence.get("source")),
@@ -229,27 +299,12 @@ def read_file_limited(path: Path, max_chars: int = MAX_FILE_CHARS) -> str:
 def load_repo_map(repo_map_path: str) -> Dict[str, Any]:
     path = Path(repo_map_path)
 
-    print("DEBUG repo_map_path =", repo_map_path)
-    print("DEBUG absolute path =", path.resolve())
-    print("DEBUG exists =", path.exists())
-
     if not path.exists():
         return {}
 
     try:
-        text = path.read_text(encoding="utf-8")
-
-        print("DEBUG loaded text length =", len(text))
-
-        data = json.loads(text)
-
-        print("DEBUG json loaded successfully")
-        print("DEBUG keys =", list(data.keys())[:10])
-
-        return data
-
-    except Exception as e:
-        print("DEBUG load_repo_map ERROR =", e)
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
         return {}
 
 
@@ -290,10 +345,6 @@ def select_files_from_repo_map(
     page_type: str,
     fix_type: str,
 ) -> List[str]:
-    """
-    Select files from real repo_map.json first.
-    This prevents source_context.py from guessing wrong folders.
-    """
     selected: List[str] = []
 
     pages = repo_map.get("pages", [])
@@ -305,6 +356,7 @@ def select_files_from_repo_map(
         selected += repo_map.get("image_related_files", [])
         selected += [p for p in widgets if path_matches_page(p, page_type)]
         selected += [p for p in pages if path_matches_page(p, page_type)]
+        selected += repo_map.get("config_files", [])
 
     elif fix_type == "javascript":
         selected += repo_map.get("javascript_related_files", [])
@@ -328,7 +380,6 @@ def select_files_from_repo_map(
         selected += components
         selected += entities
 
-    # remove duplicates while preserving order
     return list(dict.fromkeys(selected))
 
 
@@ -359,11 +410,6 @@ def get_source_files(
     page_type: str,
     fix_type: str,
 ) -> List[Path]:
-    """
-    Main source selection:
-    1. Use repo_map.json selected files
-    2. If empty, fallback to full scan
-    """
     files: List[Path] = []
 
     if repo_map:
@@ -375,6 +421,7 @@ def get_source_files(
 
         for rel in selected_relative_files:
             candidate = target_root / rel
+
             if candidate.exists() and candidate.is_file():
                 if candidate.suffix in SUPPORTED_EXTENSIONS:
                     files.append(candidate)
@@ -391,8 +438,7 @@ def score_page_scope(path_text: str, page_type: str) -> int:
 
     score = 0
 
-    prefer = PAGE_KEYWORDS.get(page_type, [])
-    for token in prefer:
+    for token in PAGE_KEYWORDS.get(page_type, []):
         if token in path_text:
             score += 18
 
@@ -484,6 +530,36 @@ def score_fix_type_signals(
     return score
 
 
+def score_by_rules(
+    path_text: str,
+    content_text: str,
+    fix_type: str,
+) -> int:
+    rules = FIX_TYPE_RULES.get(fix_type, FIX_TYPE_RULES["unknown"])
+
+    score = 0
+
+    for token in rules.get("boost", []):
+        token = token.lower()
+
+        if token in path_text:
+            score += 12
+
+        if token in content_text:
+            score += 6
+
+    for token in rules.get("penalty", []):
+        token = token.lower()
+
+        if token in path_text:
+            score -= 10
+
+        if token in content_text:
+            score -= 4
+
+    return score
+
+
 def score_file(
     path: Path,
     content: str,
@@ -498,11 +574,14 @@ def score_file(
 
     score += score_page_scope(path_text, page_type)
     score += score_fix_type_signals(path_text, content_text, fix_type)
+    score += score_by_rules(path_text, content_text, fix_type)
 
     for keyword in keywords:
         keyword = keyword.lower()
+
         if keyword in path_text:
             score += 6
+
         if keyword in content_text:
             score += 1
 
@@ -597,7 +676,7 @@ def collect_source_context(
     target_dir: str,
     fix_plan: Dict[str, Any],
     max_candidate_files: int = MAX_CANDIDATE_FILES,
-    repo_map_path="../repo_map.json",
+    repo_map_path: str = "repo_map.json",
 ) -> Dict[str, Any]:
     repo_root = Path(repo_path).resolve()
     target_root = (repo_root / target_dir).resolve()
