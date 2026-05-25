@@ -288,18 +288,29 @@ def build_local_url(remote_url: str, port: int) -> str:
     return f"http://localhost:{port}{parsed.path}"
 
 
+def _find_lighthouse_cmd() -> Optional[list]:
+    """Return the command prefix to invoke Lighthouse, or None if unavailable."""
+    lh = shutil.which("lighthouse")
+    if lh:
+        return [lh]
+    npx = shutil.which("npx")
+    if npx:
+        return [npx, "--yes", "lighthouse"]
+    return None
+
+
 def run_lighthouse_once(local_url: str, output_path: Path) -> Optional[dict]:
     """
     Run Lighthouse CLI against local_url. Returns parsed JSON or None.
     """
-    lighthouse_bin = shutil.which("lighthouse")
+    lh_cmd = _find_lighthouse_cmd()
 
-    if not lighthouse_bin:
-        print("  ⚠️  lighthouse CLI not found — skipping audit")
+    if not lh_cmd:
+        print("  ⚠️  lighthouse CLI not found (no lighthouse or npx in PATH) — skipping audit")
         return None
 
     cmd = [
-        lighthouse_bin,
+        *lh_cmd,
         local_url,
         "--output=json",
         f"--output-path={output_path}",
