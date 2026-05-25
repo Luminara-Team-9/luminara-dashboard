@@ -3,25 +3,40 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
+// ==========================================
+// THE SABOTAGE CONFIGURATION MATRIX
+// Defines the exact penalty severity for each specific route.
+// ==========================================
+const getSabotageConfig = (pathname: string) => {
+  if (pathname === '/') {
+    return { tbt: 8000, clsHeight: '100vh', clsDelay: 800, lcpBombs: 3 }; // Nuclear
+  }
+  if (pathname.includes('/category')) {
+    return { tbt: 3000, clsHeight: '40vh', clsDelay: 1200, lcpBombs: 1 }; // Heavy
+  }
+  if (pathname.includes('/product')) {
+    return { tbt: 1500, clsHeight: '20vh', clsDelay: 900, lcpBombs: 1 }; // Annoying
+  }
+  if (pathname.includes('/cart')) {
+    return { tbt: 500, clsHeight: '0px', clsDelay: 0, lcpBombs: 0 }; // Safe (Let them checkout!)
+  }
+
+  return null; // Fallback: Safe for unmapped routes
+};
+
+// ==========================================
+// 1. DYNAMIC TBT SPIKE (Main Thread Lock)
+// ==========================================
 export function CpuSpike() {
-  const pathname = usePathname(); // 1. Tracks the current URL
+  const pathname = usePathname();
 
   useEffect(() => {
-    let targetTbt = 0;
-    const BASE_NEXTJS_TBT = 150;
+    const config = getSabotageConfig(pathname);
+    if (!config || config.tbt === 0) return;
 
-    // UPDATED to match the real site's TBT metrics!
-    if (pathname === '/') targetTbt = 1600 / 4;
-    else if (pathname.includes('/category')) targetTbt = 1600 / 4;
-    else if (pathname.includes('/product')) targetTbt = 2600 / 4;
-    else if (pathname.includes('/cart')) targetTbt = 1400 / 4;
-    else targetTbt = 600;
-
-    if (targetTbt <= BASE_NEXTJS_TBT) return;
-    // 2. This now runs every time the pathname changes!
-    const blockDuration = targetTbt - BASE_NEXTJS_TBT + 92.5;
     const start = performance.now();
-    while (performance.now() - start < blockDuration) {
+    // Locks the thread synchronously based on the route's severity
+    while (performance.now() - start < config.tbt) {
       Math.random() * Math.random();
     }
   }, [pathname]);
@@ -30,38 +45,36 @@ export function CpuSpike() {
 }
 
 // ==========================================
-// CLS OPTION 1: THE LATE ANNOUNCEMENT BAR
+// 2. DYNAMIC CLS SHIFT (Ad Injection)
 // ==========================================
-// Mimics a slow third-party marketing script loading in late
 export function LateAnnouncementSaboteur() {
   const pathname = usePathname();
   const [triggerShift, setTriggerShift] = useState(false);
+  const config = getSabotageConfig(pathname);
 
   useEffect(() => {
     setTriggerShift(false);
+    if (!config || config.clsHeight === '0px') return;
 
-    // Your FCP is 1.2s. We will drop this massive block in at 2.5s.
-    // This guarantees the user sees the page layout, and then BAM, it violently shifts.
-    const timer = setTimeout(() => setTriggerShift(true), 800);
+    // Fires dynamically based on the matrix, guaranteeing Lighthouse catches it
+    const timer = setTimeout(() => setTriggerShift(true), config.clsDelay);
     return () => clearTimeout(timer);
-  }, [pathname]);
+  }, [pathname, config]);
 
-  // If false, render absolutely nothing (0 height in DOM)
-  if (!triggerShift) return null;
+  if (!triggerShift || !config) return null;
 
-  // No transitions. Instant 300px block injection to hit the 0.354 math target.
   return (
     <div
       style={{
-        width: '100%',
-        height: '300px',
+        width: '100vw',
+        height: config.clsHeight, // Height scales with route severity
         backgroundColor: '#0055ff',
         color: 'white',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '24px',
-        fontWeight: 'bold',
+        fontSize: '32px',
+        fontWeight: '900',
       }}
     >
       [SIMULATED MASSIVE AD INJECTION]
@@ -70,24 +83,24 @@ export function LateAnnouncementSaboteur() {
 }
 
 // ==========================================
-// CLS OPTION 2: WEB FONT FOUT (Flash of Unstyled Text)
+// 3. DYNAMIC CLS SHIFT (Web Font FOUT)
 // ==========================================
-// Mimics custom fonts loading in late and changing text spacing
 export function FontShiftSaboteur() {
   const pathname = usePathname();
   const [fontLoaded, setFontLoaded] = useState(false);
+  const config = getSabotageConfig(pathname);
 
   useEffect(() => {
     setFontLoaded(false);
-    // Trigger the font "swap" 4 second after page load
-    const timer = setTimeout(() => setFontLoaded(true), 1000);
+    if (!config || config.clsHeight === '0px') return;
+
+    // Fires slightly after the ad block to create compounding layout shifts
+    const timer = setTimeout(() => setFontLoaded(true), config.clsDelay + 200);
     return () => clearTimeout(timer);
-  }, [pathname]);
+  }, [pathname, config]);
 
   if (!fontLoaded) return null;
 
-  // We inject a global style that slightly widens the text.
-  // This causes paragraphs to re-wrap and buttons to resize, generating CLS!
   return (
     <style
       dangerouslySetInnerHTML={{
@@ -104,13 +117,16 @@ export function FontShiftSaboteur() {
 }
 
 // ==========================================
-// LCP OPTION: THE HEAVY HERO STARVATION
+// 4. DYNAMIC LCP NETWORK CHOKE (Image Bombs)
 // ==========================================
 export function HeavyLcpSaboteur() {
   const pathname = usePathname();
+  const config = getSabotageConfig(pathname);
 
-  // Only sabotage the homepage so you can still navigate the rest of the site safely
-  if (pathname !== '/') return null;
+  if (!config || config.lcpBombs === 0) return null;
+
+  // Generate the required number of images based on route severity
+  const bombs = Array.from({ length: config.lcpBombs });
 
   return (
     <div
@@ -120,20 +136,20 @@ export function HeavyLcpSaboteur() {
         left: 0,
         width: '100vw',
         height: '100vh',
-        opacity: 0.01, // Invisible to the user, but Lighthouse still counts it!
+        opacity: 0.01,
         pointerEvents: 'none',
         zIndex: 9999,
       }}
     >
-      {/* NO useEffect. NO setTimeout. 
-        Render immediately so Lighthouse tracks it.
-        Using a massive 8K image from Unsplash to choke the network download speed.
-      */}
-      <img
-        src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=8000&q=100"
-        alt="Massive LCP Sabotage"
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-      />
+      {bombs.map((_, i) => (
+        <img
+          key={i}
+          // The random parameter prevents browser caching from nullifying the choke effect
+          src={`https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=8000&q=100&random=${i}`}
+          alt={`Massive LCP Sabotage ${i + 1}`}
+          style={{ width: '100%', height: `${100 / config.lcpBombs}%`, objectFit: 'cover' }}
+        />
+      ))}
     </div>
   );
 }
