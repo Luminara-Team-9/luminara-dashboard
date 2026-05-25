@@ -229,12 +229,27 @@ def read_file_limited(path: Path, max_chars: int = MAX_FILE_CHARS) -> str:
 def load_repo_map(repo_map_path: str) -> Dict[str, Any]:
     path = Path(repo_map_path)
 
+    print("DEBUG repo_map_path =", repo_map_path)
+    print("DEBUG absolute path =", path.resolve())
+    print("DEBUG exists =", path.exists())
+
     if not path.exists():
         return {}
 
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+        text = path.read_text(encoding="utf-8")
+
+        print("DEBUG loaded text length =", len(text))
+
+        data = json.loads(text)
+
+        print("DEBUG json loaded successfully")
+        print("DEBUG keys =", list(data.keys())[:10])
+
+        return data
+
+    except Exception as e:
+        print("DEBUG load_repo_map ERROR =", e)
         return {}
 
 
