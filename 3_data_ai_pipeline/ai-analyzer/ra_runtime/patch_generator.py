@@ -151,6 +151,10 @@ Strict rules:
 - If no safe exact patch can be generated from the provided snippets, return auto_applicable=false.
 - original_code must be a real code block, not only a URL or string literal.
 - Do not make a patch just because source code exists. The patch must directly address the selected Lighthouse opportunity.
+- Do NOT comment out imports unless the imported component is also removed from JSX.
+- Do NOT return suggestion comments such as "Consider...", "Maybe...", or "Should..." inside suggested_code.
+- If lazy loading is needed, write actual working code using dynamic import.
+- suggested_code must compile as-is.
 
 Opportunity matching rules:
 - First understand the selected Lighthouse opportunity from the Fix Plan.
@@ -318,6 +322,7 @@ def has_placeholder_content(patch: Dict[str, Any]) -> bool:
         "/path/to", "example", "todo", "placeholder", "heroimage.tsx",
         "src/components/productdetail", "your-image", "image.jpg",
         "hero.jpg", "lorem ipsum",
+        "consider ", "maybe ", "should ", "you can ", "recommended ",
     ]
 
     return any(token in text for token in unsafe_tokens)
@@ -410,6 +415,46 @@ def looks_like_real_code_block(
 
     return any(marker in lower for marker in common_code_markers)
 
+def unsafe_import_removal_without_usage_removal(patch: Dict[str, Any]) -> bool:
+    original = patch.get("original_code") or ""
+    suggested = patch.get("suggested_code") or ""
+
+    removed_imports = []
+
+    for line in original.splitlines():
+        stripped = line.strip()
+
+        if not stripped.startswith("import "):
+            continue
+
+        if stripped in suggested:
+            continue
+
+        match = re.search(r"import\s+\{\s*([^}]+)\s*\}", stripped)
+        if not match:
+            continue
+
+        imported_names = [
+            name.strip().split(" as ")[-1].strip()
+            for name in match.group(1).split(",")
+        ]
+
+        removed_imports.extend(imported_names)
+
+    if not removed_imports:
+        return False
+
+    for name in removed_imports:
+        jsx_usage = f"<{name}"
+        normal_usage = f"{name}("
+
+        if jsx_usage in original and jsx_usage in suggested:
+            return True
+
+        if normal_usage in original and normal_usage in suggested:
+            return True
+
+    return False
 
 def validate_patch_against_context(
     patch_result: Dict[str, Any],
@@ -445,6 +490,9 @@ def validate_patch_against_context(
         suggested_code = patch.get("suggested_code")
 
         if has_placeholder_content(patch):
+            continue
+
+        if unsafe_import_removal_without_usage_removal(patch):
             continue
 
         if not is_safe_repo_relative_path(target_file, source_context):
