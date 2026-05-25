@@ -582,7 +582,7 @@ def collect_source_context(
     target_dir: str,
     fix_plan: Dict[str, Any],
     max_candidate_files: int = MAX_CANDIDATE_FILES,
-    repo_map_path: str = "repo_map.json",
+    repo_map_path="../repo_map.json",
 ) -> Dict[str, Any]:
     repo_root = Path(repo_path).resolve()
     target_root = (repo_root / target_dir).resolve()
