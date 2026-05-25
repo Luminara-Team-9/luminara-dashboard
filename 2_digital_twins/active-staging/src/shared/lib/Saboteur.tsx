@@ -42,7 +42,7 @@ export function LateAnnouncementSaboteur() {
 
     // Your FCP is 1.2s. We will drop this massive block in at 2.5s.
     // This guarantees the user sees the page layout, and then BAM, it violently shifts.
-    const timer = setTimeout(() => setTriggerShift(true), 2500);
+    const timer = setTimeout(() => setTriggerShift(true), 800);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -80,7 +80,7 @@ export function FontShiftSaboteur() {
   useEffect(() => {
     setFontLoaded(false);
     // Trigger the font "swap" 4 second after page load
-    const timer = setTimeout(() => setFontLoaded(true), 4000);
+    const timer = setTimeout(() => setFontLoaded(true), 1000);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -108,44 +108,32 @@ export function FontShiftSaboteur() {
 // ==========================================
 export function HeavyLcpSaboteur() {
   const pathname = usePathname();
-  const [showImage, setShowImage] = useState(false);
 
-  useEffect(() => {
-    if (pathname !== '/') return;
-
-    // Wait 6 seconds after load to inject the image
-    // This prevents Lighthouse from timing out while pushing the LCP super late
-    const timer = setTimeout(() => setShowImage(true), 6000);
-    return () => clearTimeout(timer);
-  }, [pathname]);
-
+  // Only sabotage the homepage so you can still navigate the rest of the site safely
   if (pathname !== '/') return null;
 
   return (
     <div
       style={{
-        // 1. Take it out of the document flow (fixes the blank space issue)
         position: 'absolute',
         top: 0,
         left: 0,
-        // 2. Make it massive so Lighthouse guarantees it is the LCP
         width: '100vw',
         height: '100vh',
-        // 3. The magic number: 1% opacity is invisible to humans, but "visible" to Lighthouse
-        opacity: 0.01,
-        // 4. Let users click right through it as if it's not there
+        opacity: 0.01, // Invisible to the user, but Lighthouse still counts it!
         pointerEvents: 'none',
-        // 5. Sit it on top of everything
         zIndex: 9999,
       }}
     >
-      {showImage && (
-        <img
-          src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=4000&q=100"
-          alt="Ghost LCP Sabotage"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-      )}
+      {/* NO useEffect. NO setTimeout. 
+        Render immediately so Lighthouse tracks it.
+        Using a massive 8K image from Unsplash to choke the network download speed.
+      */}
+      <img
+        src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=8000&q=100"
+        alt="Massive LCP Sabotage"
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
     </div>
   );
 }
