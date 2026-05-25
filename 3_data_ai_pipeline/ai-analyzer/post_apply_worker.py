@@ -189,17 +189,27 @@ def run_build(app_dir: Path) -> tuple[bool, str]:
 
     for cmd in [install_cmd, build_cmd]:
         label = " ".join(cmd)
-        print(f"  Running: {label}")
-        result = subprocess.run(
+        print(f"  Running: {label}", flush=True)
+        buf = []
+        proc = subprocess.Popen(
             cmd,
             cwd=str(app_dir),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=600,
         )
-        logs.append(f"$ {label}\n{result.stdout}\n{result.stderr}")
+        deadline = time.time() + 600
+        for line in proc.stdout:
+            print(f"    {line}", end="", flush=True)
+            buf.append(line)
+            if time.time() > deadline:
+                proc.kill()
+                proc.wait()
+                return False, "\n".join(logs) + "\nBUILD TIMEOUT"
+        proc.wait()
+        logs.append(f"$ {label}\n{''.join(buf)}")
 
-        if result.returncode != 0:
+        if proc.returncode != 0:
             return False, "\n".join(logs)
 
     # Copy standalone assets (Next.js standalone mode)
