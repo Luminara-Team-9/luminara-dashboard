@@ -1,29 +1,16 @@
 """
 patch_generator.py
 
-Source-aware patch generator for the Remediation Agent.
-
-This module is used AFTER:
-1. git_workspace.py cloned the PR branch into Agent_Workspace.
-2. source_context.py collected relevant source snippets.
-
-Purpose:
-- Generate real code patches from actual source code context.
-- Prevent hallucinated patches by validating original_code exists in the provided source.
-- Return patches in a strict JSON-compatible structure.
-
-Important:
-- This module does NOT apply patches to files.
-- This module only generates and validates patch proposals.
-- apply_patch.py will later apply approved patches.
+Production-ready source-aware patch generator for the Luminara Remediation Agent.
 """
 
 import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
+import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -47,6 +34,10 @@ QWEN_API_KEY = os.getenv("QWEN_API_KEY", "dummy")
 client = OpenAI(
     base_url=QWEN_BASE_URL,
     api_key=QWEN_API_KEY,
+    http_client=httpx.Client(
+        trust_env=False,
+        timeout=60.0,
+    ),
 )
 
 
@@ -55,14 +46,6 @@ class PatchGenerationError(RuntimeError):
 
 
 def extract_json(raw_text: str) -> Dict[str, Any]:
-    """
-    Extract JSON object from Qwen response.
-
-    Handles:
-    - pure JSON
-    - ```json fenced block
-    - extra text around JSON
-    """
     if not raw_text:
         raise PatchGenerationError("Empty Qwen response.")
 
@@ -89,15 +72,12 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
 
 
 def compact_snippet(snippet: str, limit: int = 1200) -> str:
-    """Keep source snippet small enough for prompt."""
     if len(snippet) <= limit:
         return snippet
-
     return snippet[:limit] + "\n\n/* ... snippet truncated ... */"
 
 
 def build_source_context_text(source_context: Dict[str, Any]) -> str:
-    """Convert source_context.py output into prompt text."""
     parts = []
 
     for i, item in enumerate(source_context.get("candidate_files", [])[:3], 1):
@@ -106,6 +86,7 @@ def build_source_context_text(source_context: Dict[str, Any]) -> str:
 [SOURCE_FILE_{i}]
 path: {item["path"]}
 score: {item["score"]}
+fix_type: {item.get("fix_type", source_context.get("fix_type", "unknown"))}
 
 ```tsx
 {compact_snippet(item["snippet"])}
@@ -120,8 +101,8 @@ def build_patch_prompt(
     fix_plan: Dict[str, Any],
     source_context: Dict[str, Any],
 ) -> str:
-    """Build strict source-aware patch generation prompt."""
     source_context_text = build_source_context_text(source_context)
+    detected_fix_type = source_context.get("fix_type") or classify_fix_type(fix_plan)
 
     return f"""
 You are the source-aware patch generator for Luminara Remediation Agent.
@@ -132,6 +113,9 @@ You are given:
 
 Your job:
 Generate ONE safe code patch that can be applied to the provided source code.
+
+Detected fix type:
+{detected_fix_type}
 
 Fix Plan:
 {json.dumps(fix_plan, indent=2, ensure_ascii=False, default=str)}
@@ -149,7 +133,7 @@ Return ONLY valid JSON with this exact structure:
       "original_code": "exact code copied from the provided source snippet",
       "suggested_code": "complete replacement code",
       "change_type": "code_replace",
-      "change_reason": "short reason why this improves the metric"
+      "change_reason": "short reason why this improves the selected Lighthouse opportunity"
     }}
   ],
   "manual_review_reason": null
@@ -164,16 +148,9 @@ Strict rules:
 - Do NOT return markdown.
 - Do NOT modify unrelated logic.
 - Prefer the smallest safe patch.
-- If no safe exact patch can be generated from the provided snippets, return:
+- If no safe exact patch can be generated from the provided snippets, return auto_applicable=false.
 - original_code must be a real code block, not only a URL or string literal.
-- For image fixes, original_code should include the full <img ... /> JSX element when possible.
-- For product image galleries, do not lazy-load the first visible image.
-
-{{
-  "auto_applicable": false,
-  "patches": [],
-  "manual_review_reason": "explain why no safe patch can be generated"
-}}
+- Do not make a patch just because source code exists. The patch must directly address the selected Lighthouse opportunity.
 
 Opportunity matching rules:
 - First understand the selected Lighthouse opportunity from the Fix Plan.
@@ -181,210 +158,127 @@ Opportunity matching rules:
 - Do not reuse an image-loading patch for JavaScript/TBT, CSS/render-blocking, server/TTFB, cache, or CDN opportunities.
 - For unused JavaScript/TBT issues, only patch code related to JS execution, dynamic imports, script loading, heavy component loading, or unused imports.
 - For CSS/render-blocking issues, only patch CSS, stylesheet, font, or critical rendering path code.
+- For layout/CLS issues, only patch layout stability code such as width, height, aspect-ratio, reserved space, or skeleton placeholder.
 - For server/TTFB/cache/CDN issues, return auto_applicable=false unless the provided source context contains an explicit server/config file that can be safely changed.
 - If the source context only contains unrelated files, return auto_applicable=false.
 
-Patch guidance:
-- For product detail image galleries using map((img, i) => ...):
-  - first visible image should use loading={{i === 0 ? 'eager' : 'lazy'}}
-  - first visible image should use fetchPriority={{i === 0 ? 'high' : 'auto'}}
-  - all images may use decoding="async"
-  - do NOT set loading="lazy" for every image if the first image may be LCP.
-- For a single hero/LCP image outside a loop:
-  - use loading="eager", fetchPriority="high", decoding="async".
-- For below-the-fold product/list images:
-  - use loading="lazy", decoding="async".
-- Add width/height only when safe and when dimensions are already known.
-- For TTFB/server/cache issues, return auto_applicable=false.
+Patch guidance by fix type:
+- Image/LCP:
+  - For product detail image galleries using map((img, i) => ...), first visible image should use loading={{i === 0 ? 'eager' : 'lazy'}}.
+  - First visible image should use fetchPriority={{i === 0 ? 'high' : 'auto'}}.
+  - All images may use decoding="async".
+  - Do NOT set loading="lazy" for every image if the first image may be LCP.
+  - For a single hero/LCP image outside a loop, use loading="eager", fetchPriority="high", decoding="async".
+  - Add width/height only when safe and when dimensions are already known.
+- JavaScript/TBT:
+  - Prefer safe lazy loading, dynamic import, script defer/async, or removing clearly unused imports.
+  - Do not change business logic.
+- CSS/FCP/render-blocking:
+  - Prefer safe stylesheet/font-display/critical-rendering-path changes.
+  - Do not rewrite unrelated classes.
+- Server/TTFB:
+  - Return auto_applicable=false unless the snippet includes safe config/header/cache code.
+- Unknown:
+  - Return auto_applicable=false.
 
+If no safe exact patch can be generated, return:
+
+{{
+  "auto_applicable": false,
+  "patches": [],
+  "manual_review_reason": "explain why no safe patch can be generated from the provided source context"
+}}
 """
 
 
-def looks_like_real_code_block(original_code: str) -> bool:
-    """
-    Reject patches that replace only a raw URL/string literal.
+def normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).lower()
 
-    We only allow source-aware patches that replace actual JSX/TS/JS/CSS code blocks.
-    For image fixes, original_code should normally include an <img ... /> tag
-    or a meaningful JSX block, not only an image URL.
-    """
-    if not original_code:
-        return False
-
-    text = original_code.strip()
-
-    # Reject raw URL-only replacement.
-    if text.startswith("http://") or text.startswith("https://"):
-        return False
-
-    # Reject very short string-only values.
-    if len(text) < 20 and "<" not in text and "=" not in text:
-        return False
-
-    # Prefer actual code-like patterns.
-    code_markers = [
-        "<img",
-        "<Image",
-        "src=",
-        "className=",
-        "style=",
-        "return (",
-        "const ",
-        "function ",
-        "export ",
-    ]
-
-    return any(marker in text for marker in code_markers)
 
 def classify_fix_type(fix_plan: Dict[str, Any]) -> str:
-    """
-    Classify the selected Lighthouse/Fix Plan problem.
-
-    Qwen still generates the patch.
-    This function only helps validate whether Qwen's patch matches the selected problem.
-    """
     opportunity = fix_plan.get("opportunity") or {}
 
     text = " ".join([
-        str(fix_plan.get("affected_metric", "")),
-        str(fix_plan.get("action", "")),
-        str(fix_plan.get("reasoning", "")),
-        str(fix_plan.get("problem_summary", "")),
-        str(opportunity.get("opportunity_id", "")),
-        str(opportunity.get("title", "")),
-        str(opportunity.get("description", "")),
-        str(opportunity.get("category", "")),
-    ]).lower()
+        normalize_text(fix_plan.get("affected_metric")),
+        normalize_text(fix_plan.get("action")),
+        normalize_text(fix_plan.get("reasoning")),
+        normalize_text(fix_plan.get("problem_summary")),
+        normalize_text(opportunity.get("opportunity_id")),
+        normalize_text(opportunity.get("title")),
+        normalize_text(opportunity.get("description")),
+        normalize_text(opportunity.get("category")),
+    ])
 
     if any(k in text for k in [
-        "server-response",
-        "server response",
-        "ttfb",
-        "time to first byte",
-        "redis",
-        "memcached",
-        "cdn",
-        "cache-control",
-        "backend",
-        "server-side",
+        "server-response", "server response", "ttfb", "time to first byte",
+        "redis", "memcached", "cdn", "cache-control", "backend", "server-side",
     ]):
         return "server"
 
     if any(k in text for k in [
-        "unused-javascript",
-        "legacy-javascript",
-        "javascript",
-        " js ",
-        "tbt",
-        "total blocking time",
-        "main thread",
-        "bootup",
-        "script",
-        "third-party",
+        "unused-javascript", "legacy-javascript", "javascript", " js ",
+        "tbt", "total blocking time", "main thread", "bootup", "script",
+        "third-party", "bundle",
     ]):
         return "javascript"
 
     if any(k in text for k in [
-        "render-blocking",
-        "css",
-        "stylesheet",
-        "fcp",
-        "first contentful paint",
-        "font-display",
+        "render-blocking", "css", "stylesheet", "fcp",
+        "first contentful paint", "font-display", "@import",
     ]):
         return "css"
 
     if any(k in text for k in [
-        "prioritize-lcp-image",
-        "largest contentful paint",
-        "lcp",
-        "image",
-        "next-gen",
-        "offscreen",
-        "properly size",
-        "responsive images",
-        "webp",
-        "avif",
-    ]):
-        return "image"
-
-    if any(k in text for k in [
-        "cls",
-        "layout shift",
-        "width",
-        "height",
-        "aspect-ratio",
+        "cls", "layout shift", "cumulative layout shift", "aspect-ratio",
     ]):
         return "layout"
+
+    if any(k in text for k in [
+        "prioritize-lcp-image", "largest contentful paint", "lcp", "image",
+        "img", "next-gen", "offscreen", "properly size", "responsive images",
+        "webp", "avif",
+    ]):
+        return "image"
 
     return "unknown"
 
 
 def classify_patch_type(patch: Dict[str, Any]) -> str:
-    """
-    Classify the generated patch itself.
-    """
     text = "\n".join([
-        str(patch.get("target_file", "")),
-        str(patch.get("original_code", "")),
-        str(patch.get("suggested_code", "")),
-        str(patch.get("change_reason", "")),
-    ]).lower()
+        normalize_text(patch.get("target_file")),
+        normalize_text(patch.get("original_code")),
+        normalize_text(patch.get("suggested_code")),
+        normalize_text(patch.get("change_reason")),
+    ])
 
     if any(k in text for k in [
-        "<img",
-        "<image",
-        "next/image",
-        "fetchpriority",
-        "loading=",
-        "decoding=",
-        "srcset",
-        "sizes=",
-        "priority",
+        "<img", "<image", "next/image", "fetchpriority", "loading=",
+        "decoding=", "srcset", "sizes=", "priority",
     ]):
         return "image"
 
     if any(k in text for k in [
-        "dynamic(",
-        "import(",
-        "react.lazy",
-        "defer",
-        "async",
-        "<script",
-        "script ",
-        "remove unused",
-        "lazy import",
+        "dynamic(", "import(", "react.lazy", "defer", "async", "<script",
+        "script ", "remove unused", "lazy import", "useeffect",
     ]):
         return "javascript"
 
     if any(k in text for k in [
-        ".css",
-        "stylesheet",
-        "@import",
-        "font-display",
-        "media=\"print\"",
-        "rel=\"preload\"",
-        "rel='preload'",
+        ".css", "stylesheet", "@import", "font-display", "media=\"print\"",
+        "rel=\"preload\"", "rel='preload'", "classname", "style=",
     ]):
         return "css"
 
     if any(k in text for k in [
-        "cache-control",
-        "redis",
-        "memcached",
-        "cdn",
-        "server",
-        "headers()",
-        "next.config",
-        "middleware",
+        "cache-control", "redis", "memcached", "cdn", "server", "headers()",
+        "next.config", "middleware",
     ]):
         return "server"
 
     if any(k in text for k in [
-        "width=",
-        "height=",
-        "aspect-ratio",
-        "min-height",
+        "width=", "height=", "aspect-ratio", "min-height",
     ]):
         return "layout"
 
@@ -392,10 +286,6 @@ def classify_patch_type(patch: Dict[str, Any]) -> str:
 
 
 def patch_matches_fix_type(fix_type: str, patch: Dict[str, Any]) -> bool:
-    """
-    Qwen generates the patch.
-    This only checks if the generated patch type matches the selected opportunity.
-    """
     patch_type = classify_patch_type(patch)
 
     if fix_type == "server":
@@ -417,55 +307,113 @@ def patch_matches_fix_type(fix_type: str, patch: Dict[str, Any]) -> bool:
 
 
 def has_placeholder_content(patch: Dict[str, Any]) -> bool:
-    """
-    Reject placeholder/demo-looking patches.
-    """
     text = "\n".join([
-        str(patch.get("target_file", "")),
-        str(patch.get("original_code", "")),
-        str(patch.get("suggested_code", "")),
-    ]).lower()
+        normalize_text(patch.get("target_file")),
+        normalize_text(patch.get("original_code")),
+        normalize_text(patch.get("suggested_code")),
+    ])
 
     unsafe_tokens = [
-        "/path/to",
-        "example",
-        "todo",
-        "placeholder",
-        "heroimage.tsx",
-        "src/components/productdetail",
-        "your-image",
-        "image.jpg",
-        "hero.jpg",
+        "/path/to", "example", "todo", "placeholder", "heroimage.tsx",
+        "src/components/productdetail", "your-image", "image.jpg",
+        "hero.jpg", "lorem ipsum",
     ]
 
     return any(token in text for token in unsafe_tokens)
 
 
-def is_safe_repo_relative_path(target_file: str) -> bool:
-    """
-    Generated patches should use repo-relative paths under active-staging.
-    """
+def allowed_target_prefix(source_context: Dict[str, Any]) -> Optional[str]:
+    target_dir = source_context.get("target_dir")
+
+    if not target_dir:
+        return None
+
+    prefix = str(target_dir).strip().strip("/")
+    if not prefix:
+        return None
+
+    return prefix + "/"
+
+
+def is_safe_repo_relative_path(
+    target_file: str,
+    source_context: Optional[Dict[str, Any]] = None,
+) -> bool:
     if not target_file:
         return False
 
-    if target_file.startswith("/") or ".." in Path(target_file).parts:
+    path = Path(target_file)
+
+    if path.is_absolute():
         return False
 
-    return target_file.startswith("2_digital_twins/active-staging/")
+    if ".." in path.parts:
+        return False
+
+    if source_context:
+        prefix = allowed_target_prefix(source_context)
+        if prefix and not str(target_file).startswith(prefix):
+            return False
+
+    return True
+
+
+def looks_like_real_code_block(
+    original_code: str,
+    fix_type: str = "unknown",
+) -> bool:
+    if not original_code:
+        return False
+
+    text = original_code.strip()
+    lower = text.lower()
+
+    if lower.startswith("http://") or lower.startswith("https://"):
+        return False
+
+    if len(text) < 20 and "<" not in text and "=" not in text and "{" not in text:
+        return False
+
+    common_code_markers = [
+        "return (", "const ", "let ", "var ", "function ", "export ",
+        "import ", "classname=", "style=",
+    ]
+
+    if any(marker in lower for marker in common_code_markers):
+        return True
+
+    if fix_type in {"image", "layout"}:
+        return any(marker in lower for marker in [
+            "<img", "<image", "next/image", "src=", "alt=",
+            "width=", "height=", "aspect-ratio",
+        ])
+
+    if fix_type == "javascript":
+        return any(marker in lower for marker in [
+            "dynamic(", "import(", "react.lazy", "useeffect", "<script",
+            "script", "async", "defer",
+        ])
+
+    if fix_type == "css":
+        return any(marker in lower for marker in [
+            "{", "}", "@import", "font-display", "stylesheet", ".css",
+            "classname=", "style=",
+        ])
+
+    if fix_type == "server":
+        return any(marker in lower for marker in [
+            "headers", "cache-control", "next.config", "middleware",
+            "rewrites", "redirects", "module.exports", "export default",
+        ])
+
+    return any(marker in lower for marker in common_code_markers)
+
 
 def validate_patch_against_context(
     patch_result: Dict[str, Any],
     source_context: Dict[str, Any],
     fix_plan: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Validate generated patch against the provided snippets.
-
-    Checks:
-    1. target_file is one of provided source files.
-    2. original_code exists in that file snippet.
-    3. suggested_code is not empty.
-    """
     patches = patch_result.get("patches", [])
 
     if not patch_result.get("auto_applicable") or not patches:
@@ -479,11 +427,11 @@ def validate_patch_against_context(
         }
 
     source_by_path = {
-    item["path"]: item
-    for item in source_context.get("candidate_files", [])
-}
+        item["path"]: item
+        for item in source_context.get("candidate_files", [])
+    }
 
-    fix_type = classify_fix_type(fix_plan)
+    fix_type = source_context.get("fix_type") or classify_fix_type(fix_plan)
     valid_patches = []
 
     for patch in patches:
@@ -497,7 +445,7 @@ def validate_patch_against_context(
         if has_placeholder_content(patch):
             continue
 
-        if not is_safe_repo_relative_path(target_file):
+        if not is_safe_repo_relative_path(target_file, source_context):
             continue
 
         if not patch_matches_fix_type(fix_type, patch):
@@ -509,13 +457,8 @@ def validate_patch_against_context(
         if not original_code or not suggested_code:
             continue
 
-        if not looks_like_real_code_block(original_code):
+        if not looks_like_real_code_block(original_code, fix_type):
             continue
-        
-        # Do not require exact match inside snippet.
-        # Snippets can be truncated or formatting can differ.
-        # Final exact validation is done against the actual cloned file
-        # in validate_patch_against_files().
 
         if original_code.strip() == suggested_code.strip():
             continue
@@ -555,18 +498,20 @@ def validate_patch_against_context(
 def validate_patch_against_files(
     patch_result: Dict[str, Any],
     repo_path: str,
+    source_context: Optional[Dict[str, Any]] = None,
+    fix_plan: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Final validation against actual cloned files.
-
-    This is stronger than snippet validation.
-    It checks original_code exists in the real file.
-    """
     if not patch_result.get("auto_applicable"):
         return patch_result
 
     repo_root = Path(repo_path).resolve()
     valid_patches = []
+
+    fix_type = "unknown"
+    if source_context:
+        fix_type = source_context.get("fix_type") or "unknown"
+    if fix_type == "unknown" and fix_plan:
+        fix_type = classify_fix_type(fix_plan)
 
     for patch in patch_result.get("patches", []):
         target_file = patch.get("target_file")
@@ -576,13 +521,13 @@ def validate_patch_against_files(
         if has_placeholder_content(patch):
             continue
 
-        if not is_safe_repo_relative_path(target_file):
+        if not is_safe_repo_relative_path(target_file, source_context):
             continue
 
         if not target_file or not original_code or not suggested_code:
             continue
 
-        if not looks_like_real_code_block(original_code):
+        if not looks_like_real_code_block(original_code, fix_type):
             continue
 
         file_path = (repo_root / target_file).resolve()
@@ -590,7 +535,6 @@ def validate_patch_against_files(
         if not file_path.exists():
             continue
 
-        # Safety: prevent path escape outside repo.
         if not str(file_path).startswith(str(repo_root)):
             continue
 
@@ -607,7 +551,7 @@ def validate_patch_against_files(
             "patches": [],
             "manual_review_reason": (
                 "Generated patch was rejected because original_code was not found "
-                "in the actual cloned source file."
+                "in the actual cloned source file or failed final file validation."
             ),
         }
 
@@ -623,26 +567,6 @@ def generate_patch_from_source(
     source_context: Dict[str, Any],
     repo_path: str,
 ) -> Dict[str, Any]:
-    """
-    Generate and validate source-aware patch.
-
-    Args:
-        fix_plan:
-            Fix Plan data from DB.
-
-        source_context:
-            Output from collect_source_context().
-
-        repo_path:
-            Cloned repo path.
-
-    Returns:
-        {
-          "auto_applicable": bool,
-          "patches": [...],
-          "manual_review_reason": str | None
-        }
-    """
     if not source_context.get("candidate_files"):
         return {
             "auto_applicable": False,
@@ -676,11 +600,6 @@ def generate_patch_from_source(
         )
 
         raw = response.choices[0].message.content
-
-        # print("\n[DEBUG] Raw Qwen patch response:")
-        # print(raw[:3000])
-        # print("\n[DEBUG END]\n")
-
         patch_result = extract_json(raw)
 
     except Exception as e:
@@ -699,22 +618,14 @@ def generate_patch_from_source(
     patch_result = validate_patch_against_files(
         patch_result=patch_result,
         repo_path=repo_path,
+        source_context=source_context,
+        fix_plan=fix_plan,
     )
 
     return patch_result
 
 
 if __name__ == "__main__":
-    """
-    Manual smoke test.
-
-    Requires:
-    - Agent_Workspace/fix_plan_999/repo already created by git_workspace.py.
-    - Qwen/vLLM server running if you want actual generation.
-
-    Run:
-        python -m ra_runtime.patch_generator
-    """
     test_repo_path = (
         "/abr/coss41/Luminara_App/Agent_Workspace/"
         "fix_plan_999/repo"
@@ -735,6 +646,11 @@ if __name__ == "__main__":
             "Generate a minimal safe patch from actual source code."
         ),
         "estimated_improvement": 150,
+        "opportunity": {
+            "opportunity_id": "prioritize-lcp-image",
+            "title": "Preload Largest Contentful Paint image",
+            "category": "image",
+        },
     }
 
     source_context = collect_source_context(
