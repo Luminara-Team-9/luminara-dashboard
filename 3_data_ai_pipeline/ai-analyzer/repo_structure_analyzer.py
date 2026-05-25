@@ -43,7 +43,12 @@ def classify_file(path: Path, root: Path) -> list[str]:
     rel = str(path.relative_to(root)).lower()
     tags = []
 
-    if "page.tsx" in rel or "page.jsx" in rel or "/pages/" in rel or "/app/" in rel:
+    if (
+        rel.endswith("page.tsx")
+        or rel.endswith("page.jsx")
+        or "/pages/" in rel
+        or rel.endswith("layout.tsx")
+    ):
         tags.append("pages")
 
     if "component" in rel or "components" in rel:
