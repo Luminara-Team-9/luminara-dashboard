@@ -48,7 +48,7 @@ client = OpenAI(
     api_key=os.getenv("QWEN_API_KEY", "dummy"),
     http_client=httpx.Client(
         trust_env=False,
-        timeout=60.0,
+        timeout=300.0,
     ),
 )
 

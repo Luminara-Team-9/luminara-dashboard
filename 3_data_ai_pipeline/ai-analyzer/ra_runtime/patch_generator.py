@@ -39,7 +39,7 @@ client = OpenAI(
     api_key=QWEN_API_KEY,
     http_client=httpx.Client(
         trust_env=False,
-        timeout=60.0,
+        timeout=300.0,
     ),
 )
 
