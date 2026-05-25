@@ -687,13 +687,37 @@ def make_snippet(
     if len(content) <= MAX_SNIPPET_CHARS:
         return content
 
-    center = find_important_position(content, keywords, fix_type)
+    # JS/layout/server need file header because imports/config/providers are important.
+    if fix_type in {"javascript", "layout", "server"}:
+        header = content[:2500]
+
+        center = find_important_position(
+            content,
+            keywords,
+            fix_type,
+        )
+
+        body_start = max(0, center - 400)
+        body_end = min(len(content), body_start + 2500)
+
+        body = content[body_start:body_end]
+
+        return (
+            header
+            + "\n\n/* RELEVANT SECTION */\n\n"
+            + body
+        )
+
+    center = find_important_position(
+        content,
+        keywords,
+        fix_type,
+    )
 
     start = max(0, center - 500)
     end = min(len(content), start + MAX_SNIPPET_CHARS)
 
     return content[start:end]
-
 
 def collect_source_context(
     repo_path: str,
