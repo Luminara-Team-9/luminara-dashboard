@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { track } from '@/shared/analytics';
+import { track } from 'swetrix';
 
 const navCategories = [
   { label: '모든 스포츠', href: '/c/all-sports' },
