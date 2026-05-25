@@ -157,6 +157,9 @@ Strict rules:
 - suggested_code must compile as-is.
 - If suggested_code uses dynamic(), it MUST also include import dynamic from 'next/dynamic' in the replacement block or original_code must already contain it.
 - Do NOT use dynamic import for named exports unless you correctly map the named export with .then(mod => mod.ComponentName).
+- original_code must contain ALL dependent lines required for the patch to compile.
+- If modifying imports, original_code must also include related component declarations or JSX usage.
+- Do NOT generate partial import-only refactors.
 
 Opportunity matching rules:
 - First understand the selected Lighthouse opportunity from the Fix Plan.
@@ -473,6 +476,23 @@ def unsafe_dynamic_without_import(patch: Dict[str, Any]) -> bool:
 
     return uses_dynamic and not has_dynamic_import
 
+def unsafe_partial_dynamic_refactor(patch: Dict[str, Any]) -> bool:
+    original = patch.get("original_code") or ""
+    suggested = patch.get("suggested_code") or ""
+
+    if "dynamic(" not in suggested:
+        return False
+
+    # Dynamic refactor touching imports only
+    has_imports = "import " in original
+    has_jsx = "<" in original and "/>" in original
+
+    # Unsafe if imports modified without JSX scope
+    if has_imports and not has_jsx:
+        return True
+
+    return False
+
 def validate_patch_against_context(
     patch_result: Dict[str, Any],
     source_context: Dict[str, Any],
@@ -513,6 +533,9 @@ def validate_patch_against_context(
             continue
 
         if unsafe_dynamic_without_import(patch):
+            continue
+
+        if unsafe_partial_dynamic_refactor(patch):
             continue
 
         if not is_safe_repo_relative_path(target_file, source_context):
