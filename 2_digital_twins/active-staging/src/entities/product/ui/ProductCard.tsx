@@ -1,5 +1,5 @@
 'use client';
-
+import { track } from 'swetrix';
 import { useState, useEffect } from 'react';
 import type { Product } from '../model/types';
 import Link from 'next/link';
@@ -45,7 +45,7 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
       return;
     }
 
-    // --- NEW: Save to Local Storage ---
+    // --- Save to Local Storage ---
     const existingCart = JSON.parse(localStorage.getItem('decathlon_cart') || '[]');
 
     const cartItem = {
@@ -71,6 +71,22 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
 
     localStorage.setItem('decathlon_cart', JSON.stringify(existingCart));
     // ----------------------------------
+
+    try {
+      track({
+        ev: 'click_add_to_cart',
+        meta: {
+          productId: cartItem.id,
+          productName: cartItem.name,
+          price: cartItem.price,
+          size: cartItem.size,
+          quantity: cartItem.quantity,
+        },
+      });
+    } catch (error) {
+      console.error('Add to cart tracking failed:', error);
+    }
+    // --------------------------------------------
 
     setShowError(false);
     setShowSuccess(true);
@@ -172,7 +188,7 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
             marginBottom: reviewsLoaded ? '4px' : '0px',
           }}
         >
-          ⭐⭐⭐⭐⭐ <span style={{ color: '#9ca3af', marginLeft: '4px' }}>(4.8)</span>
+          ⭐⭐⭐ <span style={{ color: '#9ca3af', marginLeft: '4px' }}>(4.8)</span>
         </div>
 
         {/* Brand */}
