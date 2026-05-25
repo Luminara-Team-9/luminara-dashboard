@@ -14,7 +14,10 @@ import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from source_context import collect_source_context
+try:
+    from .source_context import collect_source_context
+except ImportError:
+    from source_context import collect_source_context
 
 
 load_dotenv()
