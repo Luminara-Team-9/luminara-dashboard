@@ -285,7 +285,9 @@ def start_server(app_dir: Path, port: int) -> Optional[subprocess.Popen]:
         cmd = ["node", str(standalone_server)]
     else:
         pm = "pnpm" if shutil.which("pnpm") else "npm"
-        cmd = [pm, "run", "start", "--", "-p", str(port)]
+        # Use PORT env var (already in env dict); don't pass -p flag —
+        # Next.js argument parsing may treat -p as a project directory path.
+        cmd = [pm, "run", "start"]
 
     print(f"  Starting server on port {port}: {' '.join(cmd)}")
 
@@ -433,6 +435,11 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
             **kw,
         )
 
+    # Sync with remote before pushing to avoid rejected non-fast-forward
+    pull = git(["pull", "--rebase", "origin", branch_name])
+    if pull.returncode != 0:
+        return False, f"git pull --rebase failed:\n{pull.stderr}"
+
     # Stage only the target_dir changes
     stage = git(["add", TARGET_DIR])
     if stage.returncode != 0:
@@ -561,7 +568,8 @@ def process_fix_plan(fix_plan: dict) -> bool:
     elif new_score is not None:
         passed = True
     else:
-        passed = build_ok
+        # Audit produced no score (server failed or Lighthouse error) — not safe to push.
+        passed = False
 
     print(f"      passed         : {passed}")
 
