@@ -42,7 +42,7 @@ export function LateAnnouncementSaboteur() {
 
     // Your FCP is 1.2s. We will drop this massive block in at 2.5s.
     // This guarantees the user sees the page layout, and then BAM, it violently shifts.
-    const timer = setTimeout(() => setTriggerShift(true), 2500);
+    const timer = setTimeout(() => setTriggerShift(true), 800);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -80,7 +80,7 @@ export function FontShiftSaboteur() {
   useEffect(() => {
     setFontLoaded(false);
     // Trigger the font "swap" 4 second after page load
-    const timer = setTimeout(() => setFontLoaded(true), 4000);
+    const timer = setTimeout(() => setFontLoaded(true), 1000);
     return () => clearTimeout(timer);
   }, [pathname]);
 
