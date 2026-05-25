@@ -14,7 +14,7 @@ import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from ra_runtime.source_context import collect_source_context
+from source_context import collect_source_context
 
 
 load_dotenv()
@@ -80,7 +80,7 @@ def compact_snippet(snippet: str, limit: int = 1200) -> str:
 def build_source_context_text(source_context: Dict[str, Any]) -> str:
     parts = []
 
-    for i, item in enumerate(source_context.get("candidate_files", [])[:3], 1):
+    for i, item in enumerate(source_context.get("candidate_files", [])[:5], 1):
         parts.append(
             f"""
 [SOURCE_FILE_{i}]
@@ -262,6 +262,7 @@ def classify_patch_type(patch: Dict[str, Any]) -> str:
     if any(k in text for k in [
         "dynamic(", "import(", "react.lazy", "defer", "async", "<script",
         "script ", "remove unused", "lazy import", "useeffect",
+        "requestidlecallback", "settimeout", "swetrix", "trackviews", "init("
     ]):
         return "javascript"
 
@@ -289,7 +290,7 @@ def patch_matches_fix_type(fix_type: str, patch: Dict[str, Any]) -> bool:
     patch_type = classify_patch_type(patch)
 
     if fix_type == "server":
-        return False
+        return patch_type == "server"
 
     if fix_type == "image":
         return patch_type in {"image", "layout"}
@@ -392,6 +393,7 @@ def looks_like_real_code_block(
         return any(marker in lower for marker in [
             "dynamic(", "import(", "react.lazy", "useeffect", "<script",
             "script", "async", "defer",
+            "swetrix", "trackviews", "init(", "requestidlecallback", "settimeout",
         ])
 
     if fix_type == "css":
@@ -628,28 +630,25 @@ def generate_patch_from_source(
 if __name__ == "__main__":
     test_repo_path = (
         "/abr/coss41/Luminara_App/Agent_Workspace/"
-        "fix_plan_999/repo"
+        "fix_plan_manual_group_main_decathlon_main_desktop_9_decathlon_main_desktop/repo"
     )
 
     test_target_dir = "2_digital_twins/active-staging"
 
     sample_fix_plan = {
         "id": 999,
-        "test_id": 80,
-        "page_type": "product",
-        "device_type": "mobile",
-        "affected_metric": "LCP",
-        "action": "Optimize product images to improve LCP",
-        "problem_summary": "Product images may be delaying LCP.",
-        "reasoning": (
-            "Image loading and sizing can affect LCP on product pages. "
-            "Generate a minimal safe patch from actual source code."
-        ),
-        "estimated_improvement": 150,
+        "test_id": 69,
+        "page_type": "main",
+        "device_type": "desktop",
+        "affected_metric": "TBT",
+        "action": "Defer non-critical JavaScript and reduce unused JavaScript on the main page.",
+        "problem_summary": "High TBT due to unused JavaScript on the main desktop page.",
+        "reasoning": "Third-party tracking and globally loaded widgets can block the main thread.",
+        "estimated_improvement": 466,
         "opportunity": {
-            "opportunity_id": "prioritize-lcp-image",
-            "title": "Preload Largest Contentful Paint image",
-            "category": "image",
+            "opportunity_id": "unused-javascript",
+            "title": "Reduce unused JavaScript",
+            "category": "javascript",
         },
     }
 
@@ -657,6 +656,7 @@ if __name__ == "__main__":
         repo_path=test_repo_path,
         target_dir=test_target_dir,
         fix_plan=sample_fix_plan,
+        repo_map_path="../repo_map.json",
     )
 
     result = generate_patch_from_source(
