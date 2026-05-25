@@ -1,49 +1,27 @@
 """
 source_context.py
 
-Production-ready source-code context collector for the Luminara Remediation Agent.
+Source-code context collector for Luminara Remediation Agent.
 
-Purpose:
-1. Search only page-relevant source areas first.
-2. Collect source snippets related to the selected Fix Plan and page type.
-3. Stay generic across problem types:
-   - image/LCP
-   - JavaScript/TBT
-   - CSS/FCP/render-blocking
-   - layout/CLS
-   - server/TTFB/config
-4. Keep the search fast by limiting roots, file size, and candidate count.
-
-Important:
-- This module does NOT modify source files.
-- This module does NOT generate patches.
-- This module only gives Qwen the best source candidates.
+Updated version:
+- Uses repo_map.json from repo_structure_analyzer.py first
+- Falls back to directory scanning if repo_map.json is missing
+- Does NOT modify code
+- Only returns best source candidates for Qwen
 """
 
 from pathlib import Path
 from typing import Any, Dict, List, Set
+import json
 
 
 SUPPORTED_EXTENSIONS = {
-    ".tsx",
-    ".ts",
-    ".jsx",
-    ".js",
-    ".css",
-    ".mjs",
-    ".cjs",
-    ".json",
+    ".tsx", ".ts", ".jsx", ".js", ".css", ".mjs", ".cjs", ".json"
 }
 
 IGNORED_DIRS = {
-    "node_modules",
-    ".next",
-    "dist",
-    "build",
-    ".git",
-    ".turbo",
-    "coverage",
-    ".cache",
+    "node_modules", ".next", "dist", "build", ".git",
+    ".turbo", "coverage", ".cache"
 }
 
 MAX_FILE_CHARS = 20000
@@ -52,213 +30,38 @@ MAX_CANDIDATE_FILES = 8
 MAX_FILES_TO_SCORE = 160
 
 
-PAGE_PROFILES: Dict[str, Dict[str, List[str]]] = {
-    "main": {
-        "include_dirs": [
-            "src/page-components/main-landing",
-            "src/widgets/hero-banner",
-            "src/widgets/promo-banners",
-            "src/widgets/product-grid",
-            "src/widgets/header",
-            "src/app",
-            "app",
-        ],
-        "prefer_path_tokens": [
-            "main-landing",
-            "hero-banner",
-            "promo-banners",
-            "product-grid",
-            "homepage",
-            "landing",
-            "main",
-        ],
-        "avoid_path_tokens": [
-            "product-detail",
-            "cart",
-            "checkout",
-            "category",
-        ],
-        "semantic_tokens": [
-            "main",
-            "landing",
-            "home",
-            "hero",
-            "banner",
-            "promo",
-            "grid",
-        ],
-    },
-    "product": {
-        "include_dirs": [
-            "src/page-components/product-detail",
-            "src/entities/product",
-            "src/widgets/product",
-            "src/widgets/header",
-            "src/app",
-            "app",
-        ],
-        "prefer_path_tokens": [
-            "product-detail",
-            "productdetail",
-            "entities/product",
-            "product-card",
-            "productcard",
-            "product",
-        ],
-        "avoid_path_tokens": [
-            "main-landing",
-            "hero-banner",
-            "promo-banners",
-            "cart",
-            "checkout",
-            "category",
-        ],
-        "semantic_tokens": [
-            "product",
-            "detail",
-            "productdetail",
-            "product-card",
-            "gallery",
-            "price",
-            "size",
-        ],
-    },
-    "category": {
-        "include_dirs": [
-            "src/page-components/category",
-            "src/widgets/category",
-            "src/widgets/product-grid",
-            "src/entities/product",
-            "src/app",
-            "app",
-        ],
-        "prefer_path_tokens": [
-            "category",
-            "category-grid",
-            "product-grid",
-            "filter",
-            "entities/product",
-        ],
-        "avoid_path_tokens": [
-            "main-landing",
-            "product-detail",
-            "cart",
-            "checkout",
-        ],
-        "semantic_tokens": [
-            "category",
-            "grid",
-            "filter",
-            "sort",
-            "product",
-            "card",
-        ],
-    },
-    "cart": {
-        "include_dirs": [
-            "src/page-components/cart",
-            "src/page-components/checkout",
-            "src/entities/cart",
-            "src/widgets/cart",
-            "src/app",
-            "app",
-        ],
-        "prefer_path_tokens": [
-            "cart",
-            "checkout",
-            "basket",
-            "order",
-        ],
-        "avoid_path_tokens": [
-            "main-landing",
-            "hero-banner",
-            "promo-banners",
-            "product-detail",
-            "category",
-        ],
-        "semantic_tokens": [
-            "cart",
-            "basket",
-            "checkout",
-            "quantity",
-            "order",
-            "payment",
-        ],
-    },
+FIX_TYPE_KEYWORDS: Dict[str, List[str]] = {
+    "image": [
+        "image", "img", "picture", "hero", "banner", "gallery",
+        "thumbnail", "next/image", "src", "alt", "fetchpriority",
+        "loading", "decoding", "sizes", "srcset",
+    ],
+    "javascript": [
+        "javascript", "script", "dynamic", "import", "react.lazy",
+        "useeffect", "provider", "analytics", "tracker", "third-party",
+        "heavy", "bundle", "main thread",
+    ],
+    "css": [
+        "css", "style", "stylesheet", "globals", "font",
+        "font-display", "render", "@import", "critical",
+    ],
+    "layout": [
+        "layout", "cls", "width", "height", "aspect-ratio",
+        "min-height", "skeleton", "placeholder",
+    ],
+    "server": [
+        "config", "next.config", "middleware", "headers", "cache",
+        "cache-control", "cdn", "server", "redis", "rewrites",
+    ],
+    "unknown": ["page", "component", "index"],
 }
 
 
-FIX_TYPE_KEYWORDS: Dict[str, List[str]] = {
-    "image": [
-        "image",
-        "img",
-        "picture",
-        "hero",
-        "banner",
-        "gallery",
-        "thumbnail",
-        "next/image",
-        "src",
-        "alt",
-        "fetchpriority",
-        "loading",
-        "decoding",
-        "sizes",
-        "srcset",
-    ],
-    "javascript": [
-        "javascript",
-        "script",
-        "dynamic",
-        "import",
-        "react.lazy",
-        "useeffect",
-        "provider",
-        "analytics",
-        "tracker",
-        "third-party",
-        "heavy",
-        "bundle",
-        "main thread",
-    ],
-    "css": [
-        "css",
-        "style",
-        "stylesheet",
-        "globals",
-        "font",
-        "font-display",
-        "render",
-        "@import",
-        "critical",
-    ],
-    "layout": [
-        "layout",
-        "cls",
-        "width",
-        "height",
-        "aspect-ratio",
-        "min-height",
-        "skeleton",
-        "placeholder",
-    ],
-    "server": [
-        "config",
-        "next.config",
-        "middleware",
-        "headers",
-        "cache",
-        "cache-control",
-        "cdn",
-        "server",
-        "redis",
-        "rewrites",
-    ],
-    "unknown": [
-        "page",
-        "component",
-        "index",
-    ],
+PAGE_KEYWORDS = {
+    "main": ["main", "home", "homepage", "landing", "hero", "banner"],
+    "product": ["product", "detail", "gallery", "product-card"],
+    "category": ["category", "grid", "filter", "sort"],
+    "cart": ["cart", "basket", "checkout", "order", "payment"],
 }
 
 
@@ -269,30 +72,25 @@ def normalize_text(value: Any) -> str:
 
 
 def get_nested_dict(value: Any) -> Dict[str, Any]:
-    """
-    Safely return dictionary-like values.
-
-    Some fix plan fields such as risk_details or opportunity may be:
-    - missing
-    - None
-    - not a dictionary
-
-    This prevents errors like:
-    AttributeError: 'NoneType' object has no attribute 'get'
-    """
     return value if isinstance(value, dict) else {}
 
 
-def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
-    """
-    Extract useful searchable text from attempt_history.
+def replace_separators(text: str) -> str:
+    for char in ["/", "\\", "-", "_", ".", ":", "(", ")", "[", "]", "{", "}", ",", "'"]:
+        text = text.replace(char, " ")
+    return text
 
-    In real generated fix_plans, important classification hints can be stored
-    inside attempt_history, for example:
-    - lighthouse_opportunity_id: unused-javascript
-    - rag_evidence title: TBT Fix: Reduce JavaScript Execution
-    - source_patch_reason
-    """
+
+def tokenize_text(text: str) -> Set[str]:
+    tokens = set(replace_separators(text).split())
+    stopwords = {
+        "the", "and", "for", "with", "from", "this", "that",
+        "page", "fix", "plan", "issue", "using", "use",
+    }
+    return {t for t in tokens if len(t) >= 3 and t not in stopwords}
+
+
+def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
     history = fix_plan.get("attempt_history")
 
     if not isinstance(history, list):
@@ -311,12 +109,10 @@ def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
         ])
 
         rag_evidence = item.get("rag_evidence")
-
         if isinstance(rag_evidence, list):
             for evidence in rag_evidence:
                 if not isinstance(evidence, dict):
                     continue
-
                 parts.extend([
                     normalize_text(evidence.get("title")),
                     normalize_text(evidence.get("source")),
@@ -327,29 +123,17 @@ def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
 
 
 def get_fix_text(fix_plan: Dict[str, Any]) -> str:
-    """
-    Build robust text used for source-context classification.
-
-    Fix Plan data can come from several places:
-    - top-level fix_plan fields
-    - nested opportunity object
-    - risk_details JSON
-    - attempt_history JSON
-
-    This text is used by classify_fix_type(), so missing one important word
-    like "unused-javascript" can make source_context collect the wrong files.
-    """
     opportunity = get_nested_dict(fix_plan.get("opportunity"))
     risk_details = get_nested_dict(fix_plan.get("risk_details"))
 
     parts = [
-        # Top-level fields
         normalize_text(fix_plan.get("affected_metric")),
         normalize_text(fix_plan.get("action")),
         normalize_text(fix_plan.get("problem_summary")),
         normalize_text(fix_plan.get("reasoning")),
         normalize_text(fix_plan.get("impact_if_fixed")),
         normalize_text(fix_plan.get("priority")),
+        normalize_text(fix_plan.get("priority_level")),
         normalize_text(fix_plan.get("page_type")),
         normalize_text(fix_plan.get("device_type")),
         normalize_text(fix_plan.get("site_type")),
@@ -357,114 +141,60 @@ def get_fix_text(fix_plan: Dict[str, Any]) -> str:
         normalize_text(fix_plan.get("lighthouse_opportunity_id")),
         normalize_text(fix_plan.get("category")),
 
-        # Nested opportunity fields
         normalize_text(opportunity.get("opportunity_id")),
         normalize_text(opportunity.get("title")),
         normalize_text(opportunity.get("description")),
         normalize_text(opportunity.get("category")),
         normalize_text(opportunity.get("affected_metric")),
 
-        # Risk details fields
         normalize_text(risk_details.get("category")),
         normalize_text(risk_details.get("failed_metrics")),
         normalize_text(risk_details.get("group_key")),
         normalize_text(risk_details.get("page_type")),
         normalize_text(risk_details.get("device_type")),
 
-        # Attempt history / RAG evidence
         get_attempt_history_text(fix_plan),
     ]
 
     return " ".join(part for part in parts if part)
+
+
 def classify_fix_type(fix_plan: Dict[str, Any]) -> str:
-    """
-    Generic problem classification based on Fix Plan + Lighthouse opportunity text.
-    This does not decide the fix. It only helps select better source context.
-    """
     text = get_fix_text(fix_plan)
 
     if any(k in text for k in [
-        "server-response",
-        "server response",
-        "time to first byte",
-        "ttfb",
-        "cache-control",
-        "cdn",
-        "redis",
-        "memcached",
-        "backend",
-        "server-side",
+        "server-response", "server response", "time to first byte",
+        "ttfb", "cache-control", "cdn", "redis", "memcached",
+        "backend", "server-side",
     ]):
         return "server"
 
     if any(k in text for k in [
-        "unused-javascript",
-        "legacy-javascript",
-        "javascript",
-        "total blocking time",
-        "tbt",
-        "main thread",
-        "bootup",
-        "script",
-        "third-party",
-        "bundle",
+        "unused-javascript", "legacy-javascript", "javascript",
+        "total blocking time", "tbt", "main thread", "bootup",
+        "script", "third-party", "bundle",
     ]):
         return "javascript"
 
     if any(k in text for k in [
-        "render-blocking",
-        "css",
-        "stylesheet",
-        "first contentful paint",
-        "fcp",
-        "font-display",
-        "@import",
+        "render-blocking", "css", "stylesheet",
+        "first contentful paint", "fcp", "font-display", "@import",
     ]):
         return "css"
 
     if any(k in text for k in [
-        "cumulative layout shift",
-        "cls",
-        "layout shift",
-        "aspect-ratio",
+        "cumulative layout shift", "cls", "layout shift", "aspect-ratio",
     ]):
         return "layout"
 
     if any(k in text for k in [
-        "prioritize-lcp-image",
-        "largest contentful paint",
-        "lcp",
-        "image",
-        "img",
-        "next-gen",
-        "offscreen",
-        "responsive images",
-        "properly size",
-        "webp",
-        "avif",
+        "prioritize-lcp-image", "largest contentful paint", "lcp",
+        "image", "img", "next-gen", "offscreen",
+        "responsive images", "properly size", "webp", "avif",
     ]):
         return "image"
 
     return "unknown"
-
-
-def tokenize_text(text: str) -> Set[str]:
-    tokens = set(replace_separators(text).split())
-    return {
-        token
-        for token in tokens
-        if len(token) >= 3
-        and token not in {
-            "the", "and", "for", "with", "from", "this", "that",
-            "page", "fix", "plan", "issue", "using", "use",
-        }
-    }
-
-
-def replace_separators(text: str) -> str:
-    for char in ["/", "\\", "-", "_", ".", ":", "(", ")", "[", "]", "{", "}", ",", "'"]:
-        text = text.replace(char, " ")
-    return text
 
 
 def build_search_keywords(
@@ -472,27 +202,11 @@ def build_search_keywords(
     page_type: str,
     fix_type: str,
 ) -> List[str]:
-    """
-    Build generic keywords from:
-    - page type
-    - fix type
-    - Fix Plan text
-    - Lighthouse opportunity text
-
-    Page-related terms are always included, but image terms are not added
-    unless the selected opportunity is image/layout-related.
-    """
     keywords: Set[str] = set()
 
-    profile = PAGE_PROFILES.get(page_type, {})
-    keywords.update(profile.get("semantic_tokens", []))
+    keywords.update(PAGE_KEYWORDS.get(page_type, []))
     keywords.update(FIX_TYPE_KEYWORDS.get(fix_type, FIX_TYPE_KEYWORDS["unknown"]))
-
-    fix_text = get_fix_text(fix_plan)
-    keywords.update(tokenize_text(fix_text))
-
-    if not keywords:
-        keywords.update(FIX_TYPE_KEYWORDS["unknown"])
+    keywords.update(tokenize_text(get_fix_text(fix_plan)))
 
     return sorted(keywords)
 
@@ -501,105 +215,182 @@ def should_ignore_path(path: Path) -> bool:
     return any(part in IGNORED_DIRS for part in path.parts)
 
 
-def get_search_roots(target_root: Path, page_type: str, fix_type: str) -> List[Path]:
-    """
-    Faster approach:
-    Search page-specific roots first instead of scanning the whole app.
-    Fallback to target_root if no expected roots exist.
-    """
-    profile = PAGE_PROFILES.get(page_type, {})
-    include_dirs = list(profile.get("include_dirs", []))
-
-    # Server/config issues may live outside page folders.
-    if fix_type == "server":
-        include_dirs.extend([
-            "",
-            "src",
-            "config",
-        ])
-
-    roots: List[Path] = []
-    seen = set()
-
-    for relative in include_dirs:
-        candidate = (target_root / relative).resolve() if relative else target_root
-        if candidate.exists() and candidate.is_dir() and candidate not in seen:
-            roots.append(candidate)
-            seen.add(candidate)
-
-    if not roots:
-        roots = [target_root]
-
-    return roots
-
-
-def list_source_files(
-    target_root: Path,
-    page_type: str,
-    fix_type: str,
-) -> List[Path]:
-    """
-    List source files under page-relevant roots first.
-    """
-    files: List[Path] = []
-    seen = set()
-
-    for root in get_search_roots(target_root, page_type, fix_type):
-        for path in root.rglob("*"):
-            if len(files) >= MAX_FILES_TO_SCORE:
-                break
-
-            if not path.is_file():
-                continue
-
-            if should_ignore_path(path):
-                continue
-
-            if path.suffix not in SUPPORTED_EXTENSIONS:
-                continue
-
-            if path in seen:
-                continue
-
-            files.append(path)
-            seen.add(path)
-
-    return files
-
-
 def read_file_limited(path: Path, max_chars: int = MAX_FILE_CHARS) -> str:
     try:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         text = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
 
     return text[:max_chars]
 
 
-def score_page_scope(path_text: str, page_type: str) -> int:
-    """
-    Keep candidates page-related.
-    Product page should prefer product-detail files.
-    Main page should prefer main-landing files.
-    Other pages should prefer their own page folders.
-    """
+def load_repo_map(repo_map_path: str) -> Dict[str, Any]:
+    path = Path(repo_map_path)
+
+    if not path.exists():
+        return {}
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def path_matches_page(path: str, page_type: str) -> bool:
+    p = path.lower()
+
     if not page_type:
-        return 0
+        return True
 
-    profile = PAGE_PROFILES.get(page_type)
+    if page_type == "main":
+        return any(k in p for k in [
+            "main", "home", "landing", "hero", "promo",
+            "product-grid", "page.tsx", "layout.tsx",
+        ])
 
-    if not profile:
+    if page_type == "product":
+        return any(k in p for k in [
+            "product", "detail", "gallery", "product-card",
+            "page.tsx", "layout.tsx",
+        ])
+
+    if page_type == "category":
+        return any(k in p for k in [
+            "category", "grid", "filter", "page.tsx", "layout.tsx",
+        ])
+
+    if page_type == "cart":
+        return any(k in p for k in [
+            "cart", "checkout", "basket", "order",
+            "page.tsx", "layout.tsx",
+        ])
+
+    return True
+
+
+def select_files_from_repo_map(
+    repo_map: Dict[str, Any],
+    page_type: str,
+    fix_type: str,
+) -> List[str]:
+    """
+    Select files from real repo_map.json first.
+    This prevents source_context.py from guessing wrong folders.
+    """
+    selected: List[str] = []
+
+    pages = repo_map.get("pages", [])
+    widgets = repo_map.get("widgets", [])
+    components = repo_map.get("components", [])
+    entities = repo_map.get("entities", [])
+
+    if fix_type in {"image", "layout"}:
+        selected += repo_map.get("image_related_files", [])
+        selected += [p for p in widgets if path_matches_page(p, page_type)]
+        selected += [p for p in pages if path_matches_page(p, page_type)]
+
+    elif fix_type == "javascript":
+        selected += repo_map.get("javascript_related_files", [])
+        selected += [p for p in pages if path_matches_page(p, page_type)]
+        selected += [p for p in widgets if path_matches_page(p, page_type)]
+        selected += ["package.json"]
+
+    elif fix_type == "css":
+        selected += repo_map.get("styles", [])
+        selected += [p for p in pages if path_matches_page(p, page_type)]
+        selected += [p for p in widgets if path_matches_page(p, page_type)]
+
+    elif fix_type == "server":
+        selected += repo_map.get("config_files", [])
+        selected += repo_map.get("server_files", [])
+        selected += ["package.json"]
+
+    else:
+        selected += [p for p in pages if path_matches_page(p, page_type)]
+        selected += [p for p in widgets if path_matches_page(p, page_type)]
+        selected += components
+        selected += entities
+
+    # remove duplicates while preserving order
+    return list(dict.fromkeys(selected))
+
+
+def list_source_files_fallback(target_root: Path) -> List[Path]:
+    files: List[Path] = []
+
+    for path in target_root.rglob("*"):
+        if len(files) >= MAX_FILES_TO_SCORE:
+            break
+
+        if not path.is_file():
+            continue
+
+        if should_ignore_path(path):
+            continue
+
+        if path.suffix not in SUPPORTED_EXTENSIONS:
+            continue
+
+        files.append(path)
+
+    return files
+
+
+def get_source_files(
+    target_root: Path,
+    repo_map: Dict[str, Any],
+    page_type: str,
+    fix_type: str,
+) -> List[Path]:
+    """
+    Main source selection:
+    1. Use repo_map.json selected files
+    2. If empty, fallback to full scan
+    """
+    files: List[Path] = []
+
+    if repo_map:
+        selected_relative_files = select_files_from_repo_map(
+            repo_map=repo_map,
+            page_type=page_type,
+            fix_type=fix_type,
+        )
+
+        for rel in selected_relative_files:
+            candidate = target_root / rel
+            if candidate.exists() and candidate.is_file():
+                if candidate.suffix in SUPPORTED_EXTENSIONS:
+                    files.append(candidate)
+
+    if files:
+        return list(dict.fromkeys(files))
+
+    return list_source_files_fallback(target_root)
+
+
+def score_page_scope(path_text: str, page_type: str) -> int:
+    if not page_type:
         return 0
 
     score = 0
 
-    for token in profile.get("prefer_path_tokens", []):
+    prefer = PAGE_KEYWORDS.get(page_type, [])
+    for token in prefer:
         if token in path_text:
-            score += 25
+            score += 18
 
-    for token in profile.get("avoid_path_tokens", []):
+    avoid_map = {
+        "main": ["product-detail", "cart", "checkout", "category"],
+        "product": ["main-landing", "hero-banner", "promo-banners", "cart", "checkout"],
+        "category": ["main-landing", "product-detail", "cart", "checkout"],
+        "cart": ["main-landing", "product-detail", "category", "hero-banner"],
+    }
+
+    for token in avoid_map.get(page_type, []):
         if token in path_text:
-            score -= 35
+            score -= 25
 
     return score
 
@@ -609,67 +400,71 @@ def score_fix_type_signals(
     content_text: str,
     fix_type: str,
 ) -> int:
-    """
-    Strong code signals depend on selected problem type.
-    This avoids always preferring image snippets.
-    """
     score = 0
 
     if fix_type in {"image", "layout"}:
         if "<img" in content_text:
-            score += 14
+            score += 18
         if "next/image" in content_text:
-            score += 12
+            score += 16
         if "src=" in content_text and "alt=" in content_text:
-            score += 8
+            score += 10
         if "width=" in content_text or "height=" in content_text:
-            score += 5
+            score += 8
+        if "hero" in path_text:
+            score += 15
+        if "banner" in path_text:
+            score += 10
 
     elif fix_type == "javascript":
         if "dynamic(" in content_text or "react.lazy" in content_text:
-            score += 14
+            score += 16
         if "import(" in content_text:
-            score += 10
+            score += 12
         if "useeffect" in content_text:
-            score += 6
-        if "<script" in content_text or "script" in content_text:
-            score += 10
-        if "analytics" in content_text or "tracker" in content_text:
             score += 8
-        if path_text.endswith((".ts", ".js", ".tsx", ".jsx")):
-            score += 3
+        if "<script" in content_text or "script" in content_text:
+            score += 12
+        if "analytics" in content_text or "tracker" in content_text:
+            score += 12
+        if "provider" in path_text or "layout" in path_text:
+            score += 14
+        if "package.json" in path_text:
+            score += 8
 
     elif fix_type == "css":
         if path_text.endswith(".css"):
-            score += 14
+            score += 20
         if "@import" in content_text:
-            score += 10
+            score += 14
         if "font-display" in content_text:
-            score += 10
+            score += 14
         if "stylesheet" in content_text:
-            score += 8
+            score += 10
         if "globals" in path_text:
-            score += 6
+            score += 12
 
     elif fix_type == "server":
         if "next.config" in path_text:
-            score += 24
+            score += 30
         if "middleware" in path_text:
-            score += 18
+            score += 22
         if "package.json" in path_text:
-            score += 10
+            score += 12
+        if "api/" in path_text:
+            score += 16
         if "headers" in content_text or "cache-control" in content_text:
-            score += 14
+            score += 18
         if "rewrites" in content_text or "redirects" in content_text:
-            score += 8
+            score += 10
 
     else:
         if "/page-components/" in path_text:
-            score += 4
+            score += 8
         if "/widgets/" in path_text:
-            score += 3
+            score += 6
         if "/entities/" in path_text:
-            score += 3
+            score += 5
 
     return score
 
@@ -678,19 +473,17 @@ def score_file(
     path: Path,
     content: str,
     keywords: List[str],
-    page_type: str = "",
-    fix_type: str = "unknown",
+    page_type: str,
+    fix_type: str,
 ) -> int:
     score = 0
 
     path_text = str(path).lower()
     content_text = content.lower()
-    normalized_page_type = normalize_text(page_type)
 
-    # Page scope is more important than generic keyword match.
-    score += score_page_scope(path_text, normalized_page_type)
+    score += score_page_scope(path_text, page_type)
+    score += score_fix_type_signals(path_text, content_text, fix_type)
 
-    # Generic keyword score.
     for keyword in keywords:
         keyword = keyword.lower()
         if keyword in path_text:
@@ -698,29 +491,22 @@ def score_file(
         if keyword in content_text:
             score += 1
 
-    # Problem-type-specific code signals.
-    score += score_fix_type_signals(path_text, content_text, fix_type)
-
-    # Prefer useful source files.
     if "/ui/" in path_text:
         score += 5
     if "/page-components/" in path_text:
         score += 5
     if "/widgets/" in path_text:
-        score += 3
+        score += 4
     if "/entities/" in path_text:
         score += 3
     if "/app/" in path_text:
-        score += 2
+        score += 3
 
-    # Avoid barrel files unless no better option exists.
     if path.name in {"index.ts", "index.tsx", "index.js", "index.jsx"}:
         score -= 8
 
-    # Avoid mocks/data-only files for code patching unless image issue needs asset arrays.
-    if "mock" in path_text or "data" in path_text:
-        if fix_type not in {"image", "layout"}:
-            score -= 10
+    if ("mock" in path_text or "data" in path_text) and fix_type not in {"image", "layout"}:
+        score -= 12
 
     return score
 
@@ -728,53 +514,28 @@ def score_file(
 def priority_tokens_for_fix_type(fix_type: str, keywords: List[str]) -> List[str]:
     if fix_type in {"image", "layout"}:
         return [
-            "<img",
-            "<image",
-            "next/image",
-            "src=",
-            "alt=",
-            "fetchpriority",
-            "loading=",
-            "decoding=",
-            "width=",
-            "height=",
-            "aspect-ratio",
+            "<img", "<image", "next/image", "src=", "alt=",
+            "fetchpriority", "loading=", "decoding=",
+            "width=", "height=", "aspect-ratio",
         ]
 
     if fix_type == "javascript":
         return [
-            "dynamic(",
-            "import(",
-            "react.lazy",
-            "useeffect",
-            "<script",
-            "script",
-            "analytics",
-            "tracker",
-            "provider",
-            "heavy",
+            "dynamic(", "import(", "react.lazy", "useeffect",
+            "<script", "script", "analytics", "tracker",
+            "provider", "heavy",
         ]
 
     if fix_type == "css":
         return [
-            "@import",
-            "font-display",
-            "stylesheet",
-            "globals.css",
-            ".css",
-            "className=",
-            "style=",
+            "@import", "font-display", "stylesheet",
+            "globals.css", ".css", "classname=", "style=",
         ]
 
     if fix_type == "server":
         return [
-            "next.config",
-            "middleware",
-            "headers",
-            "cache-control",
-            "rewrites",
-            "redirects",
-            "cdn",
+            "next.config", "middleware", "headers",
+            "cache-control", "rewrites", "redirects", "cdn",
         ]
 
     return list(keywords)
@@ -783,7 +544,7 @@ def priority_tokens_for_fix_type(fix_type: str, keywords: List[str]) -> List[str
 def find_important_position(
     content: str,
     keywords: List[str],
-    fix_type: str = "unknown",
+    fix_type: str,
 ) -> int:
     lower = content.lower()
 
@@ -803,15 +564,13 @@ def find_important_position(
 def make_snippet(
     content: str,
     keywords: List[str],
-    fix_type: str = "unknown",
+    fix_type: str,
 ) -> str:
     if len(content) <= MAX_SNIPPET_CHARS:
         return content
 
     center = find_important_position(content, keywords, fix_type)
 
-    # Keep near the important code. Smaller pre-context is faster and avoids
-    # sending long URL arrays before actual JSX.
     start = max(0, center - 500)
     end = min(len(content), start + MAX_SNIPPET_CHARS)
 
@@ -823,6 +582,7 @@ def collect_source_context(
     target_dir: str,
     fix_plan: Dict[str, Any],
     max_candidate_files: int = MAX_CANDIDATE_FILES,
+    repo_map_path: str = "repo_map.json",
 ) -> Dict[str, Any]:
     repo_root = Path(repo_path).resolve()
     target_root = (repo_root / target_dir).resolve()
@@ -835,14 +595,18 @@ def collect_source_context(
 
     page_type = normalize_text(fix_plan.get("page_type"))
     fix_type = classify_fix_type(fix_plan)
+
     keywords = build_search_keywords(
         fix_plan=fix_plan,
         page_type=page_type,
         fix_type=fix_type,
     )
 
-    source_files = list_source_files(
+    repo_map = load_repo_map(repo_map_path)
+
+    source_files = get_source_files(
         target_root=target_root,
+        repo_map=repo_map,
         page_type=page_type,
         fix_type=fix_type,
     )
@@ -851,6 +615,9 @@ def collect_source_context(
 
     for file_path in source_files:
         content = read_file_limited(file_path)
+
+        if not content:
+            continue
 
         score = score_file(
             path=file_path,
@@ -883,6 +650,8 @@ def collect_source_context(
         "repo_path": str(repo_root),
         "target_dir": target_dir,
         "target_root": str(target_root),
+        "repo_map_used": bool(repo_map),
+        "repo_map_path": repo_map_path,
         "page_type": page_type,
         "fix_type": fix_type,
         "keywords": keywords,
@@ -895,21 +664,27 @@ def collect_source_context(
 if __name__ == "__main__":
     test_repo_path = (
         "/abr/coss41/Luminara_App/Agent_Workspace/"
-        "fix_plan_999/repo"
+        "fix_plan_manual_group_main_decathlon_main_desktop_9_decathlon_main_desktop/repo"
     )
 
     test_target_dir = "2_digital_twins/active-staging"
 
     sample_fix_plan = {
-        "page_type": "product",
-        "affected_metric": "LCP",
-        "action": "Optimize product images to improve LCP",
-        "problem_summary": "Product images may be delaying LCP.",
-        "reasoning": "Image loading and sizing can affect LCP on product pages.",
+        "page_type": "main",
+        "device_type": "desktop",
+        "affected_metric": "TBT",
+        "action": "Defer non-critical JavaScript and remove unused imports to reduce unused JavaScript on the main page for desktop.",
+        "problem_summary": "High TBT due to unused JavaScript on the main desktop page.",
+        "reasoning": "Unused JavaScript is a significant contributor to TBT.",
         "opportunity": {
-            "opportunity_id": "prioritize-lcp-image",
-            "title": "Preload Largest Contentful Paint image",
-            "category": "image",
+            "opportunity_id": "unused-javascript",
+            "title": "Reduce unused JavaScript",
+            "category": "javascript",
+        },
+        "risk_details": {
+            "failed_metrics": ["performance_score", "LCP", "TBT", "CLS"],
+            "page_type": "main",
+            "device_type": "desktop",
         },
     }
 
@@ -917,15 +692,14 @@ if __name__ == "__main__":
         repo_path=test_repo_path,
         target_dir=test_target_dir,
         fix_plan=sample_fix_plan,
+        repo_map_path="repo_map.json",
     )
 
     print("✅ Source context collected")
-    print("Repo:", result["repo_path"])
-    print("Target:", result["target_root"])
+    print("Repo map used:", result["repo_map_used"])
     print("Page type:", result["page_type"])
     print("Fix type:", result["fix_type"])
-    print("Keywords:", result["keywords"])
-    print("Total source files scanned:", result["total_source_files"])
+    print("Total selected files:", result["total_source_files"])
     print("Matched files:", result["matched_files"])
     print()
 
