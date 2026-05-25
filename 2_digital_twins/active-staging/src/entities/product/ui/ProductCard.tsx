@@ -41,6 +41,10 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
 
     if (!selectedSize) {
       setShowError(true);
+      track({
+        ev: 'error_size_not_selected',
+        meta: { productId: product.id, productName: product.name },
+      });
       setTimeout(() => setShowError(false), 2000);
       return;
     }

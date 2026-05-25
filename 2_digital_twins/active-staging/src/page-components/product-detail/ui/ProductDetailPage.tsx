@@ -55,6 +55,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   const handleAddToCart = () => {
     if (!selectedSize) {
       setShowError(true);
+
+      track({
+        ev: 'error_size_not_selected',
+        meta: { productId: product.id, productName: product.name },
+      });
+
       if (showStickyCart) window.scrollTo({ top: 0, behavior: 'smooth' });
       setTimeout(() => setShowError(false), 2000);
       return;
