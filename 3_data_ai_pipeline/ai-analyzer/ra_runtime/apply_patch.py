@@ -47,6 +47,7 @@ APPROVED_STATUSES = {
     "approved_to_apply",
     "approved",
     "ready_to_apply",
+    "applying",
 }
 
 
