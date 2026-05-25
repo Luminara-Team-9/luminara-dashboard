@@ -155,6 +155,8 @@ Strict rules:
 - Do NOT return suggestion comments such as "Consider...", "Maybe...", or "Should..." inside suggested_code.
 - If lazy loading is needed, write actual working code using dynamic import.
 - suggested_code must compile as-is.
+- If suggested_code uses dynamic(), it MUST also include import dynamic from 'next/dynamic' in the replacement block or original_code must already contain it.
+- Do NOT use dynamic import for named exports unless you correctly map the named export with .then(mod => mod.ComponentName).
 
 Opportunity matching rules:
 - First understand the selected Lighthouse opportunity from the Fix Plan.
@@ -456,6 +458,21 @@ def unsafe_import_removal_without_usage_removal(patch: Dict[str, Any]) -> bool:
 
     return False
 
+def unsafe_dynamic_without_import(patch: Dict[str, Any]) -> bool:
+    original = patch.get("original_code") or ""
+    suggested = patch.get("suggested_code") or ""
+
+    uses_dynamic = "dynamic(" in suggested
+
+    has_dynamic_import = (
+        "import dynamic from 'next/dynamic'" in original
+        or 'import dynamic from "next/dynamic"' in original
+        or "import dynamic from 'next/dynamic'" in suggested
+        or 'import dynamic from "next/dynamic"' in suggested
+    )
+
+    return uses_dynamic and not has_dynamic_import
+
 def validate_patch_against_context(
     patch_result: Dict[str, Any],
     source_context: Dict[str, Any],
@@ -493,6 +510,9 @@ def validate_patch_against_context(
             continue
 
         if unsafe_import_removal_without_usage_removal(patch):
+            continue
+
+        if unsafe_dynamic_without_import(patch):
             continue
 
         if not is_safe_repo_relative_path(target_file, source_context):
