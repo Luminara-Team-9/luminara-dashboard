@@ -9,6 +9,7 @@ from typing import TypedDict, Optional, Any
 
 import psycopg2
 import requests
+import httpx
 from psycopg2.extras import Json
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -45,6 +46,10 @@ MAX_OPPORTUNITIES = int(os.getenv("MAX_OPPORTUNITIES", "3"))
 client = OpenAI(
     base_url=QWEN_BASE_URL,
     api_key=os.getenv("QWEN_API_KEY", "dummy"),
+    http_client=httpx.Client(
+        trust_env=False,
+        timeout=60.0,
+    ),
 )
 
 
@@ -96,6 +101,8 @@ class AgentState(TypedDict, total=False):
     opp_index: int
 
     rag_context: str
+    rag_evidence: list
+    generated_patch_signatures: list
 
     risk_score: int
     risk_details: dict
@@ -995,6 +1002,8 @@ def search_rag(state: AgentState) -> AgentState:
         f"competitor benchmark Core Web Vitals"
     )
 
+    rag_evidence = []
+
     try:
         docs = []
         seen_titles = set()
@@ -1026,10 +1035,19 @@ def search_rag(state: AgentState) -> AgentState:
         formatted = []
 
         for i, doc in enumerate(docs[:5], 1):
+            similarity = round(float(doc.get("similarity", 0)), 4)
+
+            rag_evidence.append({
+                "title": doc.get("title"),
+                "doc_type": doc.get("doc_type"),
+                "source": doc.get("source"),
+                "similarity": similarity,
+            })
+
             formatted.append(
                 f"[Doc {i}] {doc.get('title')}\n"
                 f"Type: {doc.get('doc_type')}\n"
-                f"Similarity: {round(float(doc.get('similarity', 0)), 4)}\n"
+                f"Similarity: {similarity}\n"
                 f"{doc.get('content')}"
             )
 
@@ -1040,10 +1058,13 @@ def search_rag(state: AgentState) -> AgentState:
     except Exception as e:
         print(f"  ⚠️ RAG service search failed: {e}")
         rag_context = ""
+        rag_evidence = []
 
-    return {**state, "rag_context": rag_context}
-
-
+    return {
+        **state,
+        "rag_context": rag_context,
+        "rag_evidence": rag_evidence,
+    }
 # ─────────────────────────────────────────────
 # N4 — Assess risk
 # ─────────────────────────────────────────────
@@ -1122,12 +1143,11 @@ def assess_risk(state: AgentState) -> AgentState:
 # ─────────────────────────────────────────────
 
 def generate_fix(state: AgentState) -> AgentState:
-    print("\n[N5] Generating Fix Plan with Qwen...")
+    print("\n[N5] Generating text-level Fix Plan with Qwen...")
 
     opp = state["current_opp"]
     metrics = state["metrics"]
     rag_context = state.get("rag_context", "")
-    patch_template = build_patch_template(opp["title"], opp["category"])
 
     prompt = f"""
 You are a senior web performance optimization engineer for Korean e-commerce.
@@ -1135,19 +1155,24 @@ You are a senior web performance optimization engineer for Korean e-commerce.
 Generate ONE staged self-healing Fix Plan.
 Important rule:
 - Do NOT suggest fixing every issue at once.
-- Only fix the selected highest-priority opportunity first.
-- After this fix, the system will re-run Lighthouse and compare before/after scores.
+- Only explain the selected highest-priority opportunity.
+- Do NOT generate code patches in this step.
+- A separate source-aware patch generator will inspect the actual repository source code later.
+- After a patch is approved/applied, the system will re-run Lighthouse and compare before/after scores.
 
 Target audit:
 - test_id: {state.get("test_id")}
 - URL: {state.get("url")}
 - Page type: {state.get("page_type")}
 - Device: {state.get("device_type")}
+- playwright_run_id: {state.get("playwright_run_id")}
+- group_key: {state.get("group_key")}
+- supporting_test_ids: {state.get("supporting_test_ids")}
 
 Current failed metrics:
 {json.dumps(metrics.get("failed_metrics", []), indent=2)}
 
-Current metrics:
+Current median metrics from stable 3-run group:
 - Performance score: {metrics.get("avg_performance")}
 - LCP: {metrics.get("avg_lcp_ms")}ms
 - TBT: {metrics.get("avg_tbt_ms")}ms
@@ -1156,6 +1181,7 @@ Current metrics:
 - TTFB: {metrics.get("ttfb_ms")}ms
 
 Selected priority opportunity:
+- Lighthouse opportunity id: {opp.get("opportunity_id")}
 - Title: {opp.get("title")}
 - Description: {opp.get("description")}
 - Estimated savings: {opp.get("avg_savings_ms")}ms
@@ -1173,9 +1199,8 @@ RAG context:
 
 Return ONLY valid JSON:
 {{
-  "auto_applicable": true,
   "action": "specific one-sentence fix action",
-  "reasoning": "why this one fix should be applied first",
+  "reasoning": "why this one fix should be handled first",
   "problem_summary": "short dashboard-friendly problem summary",
   "impact_if_not_fixed": "impact if ignored",
   "impact_if_fixed": "expected improvement after this staged fix",
@@ -1184,59 +1209,44 @@ Return ONLY valid JSON:
   "priority_level": "{opp.get("priority_level")}",
   "estimated_improvement": {opp.get("avg_savings_ms")},
   "affected_metric": "{opp.get("affected_metric")}",
-  "patches": [
-    {{
-      "target_file": "real source file path only, for example src/components/Hero.tsx",
-      "original_code": "exact code block that already exists in the target file",
-      "suggested_code": "complete replacement code block",
-      "change_type": "code_replace",
-      "change_reason": "why this code change improves the selected metric"
-    }}
-  ],
   "manual_review_reason": null,
-  "next_step_after_patch": "apply patch in Agent_Workspace, run build test, then rerun Lighthouse and compare new score with old_score"
+  "next_step_after_patch": "generate source-aware patch from Agent_Workspace, wait for human approval, apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
 }}
 
-Rules for patches:
-- Do NOT return vague target_file values like "server configuration files", "image component", or "target source/config file".
-- Do NOT return summary-only patches.
-- original_code must be an exact existing code block from the target file.
-- suggested_code must be real code that can replace original_code.
-- If the selected opportunity requires Redis, CDN, server architecture, environment variables, or files not visible from the available context, set:
-  "auto_applicable": false,
-  "patches": [],
-  "manual_review_reason": "explain why this cannot be safely auto-applied yet"
-- Never invent file paths or fake code.
+Rules:
+- Do not output patches.
+- Do not invent file paths.
+- Do not exaggerate severity. If a metric is not over the project threshold, describe it as an optimization opportunity rather than a failure.
+- If this opportunity likely requires server/CDN/cache/infrastructure changes, say it should be manually reviewed unless source-aware patch generation finds a safe config file.
 """
 
     try:
         response = client.chat.completions.create(
             model=QWEN_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1200,
+            max_tokens=900,
             temperature=0.1,
         )
 
         raw = response.choices[0].message.content.strip()
         fix_rec = extract_json(raw)
 
-        print(f"  ✅ Qwen fix generated: {fix_rec.get('action', '')[:90]}")
+        print(f"  ✅ Qwen text Fix Plan generated: {fix_rec.get('action', '')[:90]}")
 
     except Exception as e:
         print(f"  ⚠️ Qwen failed: {e}")
-        print("  → Using fallback staged Fix Plan")
+        print("  → Using fallback staged text Fix Plan")
 
         fix_rec = {
-            "auto_applicable": False,
             "action": f"Fix {opp['title']} to improve {opp['affected_metric']}",
             "reasoning": (
-                f"This is the highest-priority opportunity for the current failed audit. "
+                f"This is a stable opportunity across the current 3-run audit group. "
                 f"It targets {opp['affected_metric']} and is estimated to save "
                 f"about {opp['avg_savings_ms']}ms."
             ),
             "problem_summary": opp["title"],
             "impact_if_not_fixed": (
-                f"{opp['affected_metric']} may remain poor, causing slower page load "
+                f"{opp['affected_metric']} may remain weak, causing slower page load "
                 "and weaker Lighthouse/Core Web Vitals performance."
             ),
             "impact_if_fixed": f"Expected improvement: about {opp['avg_savings_ms']}ms saved.",
@@ -1245,36 +1255,28 @@ Rules for patches:
             "priority_level": opp.get("priority_level", "medium"),
             "estimated_improvement": opp["avg_savings_ms"],
             "affected_metric": opp["affected_metric"],
-            "patches": [],
-            "manual_review_reason": (
-                "Qwen failed or the available context is not enough to generate an exact "
-                "file-level patch. This Fix Plan should be reviewed manually or regenerated "
-                "after source code context is available."
+            "manual_review_reason": None,
+            "next_step_after_patch": (
+                "generate source-aware patch from Agent_Workspace, wait for human approval, "
+                "apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
             ),
-            "next_step_after_patch": "rerun Lighthouse and compare new score with old_score",
         }
 
-    fix_rec.setdefault("auto_applicable", False)
-    fix_rec.setdefault("patches", [])
-    fix_rec.setdefault("manual_review_reason", None)
     fix_rec.setdefault("problem_summary", opp["title"])
     fix_rec.setdefault("priority_level", opp.get("priority_level", "medium"))
     fix_rec.setdefault("estimated_improvement", opp["avg_savings_ms"])
     fix_rec.setdefault("affected_metric", opp["affected_metric"])
+    fix_rec.setdefault("manual_review_reason", None)
     fix_rec.setdefault(
         "next_step_after_patch",
-        "rerun Lighthouse and compare new score with old_score",
+        (
+            "generate source-aware patch from Agent_Workspace, wait for human approval, "
+            "apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
+        ),
     )
 
-    # IMPORTANT:
-    # generate_fix() is only responsible for the text-level Fix Plan:
-    # action, reasoning, impact, priority, and estimated improvement.
-    #
-    # Do NOT trust patches generated here because this prompt does not include
-    # actual source snippets from the repository.
-    #
-    # Real code patches will be generated later by:
-    # git_workspace.py → source_context.py → patch_generator.py
+    # Source-aware patch generation happens in N5.5 only.
+    # This step only creates the dashboard text-level Fix Plan.
     fix_rec["auto_applicable"] = False
     fix_rec["patches"] = []
     fix_rec["manual_review_reason"] = (
@@ -1282,8 +1284,6 @@ Rules for patches:
     )
 
     return {**state, "fix_recommendation": fix_rec}
-
-
 # ─────────────────────────────────────────────
 # N5.5 — Generate source-aware patch
 # ─────────────────────────────────────────────
@@ -1292,12 +1292,10 @@ def generate_source_patch(state: AgentState) -> AgentState:
     """
     Generate a real source-aware patch.
 
-    This node uses:
-    - git_workspace.py: clone/check out PR branch into Agent_Workspace
-    - source_context.py: collect real source snippets
-    - patch_generator.py: generate validated patch using actual source code
-
-    It overrides fix_recommendation["patches"] with validated patches only.
+    Production behavior:
+    - Reuse one Agent_Workspace per audit group instead of cloning per queue rank.
+    - Let Qwen generate the exact patch from real source snippets.
+    - Reject duplicate patches inside the same ranked opportunity queue.
     """
     print("\n[N5.5] Generating source-aware patch from actual code...")
 
@@ -1326,30 +1324,25 @@ def generate_source_patch(state: AgentState) -> AgentState:
             },
         }
 
-    # Temporary workspace key before DB fix_plan_id exists.
-    # Use thread/group/rank so each queued item gets its own folder.
+    # One workspace per audit group.
+    # This avoids cloning the same PR branch for rank_1, rank_2, rank_3.
     workspace_key = (
         f"{state.get('thread_id') or 'manual'}_"
-        f"{state.get('group_key') or 'group'}_"
-        f"rank_{state.get('opp_index', 0) + 1}"
+        f"{state.get('group_key') or 'group'}"
     )
 
     # Keep filesystem-safe name.
     workspace_key = re.sub(r"[^a-zA-Z0-9_.-]+", "_", workspace_key)
 
+    # Only the first opportunity creates a clean workspace.
+    # Later queued opportunities reuse the same cloned repo.
+    clean_workspace = state.get("opp_index", 0) == 0
+
     try:
-        # 1. Prepare cloned repo.
-        #
-        # Expected return:
-        # {
-        #   "workspace_path": "...",
-        #   "repo_path": "...",
-        #   "branch": "...",
-        #   "commit_sha": "..."
-        # }
         workspace = prepare_workspace(
             fix_plan_id=workspace_key,
             pr_branch=pr_branch,
+            clean=clean_workspace,
         )
 
         repo_path = workspace.get("repo_path")
@@ -1362,7 +1355,6 @@ def generate_source_patch(state: AgentState) -> AgentState:
 
         print(f"  ✅ repo_path: {repo_path}")
 
-        # 2. Build source-aware fix_plan input for patch_generator.
         source_fix_plan = {
             "id": workspace_key,
             "test_id": state.get("test_id"),
@@ -1387,7 +1379,6 @@ def generate_source_patch(state: AgentState) -> AgentState:
             "estimated_improvement": fix_rec.get("estimated_improvement"),
         }
 
-        # 3. Collect actual source snippets.
         source_context = collect_source_context(
             repo_path=repo_path,
             target_dir=target_dir,
@@ -1400,10 +1391,10 @@ def generate_source_patch(state: AgentState) -> AgentState:
         print(
             f"  ✅ Source context collected: "
             f"matched_files={matched_files}, "
-            f"total_source_files={total_source_files}"
+            f"total_source_files={total_source_files}, "
+            f"fix_type={source_context.get('fix_type')}"
         )
 
-        # 4. Generate validated source-aware patch.
         patch_result = generate_patch_from_source(
             fix_plan=source_fix_plan,
             source_context=source_context,
@@ -1416,11 +1407,42 @@ def generate_source_patch(state: AgentState) -> AgentState:
             f"patch_count={len(patch_result.get('patches', []) or [])}"
         )
 
-        # 5. Attach only validated patch_generator output.
+        # Duplicate patch prevention inside the same ranked queue.
+        generated_signatures = list(state.get("generated_patch_signatures", []) or [])
+
         if patch_result.get("auto_applicable") and patch_result.get("patches"):
-            fix_rec["auto_applicable"] = True
-            fix_rec["patches"] = patch_result.get("patches", [])
-            fix_rec["manual_review_reason"] = None
+            patch = patch_result["patches"][0]
+
+            signature = "::".join([
+                str(patch.get("target_file", "")),
+                str(patch.get("original_code", "")),
+                str(patch.get("suggested_code", "")),
+            ])
+
+            if signature in generated_signatures:
+                reason = (
+                    "Duplicate patch already generated for another queued Fix Plan "
+                    "in the same audit group."
+                )
+                print(f"  ⚠️ {reason}")
+
+                patch_result = {
+                    "auto_applicable": False,
+                    "patches": [],
+                    "manual_review_reason": reason,
+                }
+
+                fix_rec["auto_applicable"] = False
+                fix_rec["patches"] = []
+                fix_rec["manual_review_reason"] = reason
+
+            else:
+                generated_signatures.append(signature)
+
+                fix_rec["auto_applicable"] = True
+                fix_rec["patches"] = patch_result.get("patches", [])
+                fix_rec["manual_review_reason"] = None
+
         else:
             fix_rec["auto_applicable"] = False
             fix_rec["patches"] = []
@@ -1436,11 +1458,10 @@ def generate_source_patch(state: AgentState) -> AgentState:
             "patch_result": patch_result,
             "workspace_path": workspace_path,
             "repo_path": repo_path,
+            "generated_patch_signatures": generated_signatures,
         }
 
     except TypeError as e:
-        # Usually caused by different function signature in git_workspace.py,
-        # source_context.py, or patch_generator.py.
         reason = (
             "Source-aware patch generation failed because function signature "
             f"does not match expected call: {e}"
@@ -1464,7 +1485,6 @@ def generate_source_patch(state: AgentState) -> AgentState:
             "manual_review_reason": reason,
         },
     }
-
 # ─────────────────────────────────────────────
 # N6 — Save Fix Plan
 # ─────────────────────────────────────────────
@@ -1531,6 +1551,8 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "source_patch_count": len(patches),
         "source_patch_reason": fix_rec.get("manual_review_reason"),
         "repo_path": state.get("repo_path"),
+        "rag_used": bool(state.get("rag_context")),
+        "rag_evidence": state.get("rag_evidence", []),
         "next_step": fix_rec.get("next_step_after_patch"),
     }
 
@@ -1749,6 +1771,7 @@ def main():
         "max_opportunities": args.max_opportunities,
         "should_end": False,
         "opp_index": 0,
+        "generated_patch_signatures": [],
     })
 
     print("=" * 55)

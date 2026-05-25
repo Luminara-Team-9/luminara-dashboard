@@ -262,6 +262,7 @@ def trigger_agent(
                 "max_opportunities": payload.max_opportunities,
                 "should_end": False,
                 "opp_index": 0,
+                "generated_patch_signatures": [],
 
                 # Metadata for dashboard/workspace.
                 "pr_branch": payload.pr_branch,
@@ -281,8 +282,15 @@ def trigger_agent(
                 "group": group.model_dump(),
             })
 
+            group_started_at = datetime.now()
+
             try:
                 result = agent_app.invoke(agent_input)
+
+                elapsed_seconds = round(
+                    (datetime.now() - group_started_at).total_seconds(),
+                    2,
+                )
 
                 group_result = {
                     "status": "success",
@@ -297,6 +305,7 @@ def trigger_agent(
                     "fix_plan_id": result.get("fix_plan_id"),
                     "confidence": result.get("confidence"),
                     "processed": result.get("opp_index", 0),
+                    "elapsed_seconds": elapsed_seconds,
                 }
 
                 group_results.append(group_result)
@@ -307,6 +316,11 @@ def trigger_agent(
                 })
 
             except Exception as e:
+                elapsed_seconds = round(
+                    (datetime.now() - group_started_at).total_seconds(),
+                    2,
+                )
+
                 group_result = {
                     "status": "agent_failed",
                     "mode": "audit_group",
@@ -317,6 +331,7 @@ def trigger_agent(
                     "page_type": group.page_type,
                     "device_type": group.device_type,
                     "error": str(e),
+                    "elapsed_seconds": elapsed_seconds,
                 }
 
                 group_results.append(group_result)
@@ -332,6 +347,11 @@ def trigger_agent(
             else "partial_failed"
         )
 
+        total_elapsed_seconds = round(
+            (datetime.now() - triggered_at).total_seconds(),
+            2,
+        )
+
         return {
             "status": overall_status,
             "mode": "audit_group",
@@ -343,6 +363,7 @@ def trigger_agent(
             "thread_id": payload.thread_id,
             "max_opportunities": payload.max_opportunities,
             "dry_run": payload.dry_run,
+            "total_elapsed_seconds": total_elapsed_seconds,
             "logs": logs,
         }
 
@@ -360,6 +381,7 @@ def trigger_agent(
             "max_opportunities": payload.max_opportunities,
             "should_end": False,
             "opp_index": 0,
+            "generated_patch_signatures": [],
 
             # Metadata for dashboard/workspace.
             "pr_branch": payload.pr_branch,
@@ -374,8 +396,15 @@ def trigger_agent(
             "thread_id": payload.thread_id,
         })
 
+        test_started_at = datetime.now()
+
         try:
             result = agent_app.invoke(agent_input)
+
+            elapsed_seconds = round(
+                (datetime.now() - test_started_at).total_seconds(),
+                2,
+            )
 
             logs.append({
                 "step": "agent_completed",
@@ -385,7 +414,13 @@ def trigger_agent(
                 "fix_plan_id": result.get("fix_plan_id"),
                 "confidence": result.get("confidence"),
                 "processed": result.get("opp_index", 0),
+                "elapsed_seconds": elapsed_seconds,
             })
+
+            total_elapsed_seconds = round(
+                (datetime.now() - triggered_at).total_seconds(),
+                2,
+            )
 
             return {
                 "status": "success",
@@ -400,16 +435,29 @@ def trigger_agent(
                 "thread_id": payload.thread_id,
                 "max_opportunities": payload.max_opportunities,
                 "dry_run": payload.dry_run,
+                "elapsed_seconds": elapsed_seconds,
+                "total_elapsed_seconds": total_elapsed_seconds,
                 "logs": logs,
             }
 
         except Exception as e:
+            elapsed_seconds = round(
+                (datetime.now() - test_started_at).total_seconds(),
+                2,
+            )
+
             logs.append({
                 "step": "agent_failed",
                 "mode": "test_id",
                 "test_id": payload.test_id,
                 "error": str(e),
+                "elapsed_seconds": elapsed_seconds,
             })
+
+            total_elapsed_seconds = round(
+                (datetime.now() - triggered_at).total_seconds(),
+                2,
+            )
 
             return {
                 "status": "agent_failed",
@@ -419,15 +467,24 @@ def trigger_agent(
                 "pr_branch": payload.pr_branch,
                 "target_dir": payload.target_dir,
                 "thread_id": payload.thread_id,
+                "max_opportunities": payload.max_opportunities,
+                "dry_run": payload.dry_run,
+                "elapsed_seconds": elapsed_seconds,
+                "total_elapsed_seconds": total_elapsed_seconds,
                 "logs": logs,
             }
-
     # ─────────────────────────────────────────
     # 3. Legacy/minimal payload:
     #    only pr_branch + target_dir + thread_id
     # ─────────────────────────────────────────
+    total_elapsed_seconds = round(
+        (datetime.now() - triggered_at).total_seconds(),
+        2,
+    )
+
     logs.append({
         "step": "missing_audit_identity",
+        "elapsed_seconds": total_elapsed_seconds,
         "message": (
             "No test_id and no playwright_run_id + failed_groups were provided. "
             "Listener will not guess by recent time window."
@@ -463,11 +520,18 @@ def trigger_agent(
             },
         },
         "received": safe_payload_dict(payload),
+        "total_elapsed_seconds": total_elapsed_seconds,
         "logs": logs,
     }
 
 
-# Compatibility endpoint for older manual tests.
-@app.post("/trigger")
-def trigger(payload: TriggerPayload):
-    return trigger_agent(payload)
+    # Compatibility endpoint for older manual tests.
+    @app.post("/trigger")
+    def trigger(
+        payload: TriggerPayload,
+        x_luminara_secret: Optional[str] = Header(default=None),
+    ):
+        return trigger_agent(
+            payload=payload,
+            x_luminara_secret=x_luminara_secret,
+        )
