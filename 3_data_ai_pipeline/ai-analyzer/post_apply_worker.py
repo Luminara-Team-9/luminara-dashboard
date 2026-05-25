@@ -50,6 +50,10 @@ load_dotenv()
 
 TARGET_DIR = os.getenv("AGENT_TARGET_DIR", "2_digital_twins/active-staging")
 LOCAL_TEST_PORT = int(os.getenv("LOCAL_TEST_PORT", "3099"))
+
+# Path to the permanently-installed active-staging whose node_modules we reuse.
+# If set and node_modules exists there, we symlink instead of re-installing.
+NODE_MODULES_SOURCE = os.getenv("NODE_MODULES_SOURCE", "")
 DEFAULT_POLL_INTERVAL = int(os.getenv("POST_APPLY_POLL_INTERVAL", "30"))
 WORKER_ID = os.getenv("HOSTNAME", "post_apply_worker")
 
@@ -173,6 +177,36 @@ def resolve_repo_path(fix_plan: dict) -> Optional[Path]:
     return None
 
 
+def _ensure_node_modules(app_dir: Path) -> str:
+    """
+    Ensure node_modules exists in app_dir as fast as possible.
+
+    Strategy (in priority order):
+    1. node_modules already present → skip install entirely.
+    2. NODE_MODULES_SOURCE env points to a valid node_modules dir → symlink it.
+    3. Fall through → caller runs pnpm install normally.
+
+    Returns: "skipped" | "symlinked" | "install_needed"
+    """
+    nm = app_dir / "node_modules"
+
+    if nm.exists() or nm.is_symlink():
+        print("  node_modules already present — skipping install", flush=True)
+        return "skipped"
+
+    src = NODE_MODULES_SOURCE
+    if src:
+        src_nm = Path(src) / "node_modules"
+        if src_nm.is_dir():
+            print(f"  Symlinking node_modules from {src_nm}", flush=True)
+            nm.symlink_to(src_nm.resolve())
+            return "symlinked"
+        else:
+            print(f"  ⚠️  NODE_MODULES_SOURCE set but {src_nm} not found — will install", flush=True)
+
+    return "install_needed"
+
+
 def run_build(app_dir: Path) -> tuple[bool, str]:
     """
     Install dependencies and build the Next.js app.
@@ -184,10 +218,16 @@ def run_build(app_dir: Path) -> tuple[bool, str]:
     pm = "pnpm" if shutil.which("pnpm") else "npm"
     print(f"  Using package manager: {pm}")
 
-    install_cmd = [pm, "install", "--frozen-lockfile"] if pm == "pnpm" else ["npm", "ci"]
-    build_cmd = [pm, "run", "build"]
+    nm_strategy = _ensure_node_modules(app_dir)
+    logs.append(f"node_modules strategy: {nm_strategy}")
 
-    for cmd in [install_cmd, build_cmd]:
+    if nm_strategy == "install_needed":
+        install_cmd = [pm, "install", "--frozen-lockfile"] if pm == "pnpm" else ["npm", "ci"]
+        cmds = [install_cmd, [pm, "run", "build"]]
+    else:
+        cmds = [[pm, "run", "build"]]
+
+    for cmd in cmds:
         label = " ".join(cmd)
         print(f"  Running: {label}", flush=True)
         buf = []
