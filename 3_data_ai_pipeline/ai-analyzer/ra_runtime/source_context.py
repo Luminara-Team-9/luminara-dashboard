@@ -268,22 +268,114 @@ def normalize_text(value: Any) -> str:
     return str(value).lower()
 
 
-def get_fix_text(fix_plan: Dict[str, Any]) -> str:
-    opportunity = fix_plan.get("opportunity") or {}
+def get_nested_dict(value: Any) -> Dict[str, Any]:
+    """
+    Safely return dictionary-like values.
 
-    return " ".join([
+    Some fix plan fields such as risk_details or opportunity may be:
+    - missing
+    - None
+    - not a dictionary
+
+    This prevents errors like:
+    AttributeError: 'NoneType' object has no attribute 'get'
+    """
+    return value if isinstance(value, dict) else {}
+
+
+def get_attempt_history_text(fix_plan: Dict[str, Any]) -> str:
+    """
+    Extract useful searchable text from attempt_history.
+
+    In real generated fix_plans, important classification hints can be stored
+    inside attempt_history, for example:
+    - lighthouse_opportunity_id: unused-javascript
+    - rag_evidence title: TBT Fix: Reduce JavaScript Execution
+    - source_patch_reason
+    """
+    history = fix_plan.get("attempt_history")
+
+    if not isinstance(history, list):
+        return ""
+
+    parts: List[str] = []
+
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+
+        parts.extend([
+            normalize_text(item.get("lighthouse_opportunity_id")),
+            normalize_text(item.get("source_patch_reason")),
+            normalize_text(item.get("patch_status")),
+        ])
+
+        rag_evidence = item.get("rag_evidence")
+
+        if isinstance(rag_evidence, list):
+            for evidence in rag_evidence:
+                if not isinstance(evidence, dict):
+                    continue
+
+                parts.extend([
+                    normalize_text(evidence.get("title")),
+                    normalize_text(evidence.get("source")),
+                    normalize_text(evidence.get("doc_type")),
+                ])
+
+    return " ".join(part for part in parts if part)
+
+
+def get_fix_text(fix_plan: Dict[str, Any]) -> str:
+    """
+    Build robust text used for source-context classification.
+
+    Fix Plan data can come from several places:
+    - top-level fix_plan fields
+    - nested opportunity object
+    - risk_details JSON
+    - attempt_history JSON
+
+    This text is used by classify_fix_type(), so missing one important word
+    like "unused-javascript" can make source_context collect the wrong files.
+    """
+    opportunity = get_nested_dict(fix_plan.get("opportunity"))
+    risk_details = get_nested_dict(fix_plan.get("risk_details"))
+
+    parts = [
+        # Top-level fields
         normalize_text(fix_plan.get("affected_metric")),
         normalize_text(fix_plan.get("action")),
         normalize_text(fix_plan.get("problem_summary")),
         normalize_text(fix_plan.get("reasoning")),
+        normalize_text(fix_plan.get("impact_if_fixed")),
+        normalize_text(fix_plan.get("priority")),
         normalize_text(fix_plan.get("page_type")),
+        normalize_text(fix_plan.get("device_type")),
+        normalize_text(fix_plan.get("site_type")),
+        normalize_text(fix_plan.get("opportunity_id")),
+        normalize_text(fix_plan.get("lighthouse_opportunity_id")),
+        normalize_text(fix_plan.get("category")),
+
+        # Nested opportunity fields
         normalize_text(opportunity.get("opportunity_id")),
         normalize_text(opportunity.get("title")),
         normalize_text(opportunity.get("description")),
         normalize_text(opportunity.get("category")),
-    ])
+        normalize_text(opportunity.get("affected_metric")),
 
+        # Risk details fields
+        normalize_text(risk_details.get("category")),
+        normalize_text(risk_details.get("failed_metrics")),
+        normalize_text(risk_details.get("group_key")),
+        normalize_text(risk_details.get("page_type")),
+        normalize_text(risk_details.get("device_type")),
 
+        # Attempt history / RAG evidence
+        get_attempt_history_text(fix_plan),
+    ]
+
+    return " ".join(part for part in parts if part)
 def classify_fix_type(fix_plan: Dict[str, Any]) -> str:
     """
     Generic problem classification based on Fix Plan + Lighthouse opportunity text.
