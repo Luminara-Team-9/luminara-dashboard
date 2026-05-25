@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { track } from '@/shared/analytics';
 
 const navCategories = [
   { label: '모든 스포츠', href: '/c/all-sports' },
@@ -77,11 +78,6 @@ export function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Drawer State
-
-  const handleEmptyLink = (e: React.MouseEvent) => {
-    e.preventDefault();
-    alert('등록된 상품이 없습니다. (No relevant items yet)');
-  };
 
   useEffect(() => {
     // Function to calculate total items in the cart
@@ -268,6 +264,14 @@ export function Header() {
             type="text"
             placeholder="검색"
             className="flex-1 text-sm bg-transparent outline-none"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                track({
+                  ev: 'search_query',
+                  meta: { search_term: e.currentTarget.value },
+                });
+              }
+            }}
           />
         </div>
       </div>
@@ -418,9 +422,14 @@ export function Header() {
                     </div>
                     <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
                       {megaMenuData[activeMenu]?.items?.map((item, idx) => (
-                        <div
+                        <a
                           key={item}
-                          onClick={idx === 0 ? undefined : handleEmptyLink}
+                          href={
+                            megaMenuData[item]?.link ||
+                            megaMenuData[activeMenu as string]?.link ||
+                            '#'
+                          }
+                          onClick={() => track({ ev: 'click_category', meta: { category: item } })}
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -432,11 +441,12 @@ export function Header() {
                             color: idx === 0 ? '#111827' : '#6b7280',
                             backgroundColor: idx === 0 ? '#f3f4f6' : 'transparent',
                             fontWeight: idx === 0 ? 700 : 400,
+                            textDecoration: 'none',
                           }}
                         >
                           <span>{item}</span>
                           <span style={{ color: '#9ca3af' }}>›</span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -477,9 +487,12 @@ export function Header() {
                         '러닝 클리어런스',
                         '러닝웨어',
                       ].map((subItem) => (
-                        <div
+                        <a
                           key={subItem}
-                          onClick={handleEmptyLink}
+                          href="/category/running"
+                          onClick={() =>
+                            track({ ev: 'click_category', meta: { category: subItem } })
+                          }
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -489,11 +502,12 @@ export function Header() {
                             cursor: 'pointer',
                             fontSize: '14px',
                             color: '#374151',
+                            textDecoration: 'none',
                           }}
                         >
                           <span>{subItem}</span>
                           <span style={{ color: '#9ca3af' }}>›</span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -579,9 +593,10 @@ export function Header() {
                     </div>
                     <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
                       {megaMenuData[activeMenu as string]?.items?.map((item) => (
-                        <div
+                        <a
                           key={item}
-                          onClick={handleEmptyLink}
+                          href={megaMenuData[activeMenu as string]?.link || '#'}
+                          onClick={() => track({ ev: 'click_category', meta: { category: item } })}
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -591,11 +606,12 @@ export function Header() {
                             cursor: 'pointer',
                             fontSize: '14px',
                             color: '#374151',
+                            textDecoration: 'none', // Keeps it from looking like a standard blue link
                           }}
                         >
                           <span>{item}</span>
                           <span style={{ color: '#9ca3af' }}>›</span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
