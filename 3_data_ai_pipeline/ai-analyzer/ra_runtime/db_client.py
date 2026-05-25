@@ -183,13 +183,7 @@ def claim_next_approved_fix_plan(
                     fp.run_frequency,
                     fp.workspace_path,
                     fp.build_status,
-                    fp.audit_status,
-
-                    lr.url,
-                    lr.performance_score,
-                    lr.lcp_ms,
-                    lr.tbt_ms,
-                    lr.cls_score
+                    fp.audit_status
                 """
             )
 
