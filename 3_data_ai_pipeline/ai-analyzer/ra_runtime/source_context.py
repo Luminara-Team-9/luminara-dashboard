@@ -25,6 +25,17 @@ IGNORED_DIRS = {
     ".turbo", "coverage", ".cache"
 }
 
+EXCLUDED_PATH_KEYWORDS = [
+    "scraper",
+    "test",
+    "spec",
+    "__tests__",
+    "storybook",
+    "playwright",
+    "cypress",
+    "docs",
+]
+
 MAX_FILE_CHARS = 20000
 MAX_SNIPPET_CHARS = 5000
 MAX_CANDIDATE_FILES = 5
@@ -478,6 +489,18 @@ def score_fix_type_signals(
             score += 10
 
     elif fix_type == "javascript":
+        if "swetrix" in path_text or "swetrix" in content_text:
+            score += 30
+        if "analytics" in path_text or "analytics" in content_text:
+            score += 25
+        if "tracker" in path_text or "tracker" in content_text:
+            score += 25
+        if "provider" in path_text or "provider" in content_text:
+            score += 22
+        if "layout" in path_text:
+            score += 18
+        if "chatwidget" in path_text.lower() or "chatwidget" in content_text.lower():
+            score += 18
         if "dynamic(" in content_text or "react.lazy" in content_text:
             score += 16
         if "import(" in content_text:
@@ -486,11 +509,7 @@ def score_fix_type_signals(
             score += 8
         if "<script" in content_text or "script" in content_text:
             score += 12
-        if "analytics" in content_text or "tracker" in content_text:
-            score += 12
-        if "provider" in path_text or "layout" in path_text:
-            score += 14
-        if "package.json" in path_text:
+        if "package.json" in path_text and "scripts/scraper" not in path_text:
             score += 8
 
     elif fix_type == "css":
@@ -601,6 +620,11 @@ def score_file(
 
     if ("mock" in path_text or "data" in path_text) and fix_type not in {"image", "layout"}:
         score -= 12
+
+    for token in EXCLUDED_PATH_KEYWORDS:
+        if token in path_text:
+            score -= 40
+
 
     return score
 
