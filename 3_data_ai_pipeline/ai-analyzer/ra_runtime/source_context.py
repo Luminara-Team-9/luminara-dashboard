@@ -707,7 +707,7 @@ if __name__ == "__main__":
         repo_path=test_repo_path,
         target_dir=test_target_dir,
         fix_plan=sample_fix_plan,
-        repo_map_path="repo_map.json",
+        repo_map_path="../repo_map.json",
     )
 
     print("✅ Source context collected")
