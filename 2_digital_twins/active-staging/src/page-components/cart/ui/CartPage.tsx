@@ -44,6 +44,11 @@ export function CartPage() {
     } else {
       newCart[index].quantity = newQuantity;
       setCartItems(newCart);
+
+      track({
+        ev: delta > 0 ? 'increase_cart_quantity' : 'decrease_cart_quantity',
+        meta: { productName: newCart[index].name },
+      });
     }
   };
 
@@ -53,6 +58,14 @@ export function CartPage() {
       newCart.splice(itemToDelete, 1);
       setCartItems(newCart);
       setItemToDelete(null);
+
+      track({
+        ev: 'remove_from_cart',
+        meta: {
+          productName: deletedItem.name,
+          lostRevenue: deletedItem.price * deletedItem.quantity, // Tracks exactly how much money was lost!
+        },
+      });
     }
   };
 
