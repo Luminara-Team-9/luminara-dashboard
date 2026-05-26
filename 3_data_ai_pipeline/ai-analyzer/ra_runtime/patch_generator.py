@@ -183,25 +183,50 @@ Image/LCP (prioritize-lcp-image, offscreen-images, modern-image-formats):
 
 JavaScript/TBT (unused-javascript, bootup-time):
   DO NOT try to remove imports — you cannot know which are unused without runtime data.
-  Instead, look ONLY for these specific safe patterns in the source:
-  1. Next.js <Script> components: if strategy="afterInteractive" is used for non-critical
-     third-party scripts (analytics, chat, marketing, tracking) → change to strategy="lazyOnload".
-     Example: <Script src="..." strategy="afterInteractive" /> → strategy="lazyOnload"
-  2. Inline <script> tags loading third-party tools → add defer attribute.
-  3. Heavy provider components in layout that wrap the entire app with no lazy loading →
-     convert to next/dynamic with ssr=false, BUT only if original_code includes both the
-     import statement AND the JSX usage together in one block.
-  If none of these patterns are present in the source context → return auto_applicable=false.
-  Do NOT generate dynamic() patches for partial import-only blocks.
+  Instead, look for ANY of these safe patterns in the source:
+
+  PATTERN 1 — Next.js <Script> strategy deferral:
+    If a <Script> component uses strategy="afterInteractive" for non-critical scripts
+    (analytics, chat, marketing, tracking) → change to strategy="lazyOnload".
+    Example: <Script src="..." strategy="afterInteractive" /> → strategy="lazyOnload"
+
+  PATTERN 2 — Custom analytics/tracker component in layout:
+    If layout.tsx imports a custom tracker/analytics/chat component (e.g. SwetrixTracker,
+    GTMTracker, ChatWidget, AnalyticsProvider) AND uses it in JSX, wrap it with next/dynamic
+    so it loads after the page is interactive.
+    original_code MUST include BOTH the import line AND the JSX usage in one block.
+    Example:
+      original_code:
+        import SwetrixTracker from '../shared/analytics/SwetrixTracker'
+        ...
+        <SwetrixTracker />
+      suggested_code:
+        import dynamic from 'next/dynamic'
+        const SwetrixTracker = dynamic(() => import('../shared/analytics/SwetrixTracker'), {{ ssr: false }})
+        ...
+        <SwetrixTracker />
+    The JSX usage line (<SwetrixTracker />) must appear unchanged in suggested_code.
+
+  PATTERN 3 — Font display optimization (also reduces render-blocking):
+    If a next/font or Google Font config is missing display: 'swap', add it.
+    Example: Roboto({{ subsets: ['latin'] }}) → Roboto({{ subsets: ['latin'], display: 'swap' }})
+    This is safe and has no side effects.
+
+  PATTERN 4 — Inline <script> tags → add defer attribute.
+
+  Priority: check all 4 patterns. If ANY pattern is present, generate that patch.
+  If NONE of the 4 patterns are found → return auto_applicable=false.
+  Do NOT generate dynamic() patches that only change the import line without including JSX usage.
 
 CSS/FCP (unused-css-rules, render-blocking-resources):
   DO NOT try to remove CSS rules — you cannot know which are unused without runtime coverage.
-  Instead, look ONLY for these specific safe patterns in the source:
-  1. Google Fonts URL that is missing display=swap parameter →
-     add &display=swap to the URL.
-     Example: fonts.googleapis.com/css2?family=Inter → fonts.googleapis.com/css2?family=Inter&display=swap
-  2. @font-face declarations missing font-display: swap → add font-display: swap inside the block.
-  3. Stylesheet <link> loaded without rel="preload" for critical above-fold fonts → add preload hint.
+  Instead, look for ANY of these safe patterns in the source:
+  1. Google Fonts URL missing display=swap → add &display=swap.
+     Example: fonts.googleapis.com/css2?family=Inter → ...&display=swap
+  2. next/font config missing display: 'swap' → add it.
+     Example: Inter({{ subsets: ['latin'] }}) → Inter({{ subsets: ['latin'], display: 'swap' }})
+  3. @font-face declarations missing font-display: swap → add font-display: swap.
+  4. Stylesheet <link> missing rel="preload" for critical fonts → add preload hint.
   If none of these patterns are present → return auto_applicable=false.
 
 Server/TTFB (server-response-time):
@@ -519,11 +544,22 @@ def unsafe_partial_dynamic_refactor(patch: Dict[str, Any]) -> bool:
     if "strategy=" in original or "strategy=" in suggested:
         return False
 
-    # Dynamic refactor touching imports only — unsafe without JSX scope.
     has_imports = "import " in original
     has_jsx = "<" in original and "/>" in original
 
     if has_imports and not has_jsx:
+        # Default import → dynamic() is always safe: the component name is preserved
+        # e.g. import SwetrixTracker from '...' → const SwetrixTracker = dynamic(...)
+        # Named import → dynamic() is unsafe without seeing the JSX to confirm the export shape
+        is_default_import_only = all(
+            bool(re.match(r"import\s+\w+\s+from\s+['\"]", line.strip()))
+            or not line.strip().startswith("import ")
+            for line in original.splitlines()
+            if line.strip()
+        )
+        if is_default_import_only:
+            return False
+
         return True
 
     return False
