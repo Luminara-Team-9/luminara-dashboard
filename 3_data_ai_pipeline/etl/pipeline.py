@@ -40,7 +40,19 @@ from load import (
 )
 
 
-load_dotenv()
+# Search for .env in current dir, then parent dirs (etl/ → 3_data_ai_pipeline/ → ai-analyzer/)
+_here = os.path.dirname(os.path.abspath(__file__))
+_candidates = [
+    os.path.join(_here, ".env"),
+    os.path.join(_here, "..", "ai-analyzer", ".env"),
+    os.path.join(_here, "..", ".env"),
+]
+for _env_path in _candidates:
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+        break
+else:
+    load_dotenv()  # fallback: let python-dotenv search upward
 
 
 # ─────────────────────────────────────────────
