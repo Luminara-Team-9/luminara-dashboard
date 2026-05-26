@@ -207,13 +207,22 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
     """
     fix_branch = f"fix/ai-patch-{fix_plan_id}"
 
-    def git(args: list) -> subprocess.CompletedProcess:
+    AI_ENV = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "Luminara AI Agent",
+        "GIT_AUTHOR_EMAIL": "luminara-ai@noreply.github.com",
+        "GIT_COMMITTER_NAME": "Luminara AI Agent",
+        "GIT_COMMITTER_EMAIL": "luminara-ai@noreply.github.com",
+    }
+
+    def git(args: list, use_ai_identity: bool = False) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git"] + args,
             cwd=str(repo_path),
             capture_output=True,
             text=True,
             timeout=120,
+            env=AI_ENV if use_ai_identity else None,
         )
 
     # Stash patch changes so git pull --rebase doesn't refuse
@@ -254,7 +263,7 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
         f"perf: apply AI-generated patch for fix_plan_id={fix_plan_id}\n\n"
         f"Automated patch by Luminara Remediation Agent.\n"
         f"Build verified locally before push.",
-    ])
+    ], use_ai_identity=True)
     if commit.returncode != 0:
         return False, f"git commit failed:\n{commit.stderr}"
 
