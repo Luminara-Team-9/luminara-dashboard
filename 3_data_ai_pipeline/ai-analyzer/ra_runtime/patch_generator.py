@@ -658,11 +658,96 @@ def validate_patch_against_files(
     }
 
 
+# Lighthouse opportunity IDs that cannot be auto-patched from static source code.
+# These require runtime analysis, infrastructure changes, or build config — not code edits.
+NON_AUTO_PATCHABLE_OPPORTUNITIES: Dict[str, str] = {
+    "unused-javascript": (
+        "Reducing unused JavaScript requires runtime bundle analysis "
+        "(e.g., webpack-bundle-analyzer or Chrome DevTools Coverage tab) to identify "
+        "which imports are truly unused at runtime. Static source analysis cannot safely "
+        "determine this.\n"
+        "Developer action: Run bundle analysis, then manually remove or dynamically "
+        "import unused dependencies."
+    ),
+    "unused-css-rules": (
+        "Removing unused CSS requires runtime CSS coverage analysis "
+        "(e.g., Chrome DevTools Coverage tab or PurgeCSS) to identify which rules "
+        "are never applied. Static analysis cannot determine this safely.\n"
+        "Developer action: Run PurgeCSS or check Chrome Coverage report, "
+        "then remove confirmed unused CSS rules."
+    ),
+    "server-response-time": (
+        "Improving server response time (TTFB) requires server-side infrastructure changes "
+        "such as CDN caching, Redis/Memcached, or server optimization — not frontend code.\n"
+        "Developer action: Add Cache-Control headers in next.config.js headers(), "
+        "configure CDN, or implement server-side caching."
+    ),
+    "legacy-javascript": (
+        "Removing legacy JavaScript polyfills requires updating build configuration "
+        "(browserslist, Babel/SWC targets) — not patchable as source code.\n"
+        "Developer action: Update .browserslistrc or next.config.js transpile targets."
+    ),
+    "bootup-time": (
+        "Reducing JavaScript bootup time requires runtime profiling to identify which "
+        "specific scripts are slow. Static analysis cannot pinpoint the bottleneck.\n"
+        "Developer action: Use Chrome DevTools Performance tab, then defer or remove "
+        "the identified heavy scripts."
+    ),
+    "third-party-summary": (
+        "Third-party script optimization requires a manual audit of which scripts are "
+        "necessary and which can be deferred, removed, or self-hosted.\n"
+        "Developer action: Audit all third-party scripts and configure non-critical "
+        "ones to load asynchronously or be removed."
+    ),
+    "third-party-facades": (
+        "Implementing third-party facades requires replacing embedded widgets with "
+        "lazy-loaded placeholder components — a significant change needing careful review.\n"
+        "Developer action: Replace third-party embeds with facade components "
+        "using next/dynamic."
+    ),
+    "total-byte-weight": (
+        "Reducing total page weight requires identifying the largest resources from a "
+        "runtime network waterfall. The specific files to optimize depend on actual "
+        "network load order.\n"
+        "Developer action: Review the Lighthouse network waterfall and optimize the "
+        "largest transfered resources first."
+    ),
+}
+
+
 def generate_patch_from_source(
     fix_plan: Dict[str, Any],
     source_context: Dict[str, Any],
     repo_path: str,
 ) -> Dict[str, Any]:
+    # Pre-check: some Lighthouse opportunity types cannot be auto-patched from
+    # static source code. Return a clear human reason immediately — no Qwen call.
+    opportunity = fix_plan.get("opportunity") or {}
+    lighthouse_opp_id = str(opportunity.get("opportunity_id") or "").strip()
+
+    non_patchable_reason = NON_AUTO_PATCHABLE_OPPORTUNITIES.get(lighthouse_opp_id)
+    if non_patchable_reason:
+        return {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": non_patchable_reason,
+        }
+
+    # Also block server fix_type as a catch-all (even if opportunity_id is unknown).
+    fix_type = source_context.get("fix_type") or classify_fix_type(fix_plan)
+    if fix_type == "server":
+        return {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": (
+                "Server/infrastructure optimization cannot be automated through frontend "
+                "source code patches. This requires CDN configuration, cache headers, "
+                "or server-side caching setup.\n"
+                "Developer action: Configure Cache-Control headers in next.config.js "
+                "headers() function or implement Redis/Memcached at the server level."
+            ),
+        }
+
     if not source_context.get("candidate_files"):
         return {
             "auto_applicable": False,
