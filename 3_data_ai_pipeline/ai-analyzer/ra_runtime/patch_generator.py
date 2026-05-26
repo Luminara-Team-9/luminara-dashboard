@@ -190,22 +190,31 @@ JavaScript/TBT (unused-javascript, bootup-time):
     (analytics, chat, marketing, tracking) → change to strategy="lazyOnload".
     Example: <Script src="..." strategy="afterInteractive" /> → strategy="lazyOnload"
 
-  PATTERN 2 — Custom analytics/tracker component in layout:
+  PATTERN 2 — Custom analytics/tracker/chat component in layout:
     If layout.tsx imports a custom tracker/analytics/chat component (e.g. SwetrixTracker,
-    GTMTracker, ChatWidget, AnalyticsProvider) AND uses it in JSX, wrap it with next/dynamic
-    so it loads after the page is interactive.
-    original_code MUST include BOTH the import line AND the JSX usage in one block.
-    Example:
+    GTMTracker, ChatWidget, AnalyticsProvider), wrap ONE of them with next/dynamic.
+
+    CRITICAL RULES for this pattern:
+    - original_code must be ONLY the single import line for that ONE component.
+    - DO NOT include other import lines in original_code. DO NOT remove other imports.
+    - suggested_code replaces ONLY that one import line with a dynamic() const.
+    - For default imports: const X = dynamic(() => import('...'), {{ ssr: false }})
+    - For named imports {{ X }}: const X = dynamic(() => import('...').then(mod => mod.X), {{ ssr: false }})
+    - You do NOT need to include the JSX usage line — the component name stays the same.
+
+    Example (named import):
+      original_code:
+        import {{ ChatWidget }} from '@/widgets/chat/ui/ChatWidget';
+      suggested_code:
+        import dynamic from 'next/dynamic'
+        const ChatWidget = dynamic(() => import('@/widgets/chat/ui/ChatWidget').then(mod => mod.ChatWidget), {{ ssr: false }})
+
+    Example (default import):
       original_code:
         import SwetrixTracker from '../shared/analytics/SwetrixTracker'
-        ...
-        <SwetrixTracker />
       suggested_code:
         import dynamic from 'next/dynamic'
         const SwetrixTracker = dynamic(() => import('../shared/analytics/SwetrixTracker'), {{ ssr: false }})
-        ...
-        <SwetrixTracker />
-    The JSX usage line (<SwetrixTracker />) must appear unchanged in suggested_code.
 
   PATTERN 3 — Font display optimization (also reduces render-blocking):
     If a next/font or Google Font config is missing display: 'swap', add it.
@@ -549,8 +558,6 @@ def unsafe_partial_dynamic_refactor(patch: Dict[str, Any]) -> bool:
 
     if has_imports and not has_jsx:
         # Default import → dynamic() is always safe: the component name is preserved
-        # e.g. import SwetrixTracker from '...' → const SwetrixTracker = dynamic(...)
-        # Named import → dynamic() is unsafe without seeing the JSX to confirm the export shape
         is_default_import_only = all(
             bool(re.match(r"import\s+\w+\s+from\s+['\"]", line.strip()))
             or not line.strip().startswith("import ")
@@ -560,7 +567,25 @@ def unsafe_partial_dynamic_refactor(patch: Dict[str, Any]) -> bool:
         if is_default_import_only:
             return False
 
-        return True
+        # Named import → dynamic() is safe IF every removed named component
+        # is redeclared as a const in suggested_code.
+        # e.g. import { ChatWidget } from '...' → const ChatWidget = dynamic(...)
+        for line in original.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("import "):
+                continue
+            if stripped in suggested:
+                continue  # import kept unchanged — fine
+            match = re.search(r"import\s+\{([^}]+)\}", stripped)
+            if match:
+                names = [
+                    n.strip().split(" as ")[-1].strip()
+                    for n in match.group(1).split(",")
+                ]
+                for name in names:
+                    if f"const {name}" not in suggested and f"import {name}" not in suggested:
+                        return True  # name lost without redeclaration — unsafe
+        return False
 
     return False
 
