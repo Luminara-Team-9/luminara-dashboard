@@ -78,7 +78,7 @@ runs:
         # 1. Capture Git Metadata from Host
         COMMIT_MSG=$(git log -1 --pretty=%B)
         COMMIT_TIME=$(git log -1 --format=%cI)
-        
+
         # 2. Inject ALL Metadata (Added Commit Time and Avatar URL)
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_MESSAGE="$COMMIT_MSG"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__COMMIT_TIME="$COMMIT_TIME"
@@ -87,7 +87,7 @@ runs:
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__BRANCH="${{ github.ref_name }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__ANCESTOR_HASH="${{ github.event.pull_request.base.sha }}"
         export SINGULARITYENV_LHCI_BUILD_CONTEXT__AVATAR_URL="https://github.com/${{ github.actor }}.png"
-        
+
         # 3. Credentials & URL
         export SINGULARITYENV_LHCI_BUILD_TOKEN="${{ inputs.lhci_token }}"
         export SINGULARITYENV_LHCI_USER="${{ inputs.lhci_user }}"
@@ -111,7 +111,6 @@ runs:
           --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
-          --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
           --collect.settings.preset=desktop \
           --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN
 
@@ -142,7 +141,7 @@ runs:
         echo "------------------------------------------------"
         echo "📊 DUMPING DIGITAL TWIN LOGS (Instance: ${{ env.TWIN_NAME }})"
         echo "------------------------------------------------"
-        
+
         find "$HOME/.singularity/instances/logs" -name "${{ env.TWIN_NAME }}.*" -exec echo "--- File: {} ---" \; -exec cat {} \; || echo "No instance logs found."
 
         # Check the .err file for the Twin instance

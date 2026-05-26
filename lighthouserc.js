@@ -1,3 +1,20 @@
+const baseUrl = process.env.LHCI_COLLECT_URL || '';
+const isRealDecathlon = baseUrl.includes('decathlon.co.kr');
+
+const targetUrls = isRealDecathlon
+  ? [
+      `${baseUrl}/`,
+      `${baseUrl}/cart`,
+      `${baseUrl}/c/first-choice.html?itm_source=hp&itm_medium=circlebanner&itm_campaign=firstchoice-260306`,
+      `${baseUrl}/p/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.html`,
+    ]
+  : [
+      `${baseUrl}/`,
+      `${baseUrl}/cart`,
+      `${baseUrl}/category/first-choice`,
+      `${baseUrl}/product/8488034`,
+    ];
+
 module.exports = {
   ci: {
     collect: {
