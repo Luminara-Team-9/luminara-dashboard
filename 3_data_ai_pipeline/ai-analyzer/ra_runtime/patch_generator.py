@@ -113,144 +113,86 @@ def build_patch_prompt(
     return f"""
 You are the source-aware patch generator for Luminara Remediation Agent.
 
-You are given:
-1. A performance Fix Plan from Lighthouse/RAG.
-2. Actual source code snippets collected from the PR branch.
+You are given a Lighthouse performance problem and the actual source code from the repository.
+Your job: analyze the source code, understand the problem, and generate the ONE safest possible patch.
 
-Your job:
-Generate ONE safe code patch that can be applied to the provided source code.
-
-Detected fix type:
-{detected_fix_type}
+Fix type: {detected_fix_type}
 
 Fix Plan:
 {json.dumps(fix_plan, indent=2, ensure_ascii=False, default=str)}
 
-Available source context:
+Source code:
 {source_context_text}
 
-Return ONLY valid JSON with this exact structure:
+--- HARD RULES (these are enforced by a validator — violations will be rejected) ---
+
+File and code rules:
+- target_file MUST be copied exactly from one of the SOURCE_FILE paths above. Do not invent paths.
+- original_code MUST be an exact copy of code from the provided source snippets.
+- suggested_code MUST compile as valid TypeScript/JavaScript as-is. No placeholders.
+- Do NOT return markdown. Return only the JSON object.
+- Prefer the smallest patch that directly addresses the Lighthouse opportunity.
+- Do not make a patch just because source code exists — it must fix the actual problem.
+
+Import safety rules:
+- Do NOT remove an import line unless you also remove every JSX usage of that import.
+- If you convert import X to dynamic(), the const X must be declared in suggested_code.
+- For named imports {{ X }}: use dynamic(() => import('...').then(mod => mod.X), {{ ssr: false }})
+- For default imports X: use dynamic(() => import('...'), {{ ssr: false }})
+- If suggested_code uses dynamic(), include import dynamic from 'next/dynamic' in suggested_code.
+- Do NOT touch import lines that are unrelated to your patch.
+
+When to return auto_applicable=false:
+- No code in the source context directly relates to the Lighthouse opportunity.
+- The only fix requires runtime data (e.g. which specific CSS rules are unused).
+- The fix requires infrastructure changes (server config, CDN, Redis).
+- You cannot find a safe, exact original_code block to replace.
+
+--- CONSTRAINTS BY FIX TYPE ---
+
+image (LCP, offscreen images):
+  Add loading, fetchPriority, decoding attributes to <img> tags.
+  Do not guess dimensions — only add width/height if already in the source.
+
+javascript (unused-javascript, TBT):
+  Do NOT try to remove imports or bundle code — you have no runtime data.
+  Safe options you may use if present in the source:
+  - Change <Script strategy="afterInteractive"> to strategy="lazyOnload" for non-critical scripts.
+  - Convert a non-critical analytics/chat import to dynamic() so it loads after page is interactive.
+  - Add display:'swap' to a next/font config that is missing it.
+  If none of these apply to the actual source code shown → return auto_applicable=false.
+
+css (unused-css-rules, render-blocking):
+  Do NOT remove CSS rules. Safe options: add display=swap to Google Fonts URL,
+  add display:'swap' to next/font config, add font-display:swap to @font-face.
+  If none apply → return auto_applicable=false.
+
+server (server-response-time, TTFB):
+  Only patch next.config.js headers() for Cache-Control on static paths.
+  If next.config.js is not in the source context → return auto_applicable=false.
+
+layout (CLS):
+  Only patch width, height, aspect-ratio, min-height values.
+
+--- OUTPUT FORMAT ---
+
+Return ONLY this JSON (no markdown, no extra text):
 
 {{
   "auto_applicable": true,
   "patches": [
     {{
-      "target_file": "path copied exactly from one SOURCE_FILE path",
-      "original_code": "exact code copied from the provided source snippet",
-      "suggested_code": "complete replacement code",
+      "target_file": "exact path from SOURCE_FILE",
+      "original_code": "exact code from source",
+      "suggested_code": "replacement code that compiles",
       "change_type": "code_replace",
-      "change_reason": "short reason why this improves the selected Lighthouse opportunity"
+      "change_reason": "one sentence: what this fixes and why it helps"
     }}
   ],
   "manual_review_reason": null
 }}
 
-Strict rules:
-- You MUST NOT invent file paths.
-- target_file MUST be copied exactly from one of the SOURCE_FILE paths.
-- original_code MUST be copied exactly from the provided source snippets.
-- suggested_code MUST be real code that replaces original_code.
-- Do NOT use placeholder code.
-- Do NOT return markdown.
-- Do NOT modify unrelated logic.
-- Prefer the smallest safe patch.
-- If no safe exact patch can be generated from the provided snippets, return auto_applicable=false.
-- original_code must be a real code block, not only a URL or string literal.
-- Do not make a patch just because source code exists. The patch must directly address the selected Lighthouse opportunity.
-- Do NOT comment out imports unless the imported component is also removed from JSX.
-- Do NOT return suggestion comments such as "Consider...", "Maybe...", or "Should..." inside suggested_code.
-- If lazy loading is needed, write actual working code using dynamic import.
-- suggested_code must compile as-is.
-- If suggested_code uses dynamic(), it MUST also include import dynamic from 'next/dynamic' in the replacement block or original_code must already contain it.
-- Do NOT use dynamic import for named exports unless you correctly map the named export with .then(mod => mod.ComponentName).
-- original_code must contain ALL dependent lines required for the patch to compile.
-- If modifying imports, original_code must also include related component declarations or JSX usage.
-- Do NOT generate partial import-only refactors.
-
-Opportunity matching rules:
-- First understand the selected Lighthouse opportunity from the Fix Plan.
-- Generate a patch ONLY if the source code contains code directly related to that selected opportunity.
-- If the source context only contains unrelated files, return auto_applicable=false.
-
-Patch guidance by fix type — read carefully, each has a SPECIFIC safe strategy:
-
-Image/LCP (prioritize-lcp-image, offscreen-images, modern-image-formats):
-  - For image galleries using map((img, i) => ...), first image: loading={{i===0?'eager':'lazy'}}, fetchPriority={{i===0?'high':'auto'}}, decoding="async".
-  - For a single hero/LCP image: loading="eager", fetchPriority="high", decoding="async".
-  - For below-fold images: add loading="lazy".
-  - Do NOT set loading="lazy" on the first/hero image.
-  - Add width/height only when dimensions are already known in the source.
-
-JavaScript/TBT (unused-javascript, bootup-time):
-  DO NOT try to remove imports — you cannot know which are unused without runtime data.
-  Instead, look for ANY of these safe patterns in the source:
-
-  PATTERN 1 — Next.js <Script> strategy deferral:
-    If a <Script> component uses strategy="afterInteractive" for non-critical scripts
-    (analytics, chat, marketing, tracking) → change to strategy="lazyOnload".
-    Example: <Script src="..." strategy="afterInteractive" /> → strategy="lazyOnload"
-
-  PATTERN 2 — Custom analytics/tracker/chat component in layout:
-    If layout.tsx imports a custom tracker/analytics/chat component (e.g. SwetrixTracker,
-    GTMTracker, ChatWidget, AnalyticsProvider), wrap ONE of them with next/dynamic.
-
-    CRITICAL RULES for this pattern:
-    - original_code must be ONLY the single import line for that ONE component.
-    - DO NOT include other import lines in original_code. DO NOT remove other imports.
-    - suggested_code replaces ONLY that one import line with a dynamic() const.
-    - For default imports: const X = dynamic(() => import('...'), {{ ssr: false }})
-    - For named imports {{ X }}: const X = dynamic(() => import('...').then(mod => mod.X), {{ ssr: false }})
-    - You do NOT need to include the JSX usage line — the component name stays the same.
-
-    Example (named import):
-      original_code:
-        import {{ ChatWidget }} from '@/widgets/chat/ui/ChatWidget';
-      suggested_code:
-        import dynamic from 'next/dynamic'
-        const ChatWidget = dynamic(() => import('@/widgets/chat/ui/ChatWidget').then(mod => mod.ChatWidget), {{ ssr: false }})
-
-    Example (default import):
-      original_code:
-        import SwetrixTracker from '../shared/analytics/SwetrixTracker'
-      suggested_code:
-        import dynamic from 'next/dynamic'
-        const SwetrixTracker = dynamic(() => import('../shared/analytics/SwetrixTracker'), {{ ssr: false }})
-
-  PATTERN 3 — Font display optimization (also reduces render-blocking):
-    If a next/font or Google Font config is missing display: 'swap', add it.
-    Example: Roboto({{ subsets: ['latin'] }}) → Roboto({{ subsets: ['latin'], display: 'swap' }})
-    This is safe and has no side effects.
-
-  PATTERN 4 — Inline <script> tags → add defer attribute.
-
-  Priority: check all 4 patterns. If ANY pattern is present, generate that patch.
-  If NONE of the 4 patterns are found → return auto_applicable=false.
-  Do NOT generate dynamic() patches that only change the import line without including JSX usage.
-
-CSS/FCP (unused-css-rules, render-blocking-resources):
-  DO NOT try to remove CSS rules — you cannot know which are unused without runtime coverage.
-  Instead, look for ANY of these safe patterns in the source:
-  1. Google Fonts URL missing display=swap → add &display=swap.
-     Example: fonts.googleapis.com/css2?family=Inter → ...&display=swap
-  2. next/font config missing display: 'swap' → add it.
-     Example: Inter({{ subsets: ['latin'] }}) → Inter({{ subsets: ['latin'], display: 'swap' }})
-  3. @font-face declarations missing font-display: swap → add font-display: swap.
-  4. Stylesheet <link> missing rel="preload" for critical fonts → add preload hint.
-  If none of these patterns are present → return auto_applicable=false.
-
-Server/TTFB (server-response-time):
-  Look ONLY in next.config.js or middleware files.
-  If next.config.js has a headers() function → add Cache-Control: public, max-age=31536000 for
-  static asset paths (/_next/static, /images, /fonts) that do not already have it.
-  If next.config.js is not in the source context → return auto_applicable=false.
-
-Layout/CLS:
-  Only patch width, height, aspect-ratio, min-height, skeleton placeholder code.
-
-Unknown:
-  Return auto_applicable=false.
-
-If no safe exact patch can be generated, return:
+If no safe patch exists:
 
 {{
   "auto_applicable": false,
