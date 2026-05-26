@@ -231,6 +231,9 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
     if stage.returncode != 0:
         return False, f"git add failed:\n{stage.stderr}"
 
+    # Unstage any .bak_* backup files created by apply_patch.py
+    git(["reset", "HEAD", "--", "*.bak_*", "**/*.bak_*"])
+
     status = git(["status", "--porcelain"])
     if not status.stdout.strip():
         # Nothing new to commit — push whatever is on this branch

@@ -178,7 +178,8 @@ def get_network_items(audits: Dict[str, Any]) -> List[Dict[str, Any]]:
 def sum_resource_kb(network_items: List[Dict[str, Any]], resource_types: List[str]) -> Optional[float]:
     """
     Sum transferSize for one or more resource types.
-    Lighthouse resourceType values can vary across versions.
+    Lighthouse resourceType values can vary across versions
+    (e.g. "Script" vs "script", "Stylesheet" vs "stylesheet").
     """
     wanted = {item.lower() for item in resource_types}
 
@@ -188,7 +189,11 @@ def sum_resource_kb(network_items: List[Dict[str, Any]], resource_types: List[st
         resource_type = str(item.get("resourceType", "")).lower()
 
         if resource_type in wanted:
-            total += safe_float(item.get("transferSize")) or 0
+            # Prefer transferSize; fall back to resourceSize if missing
+            size = safe_float(item.get("transferSize"))
+            if size is None:
+                size = safe_float(item.get("resourceSize"))
+            total += size or 0
 
     return round(total / 1024, 2) if total > 0 else None
 
