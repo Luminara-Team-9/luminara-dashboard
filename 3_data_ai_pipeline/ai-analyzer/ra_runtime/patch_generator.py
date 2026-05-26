@@ -32,7 +32,7 @@ QWEN_MODEL = os.getenv(
 
 QWEN_BASE_URL = os.getenv(
     "QWEN_BASE_URL",
-    "http://localhost:8000/v1",
+    "http://DIS02:8000/v1",
 )
 
 QWEN_API_KEY = os.getenv("QWEN_API_KEY", "dummy")
@@ -753,10 +753,23 @@ def generate_patch_from_source(
     source_context: Dict[str, Any],
     repo_path: str,
 ) -> Dict[str, Any]:
-    # Pre-check: some Lighthouse opportunity types cannot be auto-patched from
-    # static source code. Return a clear human reason immediately — no Qwen call.
     opportunity = fix_plan.get("opportunity") or {}
     lighthouse_opp_id = str(opportunity.get("opportunity_id") or "").strip()
+
+    # Always write entry marker so we can see the function was called and which path it takes.
+    try:
+        import datetime as _dt
+        _debug_path = Path("/tmp/qwen_patch_debug.log")
+        with open(_debug_path, "a", encoding="utf-8") as _f:
+            _f.write(
+                f"\n{'='*60}\n"
+                f"ENTER  time={_dt.datetime.now().isoformat()}  "
+                f"fix_plan_id={fix_plan.get('id')}  opp_id={lighthouse_opp_id}  "
+                f"fix_type={source_context.get('fix_type')}  "
+                f"qwen_url={QWEN_BASE_URL}\n"
+            )
+    except Exception:
+        pass
 
     non_patchable_reason = NON_AUTO_PATCHABLE_OPPORTUNITIES.get(lighthouse_opp_id)
     if non_patchable_reason:
@@ -831,6 +844,12 @@ def generate_patch_from_source(
         patch_result = extract_json(raw)
 
     except Exception as e:
+        try:
+            _debug_path = Path("/tmp/qwen_patch_debug.log")
+            with open(_debug_path, "a", encoding="utf-8") as _f:
+                _f.write(f"QWEN_ERROR: {e}\n")
+        except Exception:
+            pass
         return {
             "auto_applicable": False,
             "patches": [],
