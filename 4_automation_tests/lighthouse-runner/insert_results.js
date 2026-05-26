@@ -6,7 +6,8 @@ const { Client } = pg;
 const RESULTS_DIR = '/abr/coss41/shared_workspace/phoo_workspace/codebase/luminara-dashboard/4_automation_tests/lighthouse-runner/results';
 
 const client = new Client({
-  host: process.env.POSTGRES_HOST || '/pg_socket',
+  host: process.env.POSTGRES_HOST || '127.0.0.1',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
   user: process.env.POSTGRES_USER || 'lumin_admin',
   password: process.env.POSTGRES_PASSWORD,
   database: process.env.POSTGRES_DB || 'core_db',

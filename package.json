@@ -25,5 +25,6 @@
     "lighthouse": "^13.2.0",
     "pg": "^8.20.0",
     "playwright": "^1.59.1"
-  }
+  },
+  "type": "module"
 }

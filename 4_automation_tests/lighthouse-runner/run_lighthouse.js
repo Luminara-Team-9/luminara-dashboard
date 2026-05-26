@@ -3,14 +3,17 @@ import { launch } from 'chrome-launcher';
 import fs from 'fs';
 
 const CHROME_PATH = '/usr/bin/chromium';
-const PHOO_PORT = 9227;
 
 const PAGES = [
-  // Decathlon
-  { pageName: 'main',        url: 'https://www.decathlon.co.kr/' },
-  { pageName: 'cart',        url: 'https://www.decathlon.co.kr/cart' },
-  { pageName: 'category',    url: 'https://www.decathlon.co.kr/c/first-choice.html?itm_source=hp&itm_medium=circlebanner&itm_campaign=firstchoice-260306' },
-  { pageName: 'product',     url: 'https://www.decathlon.co.kr/p/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.html' },
+  // Decathlon clone — waiting for CpuSpike fix
+  // { pageName: 'main_clone', url: 'http://155.230.135.209:3002/' },
+
+  // Decathlon live
+  { pageName: 'main',     url: 'https://www.decathlon.co.kr/' },
+  { pageName: 'cart',     url: 'https://www.decathlon.co.kr/cart' },
+  { pageName: 'category', url: 'https://www.decathlon.co.kr/c/first-choice.html?itm_source=hp&itm_medium=circlebanner&itm_campaign=firstchoice-260306' },
+  { pageName: 'product',  url: 'https://www.decathlon.co.kr/p/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.html' },
+
   // Competitors
   { pageName: 'nike',        url: 'https://www.nike.com/kr' },
   { pageName: 'underarmour', url: 'https://www.underarmour.co.kr/ko-kr/' },
@@ -21,18 +24,21 @@ const RUNS_PER_PAGE = 3;
 
 function extractMetrics(lhr, pageName, url, runNumber) {
   const a = lhr.audits;
+
   return {
     pageName,
     url,
     runNumber,
-    fcp_ms:        a['first-contentful-paint']?.numericValue                        ?? null,
-    lcp_ms:        a['largest-contentful-paint']?.numericValue                      ?? null,
-    speedIndex_ms: a['speed-index']?.numericValue                                   ?? null,
-    tbt_ms:        a['total-blocking-time']?.numericValue                           ?? null,
-    cls_score:     a['cumulative-layout-shift']?.numericValue                       ?? null,
-    tti_ms:        a['interactive']?.numericValue                                   ?? null,
-    ttfb_ms:       a['server-response-time']?.numericValue                          ?? null,
-    inp_ms:        a['experimental-interaction-to-next-paint']?.numericValue        ?? null,
+
+    fcp_ms:        a['first-contentful-paint']?.numericValue                 ?? null,
+    lcp_ms:        a['largest-contentful-paint']?.numericValue               ?? null,
+    speedIndex_ms: a['speed-index']?.numericValue                            ?? null,
+    tbt_ms:        a['total-blocking-time']?.numericValue                    ?? null,
+    cls_score:     a['cumulative-layout-shift']?.numericValue                ?? null,
+    tti_ms:        a['interactive']?.numericValue                            ?? null,
+    ttfb_ms:       a['server-response-time']?.numericValue                   ?? null,
+    inp_ms:        a['experimental-interaction-to-next-paint']?.numericValue ?? null,
+
     score:
       typeof lhr.categories?.performance?.score === 'number'
         ? lhr.categories.performance.score * 100
@@ -42,6 +48,7 @@ function extractMetrics(lhr, pageName, url, runNumber) {
 
 function extractOpportunities(lhr) {
   const opportunities = [];
+
   for (const [auditId, audit] of Object.entries(lhr.audits)) {
     if (
       audit?.details?.type === 'opportunity' &&
@@ -58,6 +65,7 @@ function extractOpportunities(lhr) {
       });
     }
   }
+
   return opportunities;
 }
 
@@ -65,8 +73,20 @@ function averageMetric(results, key) {
   const values = results
     .map((r) => r[key])
     .filter((v) => typeof v === 'number');
+
   if (values.length === 0) return null;
+
   return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function percentileMetric(results, key, p = 75) {
+  const values = results
+    .map((r) => r[key])
+    .filter((v) => typeof v === 'number')
+    .sort((a, b) => a - b);
+  if (!values.length) return null;
+  const idx = Math.ceil((p / 100) * values.length) - 1;
+  return values[idx];
 }
 
 async function runAudit(pageInfo, runNumber) {
@@ -74,47 +94,62 @@ async function runAudit(pageInfo, runNumber) {
 
   const chrome = await launch({
     chromePath: CHROME_PATH,
-    port: PHOO_PORT,
+
     chromeFlags: [
-      '--headless',                   // FIX: was --headless=new — caused ERR_ABORTED
+      '--headless=new',
       '--no-sandbox',
+      '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-features=Translate,BackForwardCache',
       '--ignore-certificate-errors',
       '--no-first-run',
       '--no-default-browser-check',
-      // FIX: removed --disable-blink-features=AutomationControlled — conflicts with headless
+      '--disable-ipc-flooding-protection',
+      '--disable-hang-monitor',
+      '--password-store=basic',
+      '--use-mock-keychain',
       '--user-agent=Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36',
     ],
   });
 
-  await new Promise(resolve => setTimeout(resolve, 15000));
+  await new Promise(resolve => setTimeout(resolve, 5000));
 
   try {
     const runnerResult = await lighthouse(pageInfo.url, {
       port: chrome.port,
       output: 'json',
-      onlyCategories: ['performance'],
+      onlyCategories: [
+        'performance',
+        'accessibility',
+        'best-practices',
+        'seo',
+      ],
       formFactor: 'mobile',
       screenEmulation: {
-        mobile:            true,
-        width:             412,
-        height:            823,
+        mobile: true,
+        width: 412,
+        height: 823,
         deviceScaleFactor: 1.75,
-        disabled:          false,
+        disabled: false,
       },
-      throttlingMethod: 'simulate',
+      throttlingMethod: 'provided',
       throttling: {
-        rttMs:                  150,
-        throughputKbps:         1638.4,
-        cpuSlowdownMultiplier:  4,
-        requestLatencyMs:       562.5,
+        rttMs: 150,
+        throughputKbps: 1638.4,
+        cpuSlowdownMultiplier: 1,
+        requestLatencyMs: 562.5,
         downloadThroughputKbps: 1474.56,
-        uploadThroughputKbps:   675,
+        uploadThroughputKbps: 675,
       },
       settings: {
-        maxWaitForLoad:      180000, // FIX: increased from 90000 for slow competitor sites
-        disableStorageReset: false,
+        maxWaitForLoad: 90000,
+        pauseAfterFcpMs: 10000,
+        pauseAfterLoadMs: 10000,
       },
     });
 
@@ -124,10 +159,17 @@ async function runAudit(pageInfo, runNumber) {
       console.error(`  Runtime error: ${lhr.runtimeError.message}`);
       return {
         metrics: {
-          pageName: pageInfo.pageName, url: pageInfo.url, runNumber,
-          fcp_ms: null, lcp_ms: null, speedIndex_ms: null,
-          tbt_ms: null, cls_score: null,
-          tti_ms: null, ttfb_ms: null, inp_ms: null,
+          pageName: pageInfo.pageName,
+          url: pageInfo.url,
+          runNumber,
+          fcp_ms: null,
+          lcp_ms: null,
+          speedIndex_ms: null,
+          tbt_ms: null,
+          cls_score: null,
+          tti_ms: null,
+          ttfb_ms: null,
+          inp_ms: null,
           score: null,
         },
         lhr: null,
@@ -147,18 +189,26 @@ async function runAudit(pageInfo, runNumber) {
     console.error(`  Error: ${error.message}`);
     return {
       metrics: {
-        pageName: pageInfo.pageName, url: pageInfo.url, runNumber,
-        fcp_ms: null, lcp_ms: null, speedIndex_ms: null,
-        tbt_ms: null, cls_score: null,
-        tti_ms: null, ttfb_ms: null, inp_ms: null,
+        pageName: pageInfo.pageName,
+        url: pageInfo.url,
+        runNumber,
+        fcp_ms: null,
+        lcp_ms: null,
+        speedIndex_ms: null,
+        tbt_ms: null,
+        cls_score: null,
+        tti_ms: null,
+        ttfb_ms: null,
+        inp_ms: null,
         score: null,
         error: error.message,
       },
       lhr: null,
     };
+
   } finally {
     await chrome.kill();
-    await new Promise(resolve => setTimeout(resolve, 15000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
 
@@ -193,7 +243,9 @@ async function main() {
       score:         averageMetric(allMetrics, 'score'),
     };
 
-    const opportunities = lastLhr ? extractOpportunities(lastLhr) : [];
+    const opportunities = lastLhr
+      ? extractOpportunities(lastLhr)
+      : [];
 
     const pageResult = {
       page:          pageInfo.pageName,
@@ -211,15 +263,44 @@ async function main() {
     );
 
     console.log(`\nAVERAGE for ${pageInfo.pageName}:`);
-    console.log(`  Performance Score : ${avg.score?.toFixed(1)          ?? 'null'}`);
-    console.log(`  FCP               : ${avg.fcp_ms?.toFixed(0)         ?? 'null'} ms`);
-    console.log(`  LCP               : ${avg.lcp_ms?.toFixed(0)         ?? 'null'} ms`);
-    console.log(`  TBT               : ${avg.tbt_ms?.toFixed(0)         ?? 'null'} ms`);
-    console.log(`  CLS               : ${avg.cls_score?.toFixed(4)      ?? 'null'}`);
-    console.log(`  TTI               : ${avg.tti_ms?.toFixed(0)         ?? 'null'} ms`);
-    console.log(`  TTFB              : ${avg.ttfb_ms?.toFixed(0)        ?? 'null'} ms`);
-    console.log(`  INP               : ${avg.inp_ms?.toFixed(0)         ?? 'null'} ms`);
+    console.log(`  Performance Score : ${avg.score?.toFixed(1)     ?? 'null'}`);
+    console.log(`  FCP               : ${avg.fcp_ms?.toFixed(0)    ?? 'null'} ms`);
+    console.log(`  LCP               : ${avg.lcp_ms?.toFixed(0)    ?? 'null'} ms`);
+    console.log(`  TBT               : ${avg.tbt_ms?.toFixed(0)    ?? 'null'} ms`);
+    console.log(`  CLS               : ${avg.cls_score?.toFixed(4) ?? 'null'}`);
+    console.log(`  TTI               : ${avg.tti_ms?.toFixed(0)    ?? 'null'} ms`);
+    console.log(`  TTFB              : ${avg.ttfb_ms?.toFixed(0)   ?? 'null'} ms`);
+    console.log(`  INP               : ${avg.inp_ms?.toFixed(0)    ?? 'null'} ms`);
     console.log(`  Opportunities     : ${opportunities.length} found`);
+
+    const p75 = {
+      lcp_ms:    percentileMetric(allMetrics, 'lcp_ms'),
+      cls_score: percentileMetric(allMetrics, 'cls_score'),
+      fcp_ms:    percentileMetric(allMetrics, 'fcp_ms'),
+      tbt_ms:    percentileMetric(allMetrics, 'tbt_ms'),
+    };
+
+    console.log(`\nCWV STATUS (p75) for ${pageInfo.pageName}:`);
+    console.log(`  LCP : ${p75.lcp_ms?.toFixed(0) ?? 'null'} ms → ${
+      p75.lcp_ms == null ? ' No data' :
+      p75.lcp_ms <= 2500 ? ' Good' :
+      p75.lcp_ms <= 4000 ? 'Needs Improvement' : 'Poor'
+    }`);
+    console.log(`  CLS : ${p75.cls_score?.toFixed(4) ?? 'null'} → ${
+      p75.cls_score == null ? ' No data' :
+      p75.cls_score < 0.1 ? ' Good' :
+      p75.cls_score < 0.25 ? ' Needs Improvement' : 'Poor'
+    }`);
+    console.log(`  FCP : ${p75.fcp_ms?.toFixed(0) ?? 'null'} ms → ${
+      p75.fcp_ms == null ? ' No data' :
+      p75.fcp_ms <= 1800 ? ' Good' :
+      p75.fcp_ms <= 3000 ? ' Needs Improvement' : 'Poor'
+    }`);
+    console.log(`  TBT : ${p75.tbt_ms?.toFixed(0) ?? 'null'} ms → ${
+      p75.tbt_ms == null ? 'No data' :
+      p75.tbt_ms <= 200 ? ' Good' :
+      p75.tbt_ms <= 600 ? ' Needs Improvement' : 'Poor'
+    }`);
   }
 
   fs.writeFileSync(
