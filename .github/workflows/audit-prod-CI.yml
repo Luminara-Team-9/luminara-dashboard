@@ -46,6 +46,7 @@ jobs:
       # PHASE 2: AUDIT THE ARTIFACT
       # ---------------------------------------------------------
       - name: 🧪 Run Ephemeral Gatekeeper Audit
+        id: gatekeeper_audit # Added ID here to capture output
         # Calls your custom composite action
         uses: ./.github/actions/clone-audit
         with:
@@ -70,7 +71,11 @@ jobs:
             -d '{
               "pr_branch": "${{ github.head_ref }}",
               "target_dir": "${{ env.TARGET_SITE }}",
-              "thread_id": "pr_${{ github.event.pull_request.number }}"
+              "thread_id": "pr_${{ github.event.pull_request.number }}",
+              "lhci_run_id": "${{ steps.gatekeeper_audit.outputs.lhci_run_id }}",
+              "page_type": "${{ steps.gatekeeper_audit.outputs.page_type }}",
+              "device_type": "${{ steps.gatekeeper_audit.outputs.device_type }}",
+              "playwright_run_id": "${{ steps.gatekeeper_audit.outputs.playwright_run_id }}",
             }'
           echo "✅ Signal sent to AI Agent."
       
