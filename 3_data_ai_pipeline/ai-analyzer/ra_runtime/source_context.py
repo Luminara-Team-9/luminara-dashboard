@@ -105,7 +105,8 @@ FIX_TYPE_RULES = {
     "css": {
         "boost": [
             ".css", "globals", "stylesheet", "@import",
-            "font-display", "classname=", "style="
+            "font-display", "classname=", "style=",
+            "next/font", "next/font/google",
         ],
         "penalty": [
             "api/", "middleware", "analytics",
@@ -522,6 +523,11 @@ def score_fix_type_signals(
         if "stylesheet" in content_text:
             score += 10
         if "globals" in path_text:
+            score += 12
+        # next/font/google font configs live in TSX layout files — relevant for font-display
+        if "next/font" in content_text or "next/font/google" in content_text:
+            score += 18
+        if "layout" in path_text and ("font" in content_text or "roboto" in content_text or "inter" in content_text):
             score += 12
 
     elif fix_type == "server":

@@ -5,10 +5,13 @@ Production-ready source-aware patch generator for the Luminara Remediation Agent
 """
 
 import json
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from dotenv import load_dotenv
@@ -303,6 +306,8 @@ def classify_patch_type(patch: Dict[str, Any]) -> str:
         ".css", "stylesheet", "@import", "font-display", "media=\"print\"",
         "rel=\"preload\"", "rel='preload'", "classname", "style=",
         "display=swap", "font-display:", "fonts.googleapis",
+        "next/font", "display: 'swap'", 'display: "swap"',
+        "display:'swap'", 'display:"swap"',
     ]):
         return "css"
 
@@ -330,7 +335,9 @@ def patch_matches_fix_type(fix_type: str, patch: Dict[str, Any]) -> bool:
         return patch_type in {"image", "layout"}
 
     if fix_type == "javascript":
-        return patch_type == "javascript"
+        # Allow css-type patches (e.g. font-display optimization) for JS opportunities
+        # since font loading directly affects TBT/rendering time.
+        return patch_type in {"javascript", "css"}
 
     if fix_type == "css":
         return patch_type == "css"
@@ -555,33 +562,44 @@ def validate_patch_against_context(
         suggested_code = patch.get("suggested_code")
 
         if has_placeholder_content(patch):
+            logger.info("[validate_context] REJECT target=%s: placeholder content", target_file)
             continue
 
         if unsafe_import_removal_without_usage_removal(patch):
+            logger.info("[validate_context] REJECT target=%s: unsafe import removal without usage removal", target_file)
             continue
 
         if unsafe_dynamic_without_import(patch):
+            logger.info("[validate_context] REJECT target=%s: dynamic() used without import dynamic", target_file)
             continue
 
         if unsafe_partial_dynamic_refactor(patch):
+            logger.info("[validate_context] REJECT target=%s: partial dynamic refactor (import-only, no JSX)", target_file)
             continue
 
         if not is_safe_repo_relative_path(target_file, source_context):
+            logger.info("[validate_context] REJECT target=%s: unsafe or out-of-prefix path", target_file)
             continue
 
+        patch_type = classify_patch_type(patch)
         if not patch_matches_fix_type(fix_type, patch):
+            logger.info("[validate_context] REJECT target=%s: patch_type=%s does not match fix_type=%s", target_file, patch_type, fix_type)
             continue
 
         if not target_file or target_file not in source_by_path:
+            logger.info("[validate_context] REJECT target=%s: not in source_by_path candidates", target_file)
             continue
 
         if not original_code or not suggested_code:
+            logger.info("[validate_context] REJECT target=%s: missing original_code or suggested_code", target_file)
             continue
 
         if not looks_like_real_code_block(original_code, fix_type):
+            logger.info("[validate_context] REJECT target=%s: original_code does not look like real code", target_file)
             continue
 
         if original_code.strip() == suggested_code.strip():
+            logger.info("[validate_context] REJECT target=%s: original_code == suggested_code (no change)", target_file)
             continue
 
         valid_patches.append(
@@ -654,14 +672,21 @@ def validate_patch_against_files(
         file_path = (repo_root / target_file).resolve()
 
         if not file_path.exists():
+            logger.info("[validate_files] REJECT target=%s: file not found in repo at %s", target_file, file_path)
             continue
 
         if not str(file_path).startswith(str(repo_root)):
+            logger.info("[validate_files] REJECT target=%s: path escapes repo root", target_file)
             continue
 
         content = file_path.read_text(encoding="utf-8", errors="ignore")
 
         if original_code not in content:
+            logger.info(
+                "[validate_files] REJECT target=%s: original_code not found in file (first 200 chars of original_code: %r)",
+                target_file,
+                (original_code or "")[:200],
+            )
             continue
 
         valid_patches.append(patch)
@@ -789,6 +814,20 @@ def generate_patch_from_source(
         )
 
         raw = response.choices[0].message.content
+        logger.info("[patch_generator] Qwen raw output:\n%s", raw)
+
+        # Write to a debug file so it's always visible regardless of logging config
+        try:
+            import datetime as _dt
+            _debug_path = Path("/tmp/qwen_patch_debug.log")
+            with open(_debug_path, "a", encoding="utf-8") as _f:
+                _f.write(f"\n{'='*60}\n")
+                _f.write(f"time={_dt.datetime.now().isoformat()}  fix_plan_id={fix_plan.get('id')}\n")
+                _f.write(f"fix_type={source_context.get('fix_type')}  opp_id={lighthouse_opp_id}\n")
+                _f.write(f"RAW QWEN OUTPUT:\n{raw}\n")
+        except Exception:
+            pass
+
         patch_result = extract_json(raw)
 
     except Exception as e:
@@ -804,12 +843,27 @@ def generate_patch_from_source(
         fix_plan=fix_plan,
     )
 
+    logger.info("[patch_generator] after validate_context: auto_applicable=%s reason=%s",
+                patch_result.get("auto_applicable"), patch_result.get("manual_review_reason"))
+
     patch_result = validate_patch_against_files(
         patch_result=patch_result,
         repo_path=repo_path,
         source_context=source_context,
         fix_plan=fix_plan,
     )
+
+    logger.info("[patch_generator] final result: auto_applicable=%s reason=%s",
+                patch_result.get("auto_applicable"), patch_result.get("manual_review_reason"))
+
+    try:
+        import datetime as _dt
+        _debug_path = Path("/tmp/qwen_patch_debug.log")
+        with open(_debug_path, "a", encoding="utf-8") as _f:
+            _f.write(f"FINAL: auto_applicable={patch_result.get('auto_applicable')}  "
+                     f"reason={patch_result.get('manual_review_reason')}\n")
+    except Exception:
+        pass
 
     return patch_result
 
