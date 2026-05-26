@@ -181,6 +181,9 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                     src={img}
                     alt={`${product.name} ${i + 1}`}
                     className="w-full h-full object-cover mix-blend-multiply"
+                    loading={i === 0 ? 'eager' : 'lazy'}
+                    fetchPriority={i === 0 ? 'high' : 'auto'}
+                    decoding="async"
                   />
                 </div>
               ))}
