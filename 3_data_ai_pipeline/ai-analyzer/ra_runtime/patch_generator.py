@@ -167,31 +167,51 @@ Strict rules:
 Opportunity matching rules:
 - First understand the selected Lighthouse opportunity from the Fix Plan.
 - Generate a patch ONLY if the source code contains code directly related to that selected opportunity.
-- Do not reuse an image-loading patch for JavaScript/TBT, CSS/render-blocking, server/TTFB, cache, or CDN opportunities.
-- For unused JavaScript/TBT issues, only patch code related to JS execution, dynamic imports, script loading, heavy component loading, or unused imports.
-- For CSS/render-blocking issues, only patch CSS, stylesheet, font, or critical rendering path code.
-- For layout/CLS issues, only patch layout stability code such as width, height, aspect-ratio, reserved space, or skeleton placeholder.
-- For server/TTFB/cache/CDN issues, return auto_applicable=false unless the provided source context contains an explicit server/config file that can be safely changed.
 - If the source context only contains unrelated files, return auto_applicable=false.
 
-Patch guidance by fix type:
-- Image/LCP:
-  - For product detail image galleries using map((img, i) => ...), first visible image should use loading={{i === 0 ? 'eager' : 'lazy'}}.
-  - First visible image should use fetchPriority={{i === 0 ? 'high' : 'auto'}}.
-  - All images may use decoding="async".
-  - Do NOT set loading="lazy" for every image if the first image may be LCP.
-  - For a single hero/LCP image outside a loop, use loading="eager", fetchPriority="high", decoding="async".
-  - Add width/height only when safe and when dimensions are already known.
-- JavaScript/TBT:
-  - Prefer safe lazy loading, dynamic import, script defer/async, or removing clearly unused imports.
-  - Do not change business logic.
-- CSS/FCP/render-blocking:
-  - Prefer safe stylesheet/font-display/critical-rendering-path changes.
-  - Do not rewrite unrelated classes.
-- Server/TTFB:
-  - Return auto_applicable=false unless the snippet includes safe config/header/cache code.
-- Unknown:
-  - Return auto_applicable=false.
+Patch guidance by fix type — read carefully, each has a SPECIFIC safe strategy:
+
+Image/LCP (prioritize-lcp-image, offscreen-images, modern-image-formats):
+  - For image galleries using map((img, i) => ...), first image: loading={{i===0?'eager':'lazy'}}, fetchPriority={{i===0?'high':'auto'}}, decoding="async".
+  - For a single hero/LCP image: loading="eager", fetchPriority="high", decoding="async".
+  - For below-fold images: add loading="lazy".
+  - Do NOT set loading="lazy" on the first/hero image.
+  - Add width/height only when dimensions are already known in the source.
+
+JavaScript/TBT (unused-javascript, bootup-time):
+  DO NOT try to remove imports — you cannot know which are unused without runtime data.
+  Instead, look ONLY for these specific safe patterns in the source:
+  1. Next.js <Script> components: if strategy="afterInteractive" is used for non-critical
+     third-party scripts (analytics, chat, marketing, tracking) → change to strategy="lazyOnload".
+     Example: <Script src="..." strategy="afterInteractive" /> → strategy="lazyOnload"
+  2. Inline <script> tags loading third-party tools → add defer attribute.
+  3. Heavy provider components in layout that wrap the entire app with no lazy loading →
+     convert to next/dynamic with ssr=false, BUT only if original_code includes both the
+     import statement AND the JSX usage together in one block.
+  If none of these patterns are present in the source context → return auto_applicable=false.
+  Do NOT generate dynamic() patches for partial import-only blocks.
+
+CSS/FCP (unused-css-rules, render-blocking-resources):
+  DO NOT try to remove CSS rules — you cannot know which are unused without runtime coverage.
+  Instead, look ONLY for these specific safe patterns in the source:
+  1. Google Fonts URL that is missing display=swap parameter →
+     add &display=swap to the URL.
+     Example: fonts.googleapis.com/css2?family=Inter → fonts.googleapis.com/css2?family=Inter&display=swap
+  2. @font-face declarations missing font-display: swap → add font-display: swap inside the block.
+  3. Stylesheet <link> loaded without rel="preload" for critical above-fold fonts → add preload hint.
+  If none of these patterns are present → return auto_applicable=false.
+
+Server/TTFB (server-response-time):
+  Look ONLY in next.config.js or middleware files.
+  If next.config.js has a headers() function → add Cache-Control: public, max-age=31536000 for
+  static asset paths (/_next/static, /images, /fonts) that do not already have it.
+  If next.config.js is not in the source context → return auto_applicable=false.
+
+Layout/CLS:
+  Only patch width, height, aspect-ratio, min-height, skeleton placeholder code.
+
+Unknown:
+  Return auto_applicable=false.
 
 If no safe exact patch can be generated, return:
 
@@ -274,13 +294,15 @@ def classify_patch_type(patch: Dict[str, Any]) -> str:
     if any(k in text for k in [
         "dynamic(", "import(", "react.lazy", "defer", "async", "<script",
         "script ", "remove unused", "lazy import", "useeffect",
-        "requestidlecallback", "settimeout", "swetrix", "trackviews", "init("
+        "requestidlecallback", "settimeout", "swetrix", "trackviews", "init(",
+        "strategy=", 'strategy="lazyonload"', "lazyonload", "afterinteractive",
     ]):
         return "javascript"
 
     if any(k in text for k in [
         ".css", "stylesheet", "@import", "font-display", "media=\"print\"",
         "rel=\"preload\"", "rel='preload'", "classname", "style=",
+        "display=swap", "font-display:", "fonts.googleapis",
     ]):
         return "css"
 
@@ -486,11 +508,14 @@ def unsafe_partial_dynamic_refactor(patch: Dict[str, Any]) -> bool:
     if "dynamic(" not in suggested:
         return False
 
-    # Dynamic refactor touching imports only
+    # Script strategy changes do not use dynamic() — skip this check.
+    if "strategy=" in original or "strategy=" in suggested:
+        return False
+
+    # Dynamic refactor touching imports only — unsafe without JSX scope.
     has_imports = "import " in original
     has_jsx = "<" in original and "/>" in original
 
-    # Unsafe if imports modified without JSX scope
     if has_imports and not has_jsx:
         return True
 
@@ -658,11 +683,79 @@ def validate_patch_against_files(
     }
 
 
+# Lighthouse opportunity IDs that cannot be auto-patched from static source code.
+# These require runtime analysis, infrastructure changes, or build config — not code edits.
+NON_AUTO_PATCHABLE_OPPORTUNITIES: Dict[str, str] = {
+    # unused-javascript: AI will try Script strategy and dynamic import approach instead.
+    # unused-css-rules: AI will try font-display and Google Fonts optimization instead.
+    # server-response-time: AI will try Cache-Control in next.config.js instead.
+    # These are NOT blocked — Qwen will attempt the safe static strategies above.
+    "legacy-javascript": (
+        "Removing legacy JavaScript polyfills requires updating build configuration "
+        "(browserslist, Babel/SWC targets) — not patchable as source code.\n"
+        "Developer action: Update .browserslistrc or next.config.js transpile targets."
+    ),
+    "bootup-time": (
+        "Reducing JavaScript bootup time requires runtime profiling to identify which "
+        "specific scripts are slow. Static analysis cannot pinpoint the bottleneck.\n"
+        "Developer action: Use Chrome DevTools Performance tab, then defer or remove "
+        "the identified heavy scripts."
+    ),
+    "third-party-summary": (
+        "Third-party script optimization requires a manual audit of which scripts are "
+        "necessary and which can be deferred, removed, or self-hosted.\n"
+        "Developer action: Audit all third-party scripts and configure non-critical "
+        "ones to load asynchronously or be removed."
+    ),
+    "third-party-facades": (
+        "Implementing third-party facades requires replacing embedded widgets with "
+        "lazy-loaded placeholder components — a significant change needing careful review.\n"
+        "Developer action: Replace third-party embeds with facade components "
+        "using next/dynamic."
+    ),
+    "total-byte-weight": (
+        "Reducing total page weight requires identifying the largest resources from a "
+        "runtime network waterfall. The specific files to optimize depend on actual "
+        "network load order.\n"
+        "Developer action: Review the Lighthouse network waterfall and optimize the "
+        "largest transfered resources first."
+    ),
+}
+
+
 def generate_patch_from_source(
     fix_plan: Dict[str, Any],
     source_context: Dict[str, Any],
     repo_path: str,
 ) -> Dict[str, Any]:
+    # Pre-check: some Lighthouse opportunity types cannot be auto-patched from
+    # static source code. Return a clear human reason immediately — no Qwen call.
+    opportunity = fix_plan.get("opportunity") or {}
+    lighthouse_opp_id = str(opportunity.get("opportunity_id") or "").strip()
+
+    non_patchable_reason = NON_AUTO_PATCHABLE_OPPORTUNITIES.get(lighthouse_opp_id)
+    if non_patchable_reason:
+        return {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": non_patchable_reason,
+        }
+
+    # Also block server fix_type as a catch-all (even if opportunity_id is unknown).
+    fix_type = source_context.get("fix_type") or classify_fix_type(fix_plan)
+    if fix_type == "server":
+        return {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": (
+                "Server/infrastructure optimization cannot be automated through frontend "
+                "source code patches. This requires CDN configuration, cache headers, "
+                "or server-side caching setup.\n"
+                "Developer action: Configure Cache-Control headers in next.config.js "
+                "headers() function or implement Redis/Memcached at the server level."
+            ),
+        }
+
     if not source_context.get("candidate_files"):
         return {
             "auto_applicable": False,
