@@ -200,9 +200,13 @@ def run_build(app_dir: Path) -> tuple[bool, str]:
 
 def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bool, str]:
     """
-    Pull latest remote commits then push the patched branch.
-    Only stages changes inside TARGET_DIR.
+    Create a new fix branch from the patched workspace and push it to origin.
+    Never touches main or the original working branch directly.
+
+    New branch name: fix/ai-patch-{fix_plan_id}
     """
+    fix_branch = f"fix/ai-patch-{fix_plan_id}"
+
     def git(args: list) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git"] + args,
@@ -212,10 +216,15 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
             timeout=120,
         )
 
-    # Sync with remote first to avoid rejected push
+    # Sync workspace with latest remote base branch first
     pull = git(["pull", "--rebase", "origin", branch_name])
     if pull.returncode != 0:
         return False, f"git pull --rebase failed:\n{pull.stderr}"
+
+    # Create (or reset) the fix branch at current HEAD
+    checkout = git(["checkout", "-B", fix_branch])
+    if checkout.returncode != 0:
+        return False, f"git checkout -B {fix_branch} failed:\n{checkout.stderr}"
 
     # Stage only the patched app directory
     stage = git(["add", TARGET_DIR])
@@ -224,7 +233,11 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
 
     status = git(["status", "--porcelain"])
     if not status.stdout.strip():
-        return True, "Nothing to commit — patch already in tree"
+        # Nothing new to commit — push whatever is on this branch
+        push = git(["push", "-f", "origin", fix_branch])
+        if push.returncode != 0:
+            return False, f"git push failed:\n{push.stderr}"
+        return True, f"Pushed existing patch to {fix_branch} (no new changes)"
 
     commit = git([
         "commit", "-m",
@@ -235,11 +248,11 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
     if commit.returncode != 0:
         return False, f"git commit failed:\n{commit.stderr}"
 
-    push = git(["push", "origin", branch_name])
+    push = git(["push", "-f", "origin", fix_branch])
     if push.returncode != 0:
         return False, f"git push failed:\n{push.stderr}"
 
-    return True, f"Pushed branch {branch_name} to origin"
+    return True, f"Pushed patch to new branch: {fix_branch}"
 
 
 # ─────────────────────────────────────────────
@@ -285,8 +298,9 @@ def process_fix_plan(fix_plan: dict) -> bool:
         print(f"\n  [2] DB updated → patch_status=build_failed")
         return False
 
-    # ── Step 2: Push branch ─────────────────────────────────
-    print(f"\n  [2] Pushing branch {branch_name} to origin...")
+    # ── Step 2: Push to new fix branch ─────────────────────────────────
+    fix_branch = f"fix/ai-patch-{fix_plan_id}"
+    print(f"\n  [2] Pushing to new branch: {fix_branch}")
     if not branch_name:
         msg = "No branch_name saved in fix_plans — cannot push"
         print(f"  ❌ {msg}")
