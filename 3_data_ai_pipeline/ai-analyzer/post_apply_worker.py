@@ -361,6 +361,17 @@ def run_lighthouse_once(local_url: str, output_path: Path) -> Optional[dict]:
         print("  ⚠️  lighthouse CLI not found (no lighthouse or npx in PATH) — skipping audit")
         return None
 
+    chrome_candidates = [
+        "google-chrome", "google-chrome-stable",
+        "chromium-browser", "chromium",
+    ]
+    chrome_bin = next(
+        (shutil.which(c) for c in chrome_candidates if shutil.which(c)),
+        None,
+    )
+    if not chrome_bin:
+        print("  ⚠️  No Chrome/Chromium found in PATH — Lighthouse will try its own")
+
     cmd = [
         *lh_cmd,
         local_url,
@@ -371,9 +382,11 @@ def run_lighthouse_once(local_url: str, output_path: Path) -> Optional[dict]:
         "--preset=perf",
         "--quiet",
     ]
+    if chrome_bin:
+        cmd.append(f"--chrome-path={chrome_bin}")
 
     print(f"  Running Lighthouse: {local_url}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
     if not output_path.exists():
         print(f"  ❌ Lighthouse did not produce output: {result.stderr[:300]}")
