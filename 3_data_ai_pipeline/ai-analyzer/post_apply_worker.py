@@ -216,10 +216,17 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
             timeout=120,
         )
 
+    # Stash patch changes so git pull --rebase doesn't refuse
+    git(["stash"])
+
     # Sync workspace with latest remote base branch first
     pull = git(["pull", "--rebase", "origin", branch_name])
     if pull.returncode != 0:
+        git(["stash", "pop"])
         return False, f"git pull --rebase failed:\n{pull.stderr}"
+
+    # Restore the patch
+    git(["stash", "pop"])
 
     # Create (or reset) the fix branch at current HEAD
     checkout = git(["checkout", "-B", fix_branch])
