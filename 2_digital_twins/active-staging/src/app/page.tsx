@@ -1,6 +1,6 @@
 import { HomePage } from '@/page-components/main-landing';
 import { headers } from 'next/headers';
-
+//trigger Pipleline
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
