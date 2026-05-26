@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field, model_validator
 
 from agent import build_agent
 
+try:
+    from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id
+except ImportError:
+    from db_client import update_fix_plan_status, get_fix_plan_by_id
+
 
 load_dotenv()
 
@@ -208,6 +213,86 @@ def health():
         "etl_in_listener": False,
         "rag_update_in_listener": False,
         "recent_lookback_fallback": False,
+    }
+
+
+# ─────────────────────────────────────────────
+# Dashboard approval endpoint
+# Called by 1_dashboard_app when operator clicks "Apply"
+# Contract: AI_ACTION_CONTRACT.md
+# ─────────────────────────────────────────────
+
+class ApplyRequest(BaseModel):
+    actionId: str
+    requestedAt: Optional[str] = None
+    source: str
+    action: str
+    planSnapshot: Dict[str, Any]
+
+
+@app.post("/ai-actions/apply")
+def ai_actions_apply(payload: ApplyRequest):
+    """
+    Receive dashboard approval and set fix_plan patch_status = 'approved_to_apply'.
+
+    The dashboard sends planSnapshot.id which must be the integer fix_plan_id
+    (as a string). apply_worker polls for approved_to_apply and picks it up
+    automatically — no manual step needed.
+    """
+    plan_id_raw = payload.planSnapshot.get("id") or payload.actionId
+
+    try:
+        fix_plan_id = int(plan_id_raw)
+    except (TypeError, ValueError):
+        return {
+            "actionId": payload.actionId,
+            "accepted": False,
+            "status": "failed",
+            "message": (
+                f"planSnapshot.id must be the integer fix_plan_id as a string "
+                f"(got: '{plan_id_raw}'). "
+                f"Make sure the performance API returns the DB fix_plan id."
+            ),
+            "source": "remediation-agent",
+        }
+
+    fix_plan = get_fix_plan_by_id(fix_plan_id)
+    if not fix_plan:
+        return {
+            "actionId": payload.actionId,
+            "accepted": False,
+            "status": "failed",
+            "message": f"fix_plan_id={fix_plan_id} not found in database.",
+            "source": "remediation-agent",
+        }
+
+    current_status = fix_plan.get("patch_status")
+    if current_status in ("applying", "patch_applied", "build_testing", "pushed"):
+        return {
+            "actionId": payload.actionId,
+            "accepted": False,
+            "status": "failed",
+            "message": f"fix_plan_id={fix_plan_id} is already in progress (status={current_status}).",
+            "source": "remediation-agent",
+        }
+
+    update_fix_plan_status(fix_plan_id, "approved_to_apply")
+
+    print(
+        f"[ai-actions/apply] fix_plan_id={fix_plan_id} approved → "
+        f"patch_status=approved_to_apply  (was: {current_status})",
+        flush=True,
+    )
+
+    return {
+        "actionId": payload.actionId,
+        "accepted": True,
+        "status": "queued",
+        "message": f"fix_plan_id={fix_plan_id} queued for apply. apply_worker will pick it up within 30s.",
+        "runId": f"fix-plan-{fix_plan_id}",
+        "queuedAt": datetime.now().isoformat(),
+        "nextPollMs": 30_000,
+        "source": "remediation-agent",
     }
 
 
