@@ -1,20 +1,23 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+// import { usePathname } from 'next/navigation';
 import { init, trackViews } from 'swetrix';
 
+let initialized = false;
+
 export function SwetrixTracker() {
-  const pathname = usePathname();
+  // const pathname = usePathname();
 
   useEffect(() => {
-    init({
-      pid: 'TEMP_PROJECT_ID', // We will replace this once the self-hosted UI is running
-      apiURL: 'http://155.230.135.209:5005/log', // Pointing it to your custom Singularity API!
-    });
-
-    trackViews();
-  }, [pathname]);
+    if (!initialized) {
+      init('n9FlE09mPFlv', {
+        apiURL: 'http://155.230.135.209:5005/log',
+      });
+      trackViews();
+      initialized = true;
+    }
+  }, []);
 
   return null;
 }

@@ -13,47 +13,83 @@ export const runningProducts: DetailedProduct[] = [
     id: '8960456',
     name: '남성 5인치 러닝 투인원 쇼츠 런 500 KIPRUN',
     price: 39900,
-    imageUrl: 'https://contents.mediadecathlon.com/p3013863/sq/k$7b92cd3ac459dfab9763e4bc81d3981b/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p3013863/sq/k$7b92cd3ac459dfab9763e4bc81d3981b/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p3013863/sq/k$7b92cd3ac459dfab9763e4bc81d3981b/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=480x480&format=auto',
+      'https://contents.mediadecathlon.com/p3013818/k$2c712b35925d3e0a68660e428fae0e48/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3014332/k$01192003dee0d762e5860e812d855176/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013835/k$823627104374c64c605964ed59fbc1a8/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013984/k$89fcbfe83d460790cb8e9ccb73dad22c/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013848/k$8b129f28795eb90997d9eb7e0106b3d7/%EB%82%A8%EC%84%B1-5%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%ED%88%AC%EC%9D%B8%EC%9B%90-%EC%87%BC%EC%B8%A0-%EB%9F%B0-500-kiprun-8960456.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     brand: 'KIPRUN',
     colors: ['블랙', '그레이'],
     gender: '남성용',
     sizes: ['M', 'L', 'XL'],
-    productType: '반바지'
+    productType: '반바지',
   },
   {
     id: '8861547',
     name: '남성 러닝 반팔 티 런 드라이 500 KIPRUN',
     price: 24900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2893372/sq/k$c24e116895b526b86dd2be3edd16b31c/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2893372/sq/k$c24e116895b526b86dd2be3edd16b31c/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2893372/k$c24e116895b526b86dd2be3edd16b31c/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013074/k$3c1b7bd91cf4d6bc68c565ca5bba33aa/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013170/k$16403328f75947d8f1777fb069e0a7f0/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013335/k$0acb78e0f3ad7cf6552c74d7028e74fb/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013287/k$982468b50d2ed586be275c6feb9f333e/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3013245/k$0be7c59f3cd31819fbe2df8d7dc81777/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-500-kiprun-8861547.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     brand: 'KIPRUN',
     colors: ['블루', '화이트'],
     gender: '남성용',
     sizes: ['S', 'M', 'L', 'XL'],
-    productType: '반소매 티셔츠'
+    productType: '반소매 티셔츠',
   },
   {
     id: '8810971',
     name: '러닝 얇은 중목 양말 2켤레 파인 런 500 KIPRUN',
     price: 7900,
-    imageUrl: 'https://contents.mediadecathlon.com/p3005201/sq/k$c00c197e3ba329d8521e4f49ba80fd82/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p3005201/sq/k$c00c197e3ba329d8521e4f49ba80fd82/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p3005201/k$c00c197e3ba329d8521e4f49ba80fd82/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3026090/k$d4fe3a166a6c1f5ee71f28dd431bb71b/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2792719/k$f82f6437d7eaab5e51f037beb5f099e9/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3026186/k$5b1b073d645324bb6ebe5146af6591bd/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2792721/k$78c5dc5de6f6ddbe3a6555eee2821647/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3026107/k$a884f5d5171dd603731755fdce6ead66/%EB%9F%AC%EB%8B%9D-%EC%96%87%EC%9D%80-%EC%A4%91%EB%AA%A9-%EC%96%91%EB%A7%90-2%EC%BC%A4%EB%A0%88-%ED%8C%8C%EC%9D%B8-%EB%9F%B0-500-kiprun-8810971.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     brand: 'KIPRUN',
     colors: ['화이트', '블랙'],
     gender: '공용',
     sizes: ['S', 'M', 'L'],
-    productType: '양말'
+    productType: '양말',
   },
   {
     id: '8817239',
     name: '여성 러닝 윈드 자켓 런 100 KIPRUN',
     price: 19900,
     originalPrice: 23900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2516892/sq/k$d1ee673b7d4ee48bd483f4cc963e553f/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2516892/sq/k$d1ee673b7d4ee48bd483f4cc963e553f/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2516892/k$d1ee673b7d4ee48bd483f4cc963e553f/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2546155/k$725d36e6d21a7ecf70570a2b5daf3660/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2546150/k$0f6e4e017750b510eaaec9e587bb8a38/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2516897/k$34833425efed56fb63e07ace82c4e186/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2516893/k$babfce95c6d37c8c10f09cf0524be710/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2516895/k$73a1d67ce5672e8ad4eb4157d57f10dd/%EC%97%AC%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%9C%88%EB%93%9C-%EC%9E%90%EC%BC%93-%EB%9F%B0-100-kiprun-8817239.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     badge: 'sale',
@@ -61,26 +97,44 @@ export const runningProducts: DetailedProduct[] = [
     colors: ['핑크', '화이트'],
     gender: '여성용',
     sizes: ['S', 'M', 'L'],
-    productType: '자켓'
+    productType: '자켓',
   },
   {
     id: '8553338',
     name: '여성 4인치 러닝 쇼츠 런 드라이 100 KALENJI',
     price: 9900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2924625/sq/k$075f676a46105380a29b78ea3e357788/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2924625/sq/k$075f676a46105380a29b78ea3e357788/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2924625/k$075f676a46105380a29b78ea3e357788/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2048911/k$876281f6ad9e0f49f8147b66dd55c326/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2789281/k$b6d52cec6bb0be17f90d538fa881abc0/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2789279/k$f496c3d1ca9e670bdec72d4b6f429a21/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2789282/k$7bb2b8b1c6673e1df93f31763a635403/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2789277/k$af0ada65bac92891e7949b23f3d897ed/%EC%97%AC%EC%84%B1-4%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kalenji-8553338.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     brand: 'KALENJI',
     colors: ['블랙'],
     gender: '여성용',
     sizes: ['S', 'M'],
-    productType: '반바지'
+    productType: '반바지',
   },
   {
     id: '8826305',
     name: '하이킹 경량 백팩 22L MH500 라이트 QUECHUA',
     price: 79900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2612825/sq/k$73d99f4c09b202821cc9cc7162090a9b/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2612825/sq/k$73d99f4c09b202821cc9cc7162090a9b/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2612825/k$73d99f4c09b202821cc9cc7162090a9b/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2847402/k$4cd2a4303d9293a1909b78a13b901497/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2612839/k$5a2e15312e911e10aaa0beed35e10cde/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2612841/k$7904ca9bc6fe0d9490d6f17b524668fa/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2612840/k$80362b6e68953604edc55122064f7a93/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2612827/k$a8d7bff95e13f89237707542cd24acf0/%ED%95%98%EC%9D%B4%ED%82%B9-%EA%B2%BD%EB%9F%89-%EB%B0%B1%ED%8C%A9-22l-mh500-%EB%9D%BC%EC%9D%B4%ED%8A%B8-quechua-8826305.jpg?f=1024x0&format=auto',
+    ],
     category: '등산',
     rating: 4.8,
     badge: 'best',
@@ -88,40 +142,67 @@ export const runningProducts: DetailedProduct[] = [
     colors: ['그레이', '블루'],
     gender: '공용',
     sizes: ['Free'],
-    productType: '배낭 / 백팩'
+    productType: '배낭 / 백팩',
   },
   {
     id: '8487923',
     name: '남성 하프집 러닝 긴팔 티 런 웜 100 KALENJI',
     price: 19900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2607111/sq/k$ffa7f4654c9c174bcdf14cce22b20aa4/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2607111/sq/k$ffa7f4654c9c174bcdf14cce22b20aa4/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2607111/k$ffa7f4654c9c174bcdf14cce22b20aa4/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2042469/k$ffe4a1bb0314f3482f8a1d5912735d17/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2042471/k$dc7342e8620b327e5fd87eb9640a6a97/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2042491/k$93b4c540af6d6b51e048dcbf8e0a7db2/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2042470/k$2ea632248dc92d5a59c7165ab18daa60/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2042475/k$53ae8c43f2c1f2a323d41a42edba951d/%EB%82%A8%EC%84%B1-%ED%95%98%ED%94%84%EC%A7%91-%EB%9F%AC%EB%8B%9D-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EC%9B%9C-100-kalenji-8487923.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     brand: 'KALENJI',
     colors: ['블랙', '레드'],
     gender: '남성용',
     sizes: ['M', 'L', 'XL', '2XL'],
-    productType: '긴소매 티셔츠'
+    productType: '긴소매 티셔츠',
   },
   {
     id: '8588345',
     name: '남성 6인치 러닝 쇼츠 컴포트 500 KIPRUN',
     price: 29900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2600838/sq/k$fd7f3cc2db36e1673da8a650c812e5e2/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2600838/sq/k$fd7f3cc2db36e1673da8a650c812e5e2/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p3090501/k$3c34e59a4d4b3ba0ead015cb0ed79196/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3090500/k$bbd2cd18787b82acdf68fed8b3541370/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3090499/k$a266881ba26bb4aa23e2d75aa502e558/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3090291/k$fe8231d42335145bb02740469b409909/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p3090290/k$2a10fa857c3783d345095714c7b377df/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2974676/k$67b6fa103592e4b5f77a9341c24242a0/%EB%82%A8%EC%84%B1-6%EC%9D%B8%EC%B9%98-%EB%9F%AC%EB%8B%9D-%EC%87%BC%EC%B8%A0-%EC%BB%B4%ED%8F%AC%ED%8A%B8-500-%EB%B8%8C%EB%A6%AC%ED%94%84-%EB%82%B4%EC%9E%A5-kiprun-8588345.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     brand: 'KIPRUN',
     colors: ['블랙'],
     gender: '남성용',
     sizes: ['L', 'XL', '2XL'],
-    productType: '반바지'
+    productType: '반바지',
   },
   {
     id: '8488034',
     name: '남성 러닝 반팔 티 런 드라이 100 DECATHLON',
     price: 5900,
     originalPrice: 9900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2924641/sq/k$67d6b1e1b55aa3217970880ea31408c6/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2924641/sq/k$67d6b1e1b55aa3217970880ea31408c6/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2924641/k$67d6b1e1b55aa3217970880ea31408c6/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2924608/k$cdfa71179629430eba2f8a6ad0cbafb2/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2788391/k$ad0ddad8b73ae33aa4ebd7d4b1b8f89e/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2788392/k$86aa3570e8b37040c80a94bd5c7a43a9/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2788388/k$4e4396460ed71d5e673cea53fbcafc71/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2788389/k$e728fb5fbe08aebfc3731b5128fd734c/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%98%ED%8C%94-%ED%8B%B0-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-decathlon-8488034.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.7,
     badge: 'sale',
@@ -129,14 +210,23 @@ export const runningProducts: DetailedProduct[] = [
     colors: ['블루', '그레이'],
     gender: '남성용',
     sizes: ['M', 'L'],
-    productType: '반소매 티셔츠'
+    productType: '반소매 티셔츠',
   },
   {
     id: '8928516',
     name: '남성 러닝 심리스 긴팔 티 런 500 KIPRUN',
     price: 9900,
     originalPrice: 34900,
-    imageUrl: 'https://contents.mediadecathlon.com/p2906961/sq/k$5687e4d5c5b921c3f9b9e6ed8e421335/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2906961/sq/k$5687e4d5c5b921c3f9b9e6ed8e421335/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=480x480&format=auto',
+    images: [
+      'https://contents.mediadecathlon.com/p2906961/k$5687e4d5c5b921c3f9b9e6ed8e421335/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2906826/k$55addcea8593000d4db907f70df1627a/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2906866/k$c39c0ef6d2e54038515f7f3bfdcc376c/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2906518/k$5c9e520d93fffc070cd607c1d2420822/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2906741/k$30349eab86dbdde21e836362c3420904/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=1024x0&format=auto',
+      'https://contents.mediadecathlon.com/p2906836/k$00bd72a1fe910fa632ddea0fc460771f/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EC%8B%AC%EB%A6%AC%EC%8A%A4-%EA%B8%B4%ED%8C%94-%ED%8B%B0-%EB%9F%B0-500-kiprun-8928516.jpg?f=1024x0&format=auto',
+    ],
     category: '러닝',
     rating: 4.8,
     badge: 'sale',
@@ -144,8 +234,8 @@ export const runningProducts: DetailedProduct[] = [
     colors: ['레드', '블랙'],
     gender: '남성용',
     sizes: ['S', 'M', 'L'],
-    productType: '긴소매 티셔츠'
-  }
+    productType: '긴소매 티셔츠',
+  },
 ];
 
 export const essentialProducts = [
@@ -153,28 +243,32 @@ export const essentialProducts = [
     id: '8553338',
     name: '남성 러닝 반바지 런 드라이 플러스',
     price: 24000,
-    imageUrl: 'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
     rating: 4.8,
   },
   {
     id: '8605051',
     name: '남성 러닝 마라톤 레이싱 싱글렛 킵런',
     price: 34000,
-    imageUrl: 'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
     rating: 4.8,
   },
   {
     id: '8559092',
     name: '남성 러닝 마라톤 쇼츠 스플릿 킵런',
     price: 39000,
-    imageUrl: 'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
     rating: 4.7,
   },
   {
     id: '8736129',
     name: '남성 러닝 통기성 티셔츠 런 드라이 플러스',
     price: 19000,
-    imageUrl: 'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
+    imageUrl:
+      'https://contents.mediadecathlon.com/p2709170/sq/k$ede7dcf3709d56fd4d946888f661d919/%EB%82%A8%EC%84%B1-%EB%9F%AC%EB%8B%9D-%EB%B0%94%EC%A7%80-%EB%9F%B0-%EB%93%9C%EB%9D%BC%EC%9D%B4-100-kiprun-8882067.jpg?f=480x480&format=auto',
     rating: 4.8,
   },
 ];

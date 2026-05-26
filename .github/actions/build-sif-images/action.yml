@@ -22,8 +22,17 @@ runs:
     - name: Set up Environment & Cache
       shell: bash
       run: |
-        ISOLATED_PATH="/abr/coss41/singularity_cache/cache_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        # 1. Keep your preferred permanent storage location
+        CACHE_ROOT="/abr/coss41/singularity_cache"
+        ISOLATED_PATH="$CACHE_ROOT/cache_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
         echo "ISOLATED_CACHE_DIR=$ISOLATED_PATH" >> $GITHUB_ENV
+
+        echo "🧹 Sweeping cold historical cache directories..."
+        mkdir -p $CACHE_ROOT
+
+        # SRE CONCURRENCY SHIELD: Only delete folders older than 12 hours (720 minutes)
+        # This guarantees active parallel runs are left completely untouched!
+        find $CACHE_ROOT -maxdepth 1 -type d -name "cache_*" -mmin +720 -exec rm -rf {} + || true
 
     # SRE FIX 2: Cache Singularity layers. 
     # This prevents re-downloading the Ubuntu/CUDA base image every single time.
@@ -78,7 +87,17 @@ runs:
 
     - name: Smart Verification (Pre-Flight Checks)
       shell: bash
+      env:
+        SINGULARITY_TMPDIR: "/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        TMPDIR: "/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}"
+        # This blocks the choked host /tmp from bleeding into your validation run
+        SINGULARITY_BIND: "/dev/shm/sing_build_${{ github.run_id }}_${{ inputs.cache_key_suffix }}:/tmp"
       run: |
+        echo "🔍 Testing SIF Integrity in RAM Disk..."
+        
+        # Ensure our temporary target folder actually exists for this step
+        mkdir -p $SINGULARITY_TMPDIR
+        
         echo "🔍 Testing SIF Integrity in RAM Disk..."
         singularity exec ${{ env.LOCAL_SIF_PATH }} ls -d /workspace || echo "ℹ️ No /workspace found."
         singularity exec ${{ env.LOCAL_SIF_PATH }} ls -d /data || echo "ℹ️ No /data found."

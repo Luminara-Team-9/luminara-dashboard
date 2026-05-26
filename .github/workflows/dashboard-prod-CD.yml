@@ -13,16 +13,18 @@ concurrency:
   group: deploy-dashboard
   cancel-in-progress: true
 
-env:
-  PROD_SIF_PATH: "/abr/coss41/Luminara_App/images-prod"
-  KEY_DIR: "/abr/coss41/Luminara_App/secure_keys"
-  ARTIFACT_NAME: "infrastructure_web.sif"
-  BACKUP_NAME: "infrastructure_web.bak.sif"
-
 jobs:
   deploy-to-prod:
     runs-on: [self-hosted, Linux]
     
+    env:
+      IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
+      STAGING_DIR: /abr/coss41/Luminara_App/images-staging
+      ARTIFACT_NAME: infrastructure_web.sif
+      BACKUP_NAME: infrastructure_web.bak.sif
+      SERVICE_NAME: luminara-prod@web.service
+      HEALTH_URL: http://localhost:3001
+
     steps:
       - name: 📥 Checkout Merged Code
         uses: actions/checkout@v4
@@ -32,9 +34,15 @@ jobs:
       # ---------------------------------------------------------
       - name: 💾 Backup Stable Container
         run: |
-          echo "Backing up current production container..."
-          mkdir -p ${{ env.PROD_SIF_PATH }}
-          cp ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
+          echo "🔍 Preparing directories..."
+          mkdir -p ${{ env.IMAGE_DIR }} ${{ env.STAGING_DIR }}
+          
+          if [ -f "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" ]; then
+            echo "💾 Backing up current production container..."
+            cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}
+          else
+            echo "ℹ️ No existing production SIF found. Skipping backup."
+          fi
 
       # ---------------------------------------------------------
       # PHASE 2: BAKE ON MAIN (Race-Condition Fix)
@@ -45,54 +53,39 @@ jobs:
         with:
           def_file_path: "infrastructure/web.def" 
           cache_key_suffix: "prod_dashboard"
-          output_path: "${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}"
+          output_path: "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}"
 
       # ---------------------------------------------------------
       # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
-      - name: 🔄 Hot-Swap & Verify Production Container
-        run: |
-          echo "Restarting Singularity Instance..."
-          singularity instance stop luminara_web_live 2>/dev/null || true
-          
-          # Booting the freshly baked container
-          singularity instance start \
-            --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
-            ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
-            luminara_web_live
-            
-          echo "⏱️ Waiting 10 seconds for application to boot..."
-          sleep 10
-          
-          echo "🩺 Performing Health Check..."
-          if singularity instance list | grep -q "luminara_web_live"; then
-            echo "✅ Health Check Passed: Container is alive and running!"
-          else
-            echo "❌ CRITICAL FAILURE: Container died immediately after booting."
-            echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
-            
-            # Tear down the broken deployment
-            singularity instance stop luminara_web_live 2>/dev/null || true
-            
-            # Restore the backup artifact
-            mv ${{ env.PROD_SIF_PATH }}/${{ env.BACKUP_NAME }} ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }}
-            
-            # Reboot the stable backup
-            singularity instance start \
-              --env-file "${{ env.KEY_DIR }}/.env.web.prod" \
-              ${{ env.PROD_SIF_PATH }}/${{ env.ARTIFACT_NAME }} \
-              luminara_web_live
-              
-            echo "🚨 Rollback complete. Production is back online, but this deployment failed."
-            exit 1
-          fi
+      - name: 🚀 Hot-Swap & Verify
+        uses: ./.github/actions/systemd-hot-swap
+        with:
+          # Note: Ensure env.IMAGE_DIR is used instead of env.PROD_SIF_PATH for consistency
+          image_dir: ${{ env.IMAGE_DIR }} 
+          staging_dir: ${{ env.STAGING_DIR }}
+          artifact_name: ${{ env.ARTIFACT_NAME }}
+          backup_name: ${{ env.BACKUP_NAME }}
+          service_name: ${{ env.SERVICE_NAME }}
+          health_url: ${{ env.HEALTH_URL }}
 
       # ---------------------------------------------------------
-      # PHASE 4: FAIL-SAFE CLEANUP
+      # PHASE 4: GLOBAL JANITOR (Fail-Safe Cleanup)
       # ---------------------------------------------------------
-      - name: 🧹 Garbage Collection
-        if: always()
+      - name: 🧹 Post-Deployment Cleanup
+        if: always() 
         run: |
+          echo "🧹 Cleaning up temporary artifacts..."
+          
+          # 1. Clear staging (In case build finished but move failed)
+          rm -f "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}"
+          
+          # 2. Clear backup (If success, it's old; if rollback, it's already moved)
+          rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
+
+          # 3. Comprehensive RAM Disk Cleanup
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
-          chmod -R u+rwX /dev/shm/sing_build_*_prod_dashboard 2>/dev/null || true
-          rm -rf /dev/shm/sing_build_*_prod_dashboard || true
+          find /dev/shm/ -name "sing_build_*_prod_dashboard" -exec chmod -R u+rwX {} + 2>/dev/null || true
+          find /dev/shm/ -name "sing_build_*_prod_dashboard" -exec rm -rf {} + 2>/dev/null || true
+          
+          echo "✨ Environment is now clean."

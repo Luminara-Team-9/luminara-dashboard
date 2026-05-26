@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { PerformanceApiResponse } from '@/shared/lib/types';
-import mockData from '@/shared/api/performance-mock.json';
+import { getPerformanceData } from '@/shared/api/performanceData';
 
-export async function GET(): Promise<NextResponse<PerformanceApiResponse>> {
-  return NextResponse.json(mockData as PerformanceApiResponse);
+export async function GET(request: Request): Promise<NextResponse<PerformanceApiResponse>> {
+  const url = new URL(request.url);
+  const data = await getPerformanceData(url.searchParams);
+  return NextResponse.json(data, {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  });
 }

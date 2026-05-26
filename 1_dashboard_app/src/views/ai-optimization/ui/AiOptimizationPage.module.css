@@ -27,7 +27,7 @@
   width: fit-content;
 }
 
-.back_link:hover { color: #94a3b8; }
+.back_link:hover { color: #64748b; }
 
 .page_title_wrap {
   display: flex;
@@ -39,13 +39,13 @@
 .page_title {
   font-size: 22px;
   font-weight: 800;
-  color: #f1f5f9;
+  color: #111827;
   letter-spacing: -0.02em;
 }
 
 .page_subtitle {
   font-size: 13px;
-  color: #475569;
+  color: #64748b;
 }
 
 /* ── 콘텐츠 ── */
@@ -61,6 +61,28 @@
   gap: 20px;
 }
 
+.skeleton_card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: #fbfcfe;
+  border: 1px solid #d7dee8;
+  border-left: 3px solid #d7dee8;
+  border-radius: 14px;
+}
+
+.skeleton_card_top,
+.skeleton_card_footer {
+  display: flex;
+  justify-content: space-between;
+}
+
+.skeleton_card_footer {
+  padding-top: 8px;
+  border-top: 1px solid #d7dee8;
+}
+
 /* ── 요약 통계 ── */
 .stat_row {
   display: flex;
@@ -74,8 +96,8 @@
   align-items: center;
   gap: 5px;
   padding: 16px 24px;
-  background-color: #111827;
-  border: 1px solid #1e293b;
+  background-color: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-radius: 12px;
   min-width: 100px;
   flex: 1;
@@ -84,7 +106,7 @@
 .stat_value {
   font-size: 28px;
   font-weight: 800;
-  color: #f1f5f9;
+  color: #111827;
   letter-spacing: -0.03em;
   line-height: 1;
 }
@@ -103,8 +125,8 @@
   flex-wrap: wrap;
   gap: 16px;
   padding: 16px 20px;
-  background-color: #0d1424;
-  border: 1px solid #1a2234;
+  background-color: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-radius: 14px;
 }
 
@@ -118,7 +140,7 @@
 .filter_label {
   font-size: 11px;
   font-weight: 700;
-  color: #475569;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -127,8 +149,8 @@
 .tabs {
   display: flex;
   gap: 4px;
-  background-color: #080c18;
-  border: 1px solid #1e293b;
+  background-color: #eef3f8;
+  border: 1px solid #d7dee8;
   border-radius: 10px;
   padding: 3px;
   flex-wrap: wrap;
@@ -150,21 +172,21 @@
   white-space: nowrap;
 }
 
-.tab:hover  { color: #94a3b8; background-color: #1a2234; }
-.tab_active { color: #f1f5f9; background-color: #1e3a5f; }
+.tab:hover  { color: #64748b; background-color: #eef2f7; }
+.tab_active { color: #ffffff; background-color: #2563eb; }
 
 .tab_count {
   font-size: 10px;
-  background-color: #1e293b;
+  background-color: #d7dee8;
   padding: 1px 5px;
   border-radius: 9999px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 /* ── 결과 수 ── */
 .result_count {
   font-size: 12px;
-  color: #475569;
+  color: #64748b;
   font-weight: 600;
 }
 
@@ -187,15 +209,15 @@
   flex-direction: column;
   gap: 12px;
   padding: 20px 22px;
-  background-color: #111827;
-  border: 1px solid #1e293b;
+  background-color: #fbfcfe;
+  border: 1px solid #d7dee8;
   border-left-width: 3px;
   border-radius: 14px;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .plan_card:hover {
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
   transform: translateY(-1px);
 }
 
@@ -226,7 +248,7 @@
   font-size: 10px;
   font-weight: 600;
   color: #64748b;
-  background-color: #1e293b;
+  background-color: #d7dee8;
   padding: 3px 8px;
   border-radius: 5px;
 }
@@ -234,7 +256,7 @@
 .plan_title {
   font-size: 14px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: #1e293b;
   line-height: 1.45;
 }
 
@@ -249,7 +271,7 @@
   align-items: center;
   justify-content: space-between;
   padding-top: 10px;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid #d7dee8;
   margin-top: auto;
 }
 
@@ -261,7 +283,7 @@
 
 .plan_brand {
   font-size: 11px;
-  color: #475569;
+  color: #64748b;
   font-weight: 600;
 }
 
@@ -269,10 +291,10 @@
 .empty {
   padding: 60px;
   text-align: center;
-  color: #475569;
+  color: #64748b;
   font-size: 14px;
-  background-color: #0d1424;
-  border: 1px dashed #1e293b;
+  background-color: #fbfcfe;
+  border: 1px dashed #d7dee8;
   border-radius: 14px;
 }
 

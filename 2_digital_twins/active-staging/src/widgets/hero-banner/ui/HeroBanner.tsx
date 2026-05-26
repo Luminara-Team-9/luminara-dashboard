@@ -35,16 +35,9 @@ export function HeroBanner() {
   }, [slides.length]);
 
   return (
-    <section style={{ width: '100%', position: 'relative', backgroundColor: '#e5e7eb' }}>
-      {/* Real aspect ratio from scraped HTML: 1024 / 286 */}
-      <div
-        style={{
-          aspectRatio: '1024 / 286',
-          width: '100%',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
+    <section className="w-full relative bg-gray-200">
+      {/* Mobile: Perfect Square. Desktop: Wide Billboard */}
+      <div className="relative w-full overflow-hidden aspect-square md:aspect-[1024/286]">
         {slides.map((slide, index) => (
           <img
             key={index}
@@ -64,48 +57,17 @@ export function HeroBanner() {
           />
         ))}
       </div>
-      {/* Left/Right Arrows */}
+
+      {/* Left/Right Arrows (Hidden on Mobile, phones use swipe/auto) */}
       <button
         onClick={prevSlide}
-        style={{
-          position: 'absolute',
-          left: '16px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          zIndex: 20,
-          backgroundColor: 'rgba(255,255,255,0.7)',
-          border: 'none',
-          borderRadius: '50%',
-          width: '40px',
-          height: '40px',
-          fontSize: '20px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+        className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-white/70 border-none rounded-full w-10 h-10 text-xl cursor-pointer items-center justify-center hover:bg-white transition-colors"
       >
         〈
       </button>
       <button
         onClick={nextSlide}
-        style={{
-          position: 'absolute',
-          right: '16px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          zIndex: 20,
-          backgroundColor: 'rgba(255,255,255,0.7)',
-          border: 'none',
-          borderRadius: '50%',
-          width: '40px',
-          height: '40px',
-          fontSize: '20px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+        className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-white/70 border-none rounded-full w-10 h-10 text-xl cursor-pointer items-center justify-center hover:bg-white transition-colors"
       >
         〉
       </button>

@@ -1,5 +1,5 @@
 'use client';
-
+import { track } from 'swetrix';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Header } from '@/widgets/header';
@@ -55,6 +55,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   const handleAddToCart = () => {
     if (!selectedSize) {
       setShowError(true);
+
+      track({
+        ev: 'error_size_not_selected',
+        meta: { productId: product.id, productName: product.name },
+      });
+
       if (showStickyCart) window.scrollTo({ top: 0, behavior: 'smooth' });
       setTimeout(() => setShowError(false), 2000);
       return;
@@ -86,6 +92,22 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     }
 
     localStorage.setItem('decathlon_cart', JSON.stringify(existingCart));
+    try {
+      track({
+        ev: 'click_add_to_cart',
+        meta: {
+          source: 'pdp', // <--- Distinguishes this from the ProductCard clicks!
+          productId: cartItem.id,
+          productName: cartItem.name,
+          price: cartItem.price,
+          size: cartItem.size,
+          quantity: cartItem.quantity,
+        },
+      });
+    } catch (error) {
+      console.error('PDP Add to cart tracking failed:', error);
+    }
+
     window.dispatchEvent(new Event('cart-updated'));
     setShowSuccess(true);
     setIsDrawerOpen(true);

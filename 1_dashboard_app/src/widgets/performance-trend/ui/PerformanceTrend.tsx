@@ -1,123 +1,215 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ResponsiveContainer, ComposedChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ReferenceLine,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ReferenceLine,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
-import { WPO_COEFFICIENTS } from '@/shared/lib/cvr';
+import { estimateCvrLiftForMetric } from '@/shared/lib/estimationFormulas';
 import { Skeleton } from '@/shared/ui';
-import type { Trends, TrendDataset, BenchmarkEntry, MetricKey } from '@/shared/lib/types';
+import type { BenchmarkEntry, MetricKey, TrendDataset, Trends } from '@/shared/lib/types';
 import styles from './PerformanceTrend.module.css';
 
-// ── 지표 설정 (차트 + 델타 카드 공통) ─────────────────────────
 const METRIC_DEFS: Record<string, {
-  label: string; unit: string; domain: [number, number];
-  target: number; higherIsBetter: boolean; targetLabel: string;
+  label: string;
+  shortLabel: string;
+  unit: string;
+  domain: [number, number];
+  target: number;
+  higherIsBetter: boolean;
+  targetLabel: string;
 }> = {
-  lighthouse: { label: 'Lighthouse', unit: 'pt',  domain: [40, 100], target: 90,  higherIsBetter: true,  targetLabel: '≥ 90'    },
-  lcp:        { label: 'LCP',        unit: 's',   domain: [0, 7],    target: 2.5, higherIsBetter: false, targetLabel: '≤ 2.5s'  },
-  tbt:        { label: 'TBT',        unit: 'ms',  domain: [0, 600],  target: 200, higherIsBetter: false, targetLabel: '≤ 200ms' },
-  inp:        { label: 'INP',        unit: 'ms',  domain: [0, 400],  target: 200, higherIsBetter: false, targetLabel: '≤ 200ms' },
+  lighthouse: {
+    label: '종합 성능(Lighthouse)',
+    shortLabel: '종합 성능',
+    unit: '점',
+    domain: [40, 100],
+    target: 90,
+    higherIsBetter: true,
+    targetLabel: '90점 이상',
+  },
+  lcp: {
+    label: '첫 화면 표시(LCP)',
+    shortLabel: '첫 화면 표시',
+    unit: '초',
+    domain: [0, 7],
+    target: 2.5,
+    higherIsBetter: false,
+    targetLabel: '2.5초 이하',
+  },
+  tbt: {
+    label: '실행 지연(TBT)',
+    shortLabel: '실행 지연',
+    unit: 'ms',
+    domain: [0, 700],
+    target: 200,
+    higherIsBetter: false,
+    targetLabel: '200ms 이하',
+  },
+  inp: {
+    label: '클릭 반응(INP)',
+    shortLabel: '클릭 반응',
+    unit: 'ms',
+    domain: [0, 420],
+    target: 200,
+    higherIsBetter: false,
+    targetLabel: '200ms 이하',
+  },
 };
 
 const BRAND_COLORS: Record<string, string> = {
-  Decathlon:        '#3b82f6',
-  Coupang:          '#f59e0b',
-  'Naver Shopping': '#10b981',
-  'SSG.com':        '#a78bfa',
-  'Nike Korea':     '#f43f5e',
+  Decathlon: '#3b82f6',
 };
 
-// ── CVR 잠재량 라인 (이중 Y축) ───────────────────────────────
-const CVR_LINE_KEY = 'CVR 잠재량(%)';
-const CVR_CALC: Record<string, (v: number) => number> = {
-  lcp: (v) => Math.max(0, Math.round((v - 2.5) * WPO_COEFFICIENTS.LCP_PER_SECOND * 10) / 10),
-  inp: (v) => Math.max(0, Math.round(((v - 200) / 100) * WPO_COEFFICIENTS.INP_PER_100MS * 10) / 10),
+const CVR_LINE_KEY = '전환 영향 참고(%)';
+const CVR_CALC: Record<string, (value: number) => number> = {
+  lcp: (value) => estimateCvrLiftForMetric('lcp', value, 2.5),
+  inp: (value) => estimateCvrLiftForMetric('inp', value, 200),
 };
 
-// ── 경쟁사 평균 계산 ──────────────────────────────────────────
+const MIN_CHART_WIDTH = 320;
+const MIN_CHART_HEIGHT = 280;
+
 function getCompetitorAvg(benchmarks: BenchmarkEntry[], metricKey: string): number | null {
-  const competitors = benchmarks.filter(b => !b.isTarget);
+  const competitors = benchmarks.filter((benchmark) => !benchmark.isTarget);
   if (!competitors.length) return null;
 
   if (metricKey === 'lighthouse') {
-    const avg = competitors.reduce((s, b) => s + b.scores.lighthouse, 0) / competitors.length;
+    const avg = competitors.reduce((sum, benchmark) => sum + benchmark.scores.lighthouse, 0) / competitors.length;
     return Math.round(avg * 10) / 10;
   }
 
-  const vals = competitors
-    .map(b => b.metrics[metricKey as MetricKey]?.value)
-    .filter((v): v is number => v != null);
-  if (!vals.length) return null;
-  return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10;
+  const values = competitors
+    .map((benchmark) => benchmark.metrics[metricKey as MetricKey]?.value)
+    .filter((value): value is number => value != null);
+
+  if (!values.length) return null;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
 }
 
-// ── 날짜 포맷 ("2026-03-08" → "3/8") ─────────────────────────
 function fmtDate(iso: string) {
-  const [, m, d] = iso.split('-');
-  return `${parseInt(m)}/${parseInt(d)}`;
+  const [, month, day] = iso.split('-');
+  return `${parseInt(month, 10)}/${parseInt(day, 10)}`;
 }
 
-// ── Recharts용 데이터 변환 ────────────────────────────────────
-function buildChartData(trends: Trends, metricKey: string) {
-  const datasets    = trends.datasets.filter((d) => d.metricKey === metricKey);
-  const decathlonDs = datasets.find((d) => d.brand === 'Decathlon');
-  const cvrFn       = CVR_CALC[metricKey];
+function formatValue(value: number, metricKey: string): string {
+  const config = METRIC_DEFS[metricKey];
+  if (!config) return String(value);
+  return `${value}${config.unit}`;
+}
 
-  return trends.labels.map((label, i) => {
+function buildChartData(trends: Trends, metricKey: string) {
+  const datasets = trends.datasets.filter((dataset) => dataset.metricKey === metricKey);
+  const decathlonDataset = datasets.find((dataset) => dataset.brand === 'Decathlon');
+  const cvrFn = CVR_CALC[metricKey];
+
+  return trends.labels.map((label, index) => {
     const point: Record<string, string | number> = { date: fmtDate(label) };
-    datasets.forEach((d) => { point[d.brand] = d.values[i]; });
-    if (cvrFn && decathlonDs) {
-      point[CVR_LINE_KEY] = cvrFn(decathlonDs.values[i]);
+    datasets.forEach((dataset) => {
+      point[dataset.brand] = dataset.values[index];
+    });
+    if (cvrFn && decathlonDataset) {
+      point[CVR_LINE_KEY] = cvrFn(decathlonDataset.values[index]);
     }
     return point;
   });
 }
 
-// ── 특정 날짜의 Decathlon 스냅샷 ─────────────────────────────
 function getDecathlonSnapshot(trends: Trends, date: string): Record<string, number> | null {
-  const idx = trends.labels.indexOf(date);
-  if (idx < 0) return null;
+  const index = trends.labels.indexOf(date);
+  if (index < 0) return null;
+
   const result: Record<string, number> = {};
   trends.datasets
-    .filter((ds: TrendDataset) => ds.brand === 'Decathlon')
-    .forEach((ds: TrendDataset) => { result[ds.metricKey] = ds.values[idx]; });
+    .filter((dataset: TrendDataset) => dataset.brand === 'Decathlon')
+    .forEach((dataset: TrendDataset) => {
+      result[dataset.metricKey] = dataset.values[index];
+    });
+
   return Object.keys(result).length > 0 ? result : null;
 }
 
-// ── 릴리즈 전후 delta 계산 (Decathlon 전용) ──────────────────
 function calcDeltas(trends: Trends, releaseDate: string) {
-  const relIdx = trends.labels.indexOf(releaseDate);
-  if (relIdx < 1) return [];
+  const releaseIndex = trends.labels.indexOf(releaseDate);
+  if (releaseIndex < 1) return [];
 
   const results: {
     metricKey: string;
-    before: number; after: number; delta: number; pct: number;
+    before: number;
+    after: number;
+    delta: number;
+    pct: number;
   }[] = [];
 
   trends.datasets
-    .filter((ds: TrendDataset) => ds.brand === 'Decathlon')
-    .forEach((ds: TrendDataset) => {
-      const before = ds.values[relIdx - 1];
-      const after  = ds.values[relIdx];
+    .filter((dataset: TrendDataset) => dataset.brand === 'Decathlon')
+    .forEach((dataset: TrendDataset) => {
+      const before = dataset.values[releaseIndex - 1];
+      const after = dataset.values[releaseIndex];
       if (before == null || after == null) return;
+
       const delta = Math.round((after - before) * 100) / 100;
-      const pct   = Math.round((delta / before) * 1000) / 10;
-      results.push({ metricKey: ds.metricKey, before, after, delta, pct });
+      const pct = before === 0 ? 0 : Math.round((delta / before) * 1000) / 10;
+      results.push({ metricKey: dataset.metricKey, before, after, delta, pct });
     });
 
   return results;
 }
 
-// ── 커스텀 툴팁 ───────────────────────────────────────────────
-interface TooltipEntry { name: string; value: number; color: string }
-interface TooltipProps  { active?: boolean; payload?: TooltipEntry[]; label?: string; unit: string }
+function useElementSize() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
 
-function CustomTooltip({ active, payload, label, unit }: TooltipProps) {
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      setSize({
+        width: Math.floor(rect.width),
+        height: Math.floor(rect.height),
+      });
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+    window.addEventListener('resize', updateSize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, []);
+
+  return { ref, ...size };
+}
+
+interface TooltipEntry {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface TooltipProps {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+  metricKey: string;
+}
+
+function CustomTooltip({ active, payload, label, metricKey }: TooltipProps) {
   if (!active || !payload?.length) return null;
+
   return (
     <div className={styles.tooltip}>
       <p className={styles.tooltip_date}>{label}</p>
@@ -125,8 +217,8 @@ function CustomTooltip({ active, payload, label, unit }: TooltipProps) {
         <p key={entry.name} className={styles.tooltip_row}>
           <span className={styles.tooltip_dot} style={{ backgroundColor: entry.color }} />
           <span style={{ color: entry.color }}>{entry.name}</span>
-          <span style={{ color: '#e2e8f0' }}>
-            {entry.name === CVR_LINE_KEY ? `+${entry.value}%` : `${entry.value}${unit}`}
+          <span style={{ color: '#1e293b' }}>
+            {entry.name === CVR_LINE_KEY ? `+${entry.value}%` : formatValue(entry.value, metricKey)}
           </span>
         </p>
       ))}
@@ -134,51 +226,59 @@ function CustomTooltip({ active, payload, label, unit }: TooltipProps) {
   );
 }
 
-// ── 델타 카드 ─────────────────────────────────────────────────
-function DeltaCard({ metricKey, before, after, delta, pct }: {
+function DeltaCard({
+  metricKey,
+  before,
+  after,
+  delta,
+  pct,
+}: {
   metricKey: string;
-  before: number; after: number; delta: number; pct: number;
+  before: number;
+  after: number;
+  delta: number;
+  pct: number;
 }) {
-  const cfg = METRIC_DEFS[metricKey];
-  if (!cfg) return null;
+  const config = METRIC_DEFS[metricKey];
+  if (!config) return null;
 
-  const improved   = cfg.higherIsBetter ? delta > 0 : delta < 0;
-  const neutral    = delta === 0;
+  const improved = config.higherIsBetter ? delta > 0 : delta < 0;
+  const neutral = delta === 0;
   const deltaColor = neutral ? '#64748b' : improved ? '#10b981' : '#ef4444';
-  const sign       = delta > 0 ? '+' : '';
-
-  const passAfter = cfg.higherIsBetter ? after >= cfg.target : after <= cfg.target;
+  const sign = delta > 0 ? '+' : '';
+  const passAfter = config.higherIsBetter ? after >= config.target : after <= config.target;
 
   return (
     <div className={styles.delta_card}>
       <div className={styles.delta_card_top}>
-        <span className={styles.delta_metric_name}>{cfg.label}</span>
-        <span className={styles.delta_target}>{cfg.targetLabel}</span>
+        <span className={styles.delta_metric_name}>{config.label}</span>
+        <span className={styles.delta_target}>{config.targetLabel}</span>
       </div>
       <div className={styles.delta_values}>
-        <span className={styles.delta_before}>{before}{cfg.unit}</span>
-        <span className={styles.delta_arrow}>→</span>
+        <span className={styles.delta_before}>{formatValue(before, metricKey)}</span>
+        <span className={styles.delta_arrow}>&gt;</span>
         <span className={`${styles.delta_after} ${passAfter ? styles.pass : styles.fail}`}>
-          {after}{cfg.unit}
+          {formatValue(after, metricKey)}
         </span>
       </div>
       <div className={styles.delta_footer}>
         <span className={styles.delta_change} style={{ color: deltaColor }}>
-          {neutral ? '변화 없음' : `${sign}${delta}${cfg.unit} (${sign}${pct}%)`}
+          {neutral ? '변화 없음' : `${sign}${formatValue(delta, metricKey)} (${sign}${pct}%)`}
         </span>
         <span className={`${styles.delta_status} ${passAfter ? styles.status_pass : styles.status_fail}`}>
-          {passAfter ? '✓ 달성' : '✗ 미달'}
+          {passAfter ? '목표 충족' : '목표 미달'}
         </span>
       </div>
     </div>
   );
 }
 
-// ── 메인 컴포넌트 ─────────────────────────────────────────────
 export function PerformanceTrend() {
   const { data, loading, error } = usePerformanceData();
   const [activeMetric, setActiveMetric] = useState('lighthouse');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const { ref: chartRef, width: chartWidth, height: chartHeight } = useElementSize();
+  const canRenderChart = chartWidth >= MIN_CHART_WIDTH && chartHeight >= MIN_CHART_HEIGHT;
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
@@ -187,15 +287,18 @@ export function PerformanceTrend() {
         <div className={styles.header}>
           <Skeleton width="130px" height="18px" />
           <div style={{ display: 'flex', gap: 4 }}>
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} width="72px" height="30px" radius="7px" />
+            {[0, 1, 2].map((index) => (
+              <Skeleton key={index} width="72px" height="30px" radius="7px" />
             ))}
           </div>
         </div>
-        <div className={styles.chart_wrap} style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'flex-end' }}>
+        <div
+          className={styles.chart_wrap}
+          style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'flex-end' }}
+        >
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flex: 1, paddingTop: 8 }}>
-            {[60, 80, 55, 90, 70, 85, 65, 95, 75].map((h, i) => (
-              <Skeleton key={i} width="100%" height={`${h}%`} radius="4px 4px 0 0" />
+            {[60, 80, 55, 90, 70, 85, 65, 95, 75].map((height, index) => (
+              <Skeleton key={index} width="100%" height={`${height}%`} radius="4px 4px 0 0" />
             ))}
           </div>
         </div>
@@ -205,37 +308,33 @@ export function PerformanceTrend() {
 
   const { trends } = data;
   const availableMetrics = Object.keys(METRIC_DEFS).filter((key) =>
-    trends.datasets.some((d) => d.metricKey === key),
+    trends.datasets.some((dataset) => dataset.metricKey === key),
   );
-  const config       = METRIC_DEFS[activeMetric];
-  const chartData    = buildChartData(trends, activeMetric);
-  const activeBrands = ['Decathlon'].filter(brand =>
-    trends.datasets.some(d => d.metricKey === activeMetric && d.brand === brand),
+  const config = METRIC_DEFS[activeMetric];
+  const chartData = buildChartData(trends, activeMetric);
+  const activeBrands = ['Decathlon'].filter((brand) =>
+    trends.datasets.some((dataset) => dataset.metricKey === activeMetric && dataset.brand === brand),
   );
   const competitorAvg = getCompetitorAvg(data.benchmarks, activeMetric);
 
   const showCvr = activeMetric in CVR_CALC;
-  const cvrMax  = showCvr
-    ? Math.ceil(Math.max(...chartData.map((d) => (d[CVR_LINE_KEY] as number) ?? 0)) * 1.5 * 10) / 10
+  const cvrMax = showCvr
+    ? Math.ceil(Math.max(...chartData.map((point) => (point[CVR_LINE_KEY] as number) ?? 0)) * 1.5 * 10) / 10
     : 0;
 
-  // ── 클릭된 날짜 기반 계산 ──
   const selectedReleaseInfo = selectedDate
-    ? trends.releases.find((r) => r.date === selectedDate)
+    ? trends.releases.find((release) => release.date === selectedDate)
     : null;
-
   const snapshot = selectedDate ? getDecathlonSnapshot(trends, selectedDate) : null;
-
   const pointDeltas = selectedDate ? calcDeltas(trends, selectedDate) : [];
 
   return (
     <section className={styles.wrapper}>
-      {/* ── 헤더 ── */}
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>성능 트렌드</h2>
+          <h2 className={styles.title}>성능 추세</h2>
           <span className={styles.click_hint}>
-            {showCvr ? 'CVR 잠재량 상관관계 포함 · 클릭 시 상세 확인' : '그래프 클릭 시 릴리즈 내역과 지표 변화 확인'}
+            웹사이트 변경이 있었을 때 측정한 값입니다. 날짜를 클릭하면 변경 이력과 성능 변화가 함께 표시됩니다.
           </span>
         </div>
         <div className={styles.tabs}>
@@ -251,42 +350,42 @@ export function PerformanceTrend() {
         </div>
       </div>
 
-      {/* ── 차트 ── */}
       <div className={styles.chart_wrap}>
-        <div className={styles.chart_inner}>
-          <ResponsiveContainer width="100%" height="100%">
+        <div className={styles.chart_inner} ref={chartRef}>
+          {canRenderChart ? (
             <ComposedChart
+              width={chartWidth}
+              height={chartHeight}
               data={chartData}
-              margin={{ top: 10, right: showCvr ? 4 : 16, left: 0, bottom: 0 }}
+              margin={{ top: 34, right: showCvr ? 4 : 16, left: 0, bottom: 0 }}
               style={{ cursor: 'pointer' }}
               onClick={(payload) => {
                 if (!payload?.activeLabel) return;
-                const origDate = trends.labels.find((l) => fmtDate(l) === payload.activeLabel);
-                if (!origDate) { setSelectedDate(null); return; }
-                setSelectedDate((prev) => (prev === origDate ? null : origDate));
+                const originalDate = trends.labels.find((label) => fmtDate(label) === payload.activeLabel);
+                if (!originalDate) {
+                  setSelectedDate(null);
+                  return;
+                }
+                setSelectedDate((prev) => (prev === originalDate ? null : originalDate));
               }}
             >
               <CartesianGrid strokeDasharray="2 4" stroke="#1e2d45" vertical={false} />
-
               <XAxis
                 dataKey="date"
                 tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={{ stroke: '#1e293b' }}
+                axisLine={{ stroke: '#d7dee8' }}
                 tickLine={false}
               />
-
-              {/* 좌측 Y축: 성능 지표 */}
               <YAxis
                 yAxisId="left"
                 domain={config.domain}
                 tick={{ fill: '#64748b', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => `${v}${config.unit}`}
+                tickFormatter={(value) => `${value}${config.unit}`}
                 width={48}
               />
 
-              {/* 우측 Y축: CVR 잠재량 (LCP·INP만) */}
               {showCvr && (
                 <YAxis
                   yAxisId="right"
@@ -295,7 +394,7 @@ export function PerformanceTrend() {
                   tick={{ fill: '#10b981', fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(v) => `+${v}%`}
+                  tickFormatter={(value) => `+${value}%`}
                   width={44}
                 />
               )}
@@ -306,54 +405,51 @@ export function PerformanceTrend() {
                     active={props.active}
                     payload={props.payload as unknown as TooltipEntry[]}
                     label={props.label as string}
-                    unit={config.unit}
+                    metricKey={activeMetric}
                   />
                 )}
               />
+              <Legend wrapperStyle={{ fontSize: '12px', color: '#64748b', paddingTop: '8px' }} />
 
-              <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8', paddingTop: '8px' }} />
-
-              {config.target !== undefined && (
-                <ReferenceLine
-                  yAxisId="left"
-                  y={config.target}
-                  stroke="#22c55e"
-                  strokeDasharray="5 3"
-                  strokeOpacity={0.6}
-                  label={{ value: '목표', position: 'insideTopRight', fill: '#22c55e', fontSize: 10 }}
-                />
-              )}
+              <ReferenceLine
+                yAxisId="left"
+                y={config.target}
+                stroke="#22c55e"
+                strokeDasharray="5 3"
+                strokeOpacity={0.6}
+                label={{ value: '목표', position: 'insideTopRight', fill: '#22c55e', fontSize: 10 }}
+              />
 
               {competitorAvg !== null && (
                 <ReferenceLine
                   yAxisId="left"
                   y={competitorAvg}
-                  stroke="#f59e0b"
+                  stroke="#b45309"
                   strokeDasharray="3 4"
                   strokeOpacity={0.7}
                   label={{
-                    value: `업계 평균 ${competitorAvg}${config.unit}`,
+                    value: `경쟁사 평균 ${competitorAvg}${config.unit}`,
                     position: 'insideBottomRight',
-                    fill: '#f59e0b',
+                    fill: '#b45309',
                     fontSize: 10,
                   }}
                 />
               )}
 
-              {trends.releases.map((r) => {
-                const isSelected = selectedDate === r.date;
+              {trends.releases.map((release) => {
+                const isSelected = selectedDate === release.date;
                 return (
                   <ReferenceLine
-                    key={r.version}
+                    key={`${release.date}-${release.version}`}
                     yAxisId="left"
-                    x={fmtDate(r.date)}
+                    x={fmtDate(release.date)}
                     stroke={isSelected ? '#3b82f6' : '#334155'}
                     strokeWidth={isSelected ? 2 : 1}
                     strokeDasharray={isSelected ? undefined : '4 3'}
                     label={{
-                      value: r.version,
-                      position: 'top',
-                      fill: isSelected ? '#60a5fa' : '#475569',
+                      value: release.version,
+                      position: 'insideTop',
+                      fill: isSelected ? '#2563eb' : '#64748b',
                       fontSize: 10,
                     }}
                   />
@@ -361,107 +457,105 @@ export function PerformanceTrend() {
               })}
 
               {activeBrands.map((brand) => {
-                const color = BRAND_COLORS[brand] ?? '#94a3b8';
+                const color = BRAND_COLORS[brand] ?? '#64748b';
                 return (
                   <Line
                     key={brand}
                     yAxisId="left"
-                    type="monotone"
+                    type="linear"
                     dataKey={brand}
                     stroke={color}
                     strokeWidth={2.5}
-                    dot={false}
-                    activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#0f172a' }}
+                    dot={{ r: 3, strokeWidth: 1.5, stroke: color, fill: '#ffffff' }}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#ffffff' }}
                     isAnimationActive={false}
                   />
                 );
               })}
 
-              {/* CVR 잠재량 라인 (우측 Y축) */}
               {showCvr && (
                 <Line
                   yAxisId="right"
-                  type="monotone"
+                  type="linear"
                   dataKey={CVR_LINE_KEY}
                   stroke="#10b981"
                   strokeWidth={2}
                   strokeDasharray="6 3"
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 2, stroke: '#10b981', fill: '#0f172a' }}
+                  dot={{ r: 2.5, strokeWidth: 1.5, stroke: '#10b981', fill: '#ffffff' }}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: '#10b981', fill: '#ffffff' }}
                   isAnimationActive={false}
                 />
               )}
             </ComposedChart>
-          </ResponsiveContainer>
+          ) : (
+            <Skeleton width="100%" height="100%" radius="12px" />
+          )}
         </div>
 
-        {/* ── 변경 원인 오버레이 패널 ── */}
         {selectedDate && (
           <div className={styles.overlay_panel}>
-            {/* 패널 헤더 */}
             <div className={styles.panel_header}>
               <div className={styles.panel_title_row}>
                 <span className={styles.panel_date}>{selectedDate}</span>
-                {selectedReleaseInfo && (
+                {selectedReleaseInfo ? (
                   <span className={styles.panel_version}>{selectedReleaseInfo.version}</span>
-                )}
-                {!selectedReleaseInfo && (
-                  <span className={styles.panel_desc}>일반 데이터 포인트</span>
+                ) : (
+                  <span className={styles.panel_desc}>측정 지점</span>
                 )}
               </div>
               <button
                 className={styles.panel_close}
-                onClick={(e) => { e.stopPropagation(); setSelectedDate(null); }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedDate(null);
+                }}
                 aria-label="닫기"
               >
-                ✕
+                닫기
               </button>
             </div>
 
-            {/* 릴리즈 변경 내역 */}
             {selectedReleaseInfo && (
               <div className={styles.cause_section}>
-                <p className={styles.section_label}>변경 내역</p>
+                <p className={styles.section_label}>사이트 변경 이력</p>
                 <p className={styles.cause_desc}>{selectedReleaseInfo.description}</p>
                 {selectedReleaseInfo.changeLog && selectedReleaseInfo.changeLog.length > 0 && (
                   <ul className={styles.changelog}>
-                    {selectedReleaseInfo.changeLog.map((item, i) => (
-                      <li key={i} className={styles.changelog_item}>{item}</li>
+                    {selectedReleaseInfo.changeLog.map((item, index) => (
+                      <li key={index} className={styles.changelog_item}>{item}</li>
                     ))}
                   </ul>
                 )}
               </div>
             )}
 
-            {/* 지표 변화 (릴리즈: 배포 전후 / 일반: 전주 대비) */}
             {pointDeltas.length > 0 && (
               <>
                 <div className={styles.section_divider} />
                 <div className={styles.release_section}>
                   <p className={styles.section_label}>
-                    {selectedReleaseInfo ? '배포 전후 지표 변화' : '전주 대비 지표 변화'}
+                    {selectedReleaseInfo ? '변경 전후 성능 변화' : '직전 측정 대비 성능 변화'}
                   </p>
                   <div className={styles.delta_grid}>
-                    {pointDeltas.map((d) => (
-                      <DeltaCard key={d.metricKey} {...d} />
+                    {pointDeltas.map((delta) => (
+                      <DeltaCard key={delta.metricKey} {...delta} />
                     ))}
                   </div>
                 </div>
               </>
             )}
 
-            {/* 첫 데이터 포인트 — 이전 데이터 없음 */}
             {!selectedReleaseInfo && pointDeltas.length === 0 && snapshot && (
               <div className={styles.snapshot_section}>
-                <p className={styles.section_label}>지표 스냅샷</p>
+                <p className={styles.section_label}>측정 요약</p>
                 <div className={styles.snapshot_grid}>
-                  {Object.entries(snapshot).map(([key, val]) => {
-                    const cfg = METRIC_DEFS[key];
-                    if (!cfg) return null;
+                  {Object.entries(snapshot).map(([key, value]) => {
+                    const metric = METRIC_DEFS[key];
+                    if (!metric) return null;
                     return (
                       <div key={key} className={styles.snapshot_item}>
-                        <span className={styles.snapshot_label}>{cfg.label}</span>
-                        <span className={styles.snapshot_val}>{val}{cfg.unit}</span>
+                        <span className={styles.snapshot_label}>{metric.label}</span>
+                        <span className={styles.snapshot_val}>{formatValue(value, key)}</span>
                       </div>
                     );
                   })}
@@ -470,7 +564,7 @@ export function PerformanceTrend() {
             )}
 
             <p className={styles.panel_footnote}>
-              {selectedReleaseInfo ? '이전 주 데이터 대비 변화량' : '전주 대비 변화량 · 해당 날짜 배포 없음'}
+              운영 환경에서는 배포, CMS, 상품·이벤트 페이지 변경 직후 Lighthouse/Web Vitals를 측정해 변경 영향만 비교합니다.
             </p>
           </div>
         )}

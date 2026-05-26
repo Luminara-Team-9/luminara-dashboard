@@ -30,6 +30,7 @@ From: python:3.12-slim-bookworm
 
     # 1. System Dependencies & Chromium
     apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+        git \
         curl \
         ca-certificates \
         gnupg \
@@ -41,7 +42,7 @@ From: python:3.12-slim-bookworm
     # 2. Node.js & Lighthouse CLI
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
-    npm install -g @lhci/cli lighthouse
+    npm install -g @lhci/cli@0.13.0 lighthouse
 
     # 3. Python Foundation
     pip install --no-cache-dir --upgrade pip

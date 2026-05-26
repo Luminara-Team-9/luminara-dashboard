@@ -15,10 +15,83 @@
   flex-wrap: wrap;
 }
 
+.header_badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 8px 12px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.header_badge span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.header_badge strong {
+  color: #1e293b;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.header_badge em {
+  max-width: 180px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.legend_good { background: #10b981; }
+.legend_warn { background: #b45309; }
+.legend_bad  { background: #ef4444; }
+
 .title {
   font-size: 16px;
   font-weight: 700;
-  color: #94a3b8;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -26,50 +99,114 @@
 .subtitle {
   display: block;
   font-size: 11px;
-  color: #475569;
+  color: #64748b;
   margin-top: 2px;
 }
 
-/* ── 매출 입력 ── */
-.revenue_input {
+.score_grid {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.score_card {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  flex-shrink: 0;
+  gap: 6px;
+  padding: 13px 14px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #fbfcfe;
 }
 
-.revenue_label {
-  font-size: 10px;
-  color: #475569;
-  letter-spacing: 0.04em;
-}
-
-.revenue_wrap {
+.score_top {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background-color: #0d1424;
-  border: 1px solid #1e293b;
-  border-radius: 7px;
-  padding: 3px 10px 3px 8px;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.revenue_field {
-  background: none;
-  border: none;
-  color: #e2e8f0;
-  font-size: 13px;
-  font-weight: 700;
-  width: 64px;
-  text-align: right;
-  outline: none;
+.context_label {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.score_value {
+  color: #0f172a;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
-.revenue_unit {
+.score_metric {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score_change {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.change_up {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.change_down {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.score_area {
+  min-height: 30px;
+  margin: 0;
+  color: #64748b;
   font-size: 11px;
-  color: #475569;
+  line-height: 1.35;
+}
+
+.score_status,
+.score_pill {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.score_pill {
+  display: inline-block;
+  min-width: 38px;
+  text-align: center;
+}
+
+.good {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.warn {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.bad {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
 }
 
 /* ── 총합 요약 ── */
@@ -78,8 +215,8 @@
   display: flex;
   align-items: center;
   gap: 0;
-  background-color: #0d1829;
-  border: 1px solid #1e3a5f;
+  background-color: #f8fafc;
+  border: 1px solid #d7dee8;
   border-radius: 12px;
   padding: 10px 20px;
 }
@@ -95,12 +232,12 @@
 .summary_divider {
   width: 1px;
   height: 32px;
-  background: #1e293b;
+  background: #d7dee8;
 }
 
 .summary_label {
   font-size: 10px;
-  color: #475569;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -112,18 +249,19 @@
   line-height: 1.1;
 }
 
-.summary_revenue {
-  font-size: 20px;
-  font-weight: 800;
-  color: #60a5fa;
-  line-height: 1.1;
-}
-
 .summary_fail {
   font-size: 20px;
   font-weight: 800;
   color: #f87171;
   line-height: 1.1;
+}
+
+.summary_revenue {
+  color: #2563eb;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
 }
 
 /* ── 테이블 ── */
@@ -132,7 +270,7 @@
   min-height: 0;
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid #1e293b;
+  border: 1px solid #d7dee8;
 }
 
 .table {
@@ -151,23 +289,23 @@
   font-weight: 600;
   color: #64748b;
   text-align: left;
-  background-color: #0d1424;
+  background-color: #fbfcfe;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid #d7dee8;
   white-space: nowrap;
 }
 
 .th_cvr     { text-align: center; }
-.th_revenue { text-align: right;  }
+.th_revenue { text-align: left;  }
 
 .row {
-  border-bottom: 1px solid #131d2e;
+  border-bottom: 1px solid #e5eaf2;
   transition: background-color 0.12s;
 }
 
 .row:last-child { border-bottom: none; }
-.row:hover      { background-color: #0f1a2e; }
+.row:hover      { background-color: #f8fafc; }
 .row_pass       { opacity: 0.55; }
 
 .td,
@@ -179,7 +317,10 @@
 }
 
 .td_cvr     { text-align: center; }
-.td_revenue { text-align: right;  }
+.td_revenue {
+  min-width: 190px;
+  text-align: left;
+}
 
 /* 지표명 셀 */
 .td_label {
@@ -191,7 +332,7 @@
 .metric_name {
   font-size: 13px;
   font-weight: 700;
-  color: #cbd5e1;
+  color: #334155;
 }
 
 .status_dot {
@@ -207,83 +348,67 @@
 /* 값 */
 .val_pass   { font-size: 13px; font-weight: 600; color: #10b981; }
 .val_fail   { font-size: 13px; font-weight: 600; color: #f87171; }
-.val_target { font-size: 12px; color: #475569; }
+.val_target { font-size: 12px; color: #64748b; }
 
-.achieved {
-  font-size: 12px;
-  font-weight: 700;
-  color: #10b981;
+.position_note {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
-.gap {
-  font-size: 12px;
-  font-weight: 700;
-  color: #f59e0b;
-}
-
-/* CVR */
-.cvr_val {
-  font-size: 13px;
-  font-weight: 800;
-  color: #10b981;
-}
-
-.cvr_achieved {
-  font-size: 13px;
-  color: #10b981;
-}
-
-.no_coeff {
-  font-size: 11px;
+.priority_note {
+  display: block;
+  margin-top: 6px;
   color: #334155;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.effect_note {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.business_use {
+  display: flex;
+  max-width: 340px;
+  flex-direction: column;
+  gap: 3px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.business_use strong {
+  color: #1e293b;
+  font-size: 12.5px;
 }
 
 .coeff {
-  font-size: 10px;
-  color: #475569;
-  background: #111827;
-  border: 1px solid #1e293b;
-  border-radius: 4px;
-  padding: 2px 6px;
+  font-size: 11.5px;
+  color: #92400e;
+  background: rgba(180, 83, 9, 0.14);
+  border: 1px solid rgba(180, 83, 9, 0.36);
+  border-radius: 6px;
+  padding: 4px 7px;
   white-space: nowrap;
 }
 
-/* 매출 */
-.revenue_val {
-  font-size: 13px;
-  font-weight: 700;
-  color: #60a5fa;
-}
-
-.revenue_none {
-  font-size: 12px;
-  color: #334155;
-}
-
-/* 합계 행 */
-.total_row {
-  background-color: #0d1424;
-  border-top: 1px solid #1e293b;
-}
-
-.total_label {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.total_cvr {
-  font-size: 15px;
-  font-weight: 800;
-  color: #10b981;
-}
-
-.total_revenue {
-  font-size: 15px;
-  font-weight: 800;
-  color: #60a5fa;
+.td_revenue .coeff {
+  display: inline-block;
+  margin-bottom: 0;
 }
 
 /* ── 스켈레톤 ── */
@@ -297,15 +422,73 @@
 /* ── 각주 ── */
 .footnote {
   flex-shrink: 0;
-  font-size: 9px;
+  padding: 8px 10px;
+  border: 1px solid rgba(180, 83, 9, 0.26);
+  border-radius: 8px;
   color: #334155;
+  background: rgba(180, 83, 9, 0.1);
+  font-size: 10.5px;
   line-height: 1.5;
 }
 
 /* ── 에러 ── */
+.formula_note {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 8px;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.text_button {
+  margin-right: 8px;
+  padding: 0;
+  border: 0;
+  color: #2563eb;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.text_button:hover {
+  color: #2563eb;
+}
+
 .error {
   text-align: center;
   color: #ef4444;
   padding: 40px;
   font-size: 14px;
+}
+
+@media (max-width: 1180px) {
+  .score_grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .score_grid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .summary_divider {
+    display: none;
+  }
 }

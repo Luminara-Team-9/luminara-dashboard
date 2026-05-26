@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { track } from 'swetrix';
 
 const navCategories = [
   { label: '모든 스포츠', href: '/c/all-sports' },
@@ -76,11 +77,7 @@ export function Header() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
-
-  const handleEmptyLink = (e: React.MouseEvent) => {
-    e.preventDefault();
-    alert('등록된 상품이 없습니다. (No relevant items yet)');
-  };
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Drawer State
 
   useEffect(() => {
     // Function to calculate total items in the cart
@@ -102,36 +99,32 @@ export function Header() {
   }, []);
 
   return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 50, backgroundColor: 'white' }}>
-      <div style={{ borderBottom: '1px solid #e5e7eb' }}>
-        <div
-          style={{
-            maxWidth: '1200px',
-            margin: '0 auto',
-            padding: '0 16px',
-            height: '80px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-          }}
-        >
-          <a href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
-            <div
-              style={{
-                color: '#0055A4',
-                fontWeight: 900,
-                fontSize: '28px',
-                fontStyle: 'italic',
-                letterSpacing: '-1px',
-              }}
-            >
+    <header className="sticky top-0 z-50 bg-white shadow-sm">
+      <div className="border-b border-gray-200">
+        <div className="max-w-[1200px] mx-auto px-4 h-16 md:h-20 flex items-center justify-between gap-4">
+          {/* Mobile Hamburger Menu */}
+          <button
+            className="md:hidden text-gray-700 p-1 flex-shrink-0 cursor-pointer"
+            onClick={() => setIsMobileMenuOpen(true)}
+          >
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+
+          <a href="/" className="shrink-0 no-underline">
+            <div className="text-[#0055A4] font-black text-xl md:text-[28px] italic tracking-tight">
               DECATHLON
             </div>
           </a>
 
           {/* Search */}
-          <div style={{ flex: 1, maxWidth: '640px', position: 'relative' }}>
+          <div className="flex-1 max-w-[640px] relative hidden md:block">
             <div
               onClick={() => setIsSearchOpen(!isSearchOpen)}
               style={{
@@ -233,83 +226,29 @@ export function Header() {
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexShrink: 0 }}>
+          <div className="flex items-center gap-4 md:gap-5 shrink-0">
             <a
               href="/login"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '2px',
-                textDecoration: 'none',
-                color: '#374151',
-              }}
+              className="hidden md:flex flex-col items-center gap-1 no-underline text-gray-700"
             >
-              <span style={{ fontSize: '20px' }}>👤</span>
-              <span style={{ fontSize: '10px' }}>로그인</span>
+              <span className="text-xl">👤</span>
+              <span className="text-[10px]">로그인</span>
             </a>
             <a
               href="/s/our-stores"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '2px',
-                textDecoration: 'none',
-                color: '#374151',
-              }}
+              className="hidden md:flex flex-col items-center gap-1 no-underline text-gray-700"
             >
-              <span style={{ fontSize: '20px' }}>🏬</span>
-              <span style={{ fontSize: '10px' }}>매장 안내</span>
+              <span className="text-xl">🏬</span>
+              <span className="text-[10px]">매장 안내</span>
             </a>
-            <a
-              href="/delivery"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '2px',
-                textDecoration: 'none',
-                color: '#374151',
-              }}
-            >
-              <span style={{ fontSize: '20px' }}>📦</span>
-              <span style={{ fontSize: '10px' }}>배송 확인</span>
-            </a>
-            <a
-              href="/cart"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '4px',
-                textDecoration: 'none',
-                color: '#374151',
-              }}
-            >
-              <div style={{ position: 'relative', display: 'flex' }}>
-                <span style={{ fontSize: '20px', lineHeight: '1' }}>🛒</span>
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: '-6px',
-                    right: '-8px',
-                    backgroundColor: '#0055A4',
-                    color: 'white',
-                    borderRadius: '50%',
-                    width: '16px',
-                    height: '16px',
-                    fontSize: '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 700,
-                  }}
-                >
+            <a href="/cart" className="flex flex-col items-center gap-1 no-underline text-gray-700">
+              <div className="relative flex">
+                <span className="text-[22px] leading-none">🛒</span>
+                <span className="absolute -top-1.5 -right-2 bg-[#0055A4] text-white rounded-full w-[18px] h-[18px] text-[10px] flex items-center justify-center font-bold">
                   {cartCount}
                 </span>
               </div>
-              <span style={{ fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              <span className="text-[11px] font-medium whitespace-nowrap hidden md:block">
                 내 장바구니
               </span>
             </a>
@@ -317,8 +256,28 @@ export function Header() {
         </div>
       </div>
 
+      {/* Mobile Search Bar (Only shows below header on phones) */}
+      <div className="p-2 md:hidden border-b border-gray-200 bg-white">
+        <div className="flex items-center rounded-lg bg-gray-100 py-2 px-3">
+          <span className="text-gray-400 mr-2 text-sm">🔍</span>
+          <input
+            type="text"
+            placeholder="검색"
+            className="flex-1 text-sm bg-transparent outline-none"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                track({
+                  ev: 'search_query',
+                  meta: { search_term: e.currentTarget.value },
+                });
+              }
+            }}
+          />
+        </div>
+      </div>
+
       {/* Category Nav */}
-      <nav style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: 'white' }}>
+      <nav className="border-b border-gray-200 bg-white hidden md:block relative">
         <div
           style={{
             maxWidth: '1200px',
@@ -463,9 +422,14 @@ export function Header() {
                     </div>
                     <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
                       {megaMenuData[activeMenu]?.items?.map((item, idx) => (
-                        <div
+                        <a
                           key={item}
-                          onClick={idx === 0 ? undefined : handleEmptyLink}
+                          href={
+                            megaMenuData[item]?.link ||
+                            megaMenuData[activeMenu as string]?.link ||
+                            '#'
+                          }
+                          onClick={() => track({ ev: 'click_category', meta: { category: item } })}
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -477,11 +441,12 @@ export function Header() {
                             color: idx === 0 ? '#111827' : '#6b7280',
                             backgroundColor: idx === 0 ? '#f3f4f6' : 'transparent',
                             fontWeight: idx === 0 ? 700 : 400,
+                            textDecoration: 'none',
                           }}
                         >
                           <span>{item}</span>
                           <span style={{ color: '#9ca3af' }}>›</span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -522,9 +487,12 @@ export function Header() {
                         '러닝 클리어런스',
                         '러닝웨어',
                       ].map((subItem) => (
-                        <div
+                        <a
                           key={subItem}
-                          onClick={handleEmptyLink}
+                          href="/category/running"
+                          onClick={() =>
+                            track({ ev: 'click_category', meta: { category: subItem } })
+                          }
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -534,11 +502,12 @@ export function Header() {
                             cursor: 'pointer',
                             fontSize: '14px',
                             color: '#374151',
+                            textDecoration: 'none',
                           }}
                         >
                           <span>{subItem}</span>
                           <span style={{ color: '#9ca3af' }}>›</span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -624,9 +593,10 @@ export function Header() {
                     </div>
                     <div style={{ overflowY: 'auto', paddingRight: '16px' }}>
                       {megaMenuData[activeMenu as string]?.items?.map((item) => (
-                        <div
+                        <a
                           key={item}
-                          onClick={handleEmptyLink}
+                          href={megaMenuData[activeMenu as string]?.link || '#'}
+                          onClick={() => track({ ev: 'click_category', meta: { category: item } })}
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -636,11 +606,12 @@ export function Header() {
                             cursor: 'pointer',
                             fontSize: '14px',
                             color: '#374151',
+                            textDecoration: 'none', // Keeps it from looking like a standard blue link
                           }}
                         >
                           <span>{item}</span>
                           <span style={{ color: '#9ca3af' }}>›</span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -681,6 +652,41 @@ export function Header() {
           </>
         )}
       </nav>
+
+      {/* Mobile Side Drawer (Slides out when Hamburger is clicked) */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] flex md:hidden">
+          {/* Dark Overlay */}
+          <div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setIsMobileMenuOpen(false)}
+          ></div>
+          {/* White Drawer */}
+          <div className="relative w-[85%] max-w-sm bg-white h-full shadow-xl flex flex-col z-[101] overflow-y-auto">
+            <div className="p-4 flex justify-between items-center bg-[#0055A4] text-white">
+              <span className="font-bold text-lg">전체 카테고리</span>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="text-2xl leading-none bg-transparent border-none text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-col">
+              {navCategories.map((cat) => (
+                <a
+                  key={cat.label}
+                  href={cat.href}
+                  className="px-6 py-4 border-b border-gray-100 text-sm font-medium text-gray-800 flex justify-between items-center no-underline"
+                >
+                  <span style={{ color: cat.color || '#111827' }}>{cat.label}</span>
+                  <span className="text-gray-400">›</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

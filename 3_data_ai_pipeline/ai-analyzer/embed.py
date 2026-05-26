@@ -1,86 +1,241 @@
 """
 embed.py
-RAG Knowledge Base Builder.
-Embeds documents into rag_documents table using BGE-M3.
 
-Sources:
-    1. Hardcoded CWV guides (one-time, never changes)
-    2. lighthouse_opportunities from DB (re-run when new scans added)
-    3. Competitor benchmarks from DB (re-run when new scans added)
+Production-ready RAG Knowledge Base Builder for Luminara.
 
-Flow:
-    documents → BGE-M3 (1024-dim vectors) → rag_documents table
+Purpose:
+- Build/update rag_documents using BGE-M3 1024-dimensional embeddings.
+- Support all performance problem types through:
+  1. Core Web Vitals guides
+  2. Page/device-aware Lighthouse opportunities
+  3. Main-page competitor benchmark context
+
+Production behavior:
+- Incremental update using content_hash.
+- Skips unchanged documents unless --force is used.
+- Batch embedding for speed.
+- Keeps listener fast: this script should be run by daily ETL/RAG update job, not by listener.py.
 """
 
+import argparse
+import hashlib
 import os
+import re
+from typing import Any, Dict, Iterable, List, Sequence
+
 import psycopg2
-from psycopg2.extras import Json
 from dotenv import load_dotenv
+from psycopg2.extras import Json
 from sentence_transformers import SentenceTransformer
+
 
 load_dotenv()
 
 
-# ── DB Connection ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Config
+# ─────────────────────────────────────────────────────────────
+
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3")
+EXPECTED_EMBEDDING_DIM = int(os.getenv("EXPECTED_EMBEDDING_DIM", "1024"))
+EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "16"))
+
+TARGET_SITE_TYPES = tuple(
+    item.strip()
+    for item in os.getenv("RAG_TARGET_SITE_TYPES", "target,decathlon").split(",")
+    if item.strip()
+)
+
+
+# ─────────────────────────────────────────────────────────────
+# DB Connection
+# ─────────────────────────────────────────────────────────────
 
 def get_db_connection():
-    """Connect to core_db."""
     return psycopg2.connect(
-        host=os.getenv('HOST_IP'),
-        port=os.getenv('PGPORT', '5432'),
-        dbname=os.getenv('POSTGRES_DB'),
-        user=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD')
+        host=os.getenv("HOST_IP"),
+        port=os.getenv("PGPORT", "5432"),
+        dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
     )
 
 
-# ── BGE-M3 Model ──────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Model
+# ─────────────────────────────────────────────────────────────
 
-def load_model():
-    """Load BGE-M3 embedding model."""
-    print("Loading BGE-M3 model...")
-    model = SentenceTransformer('BAAI/bge-m3')
-    print(f"✅ BGE-M3 loaded — dim: {model.get_embedding_dimension()}")
+def load_model() -> SentenceTransformer:
+    print(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+
+    dim = model.get_sentence_embedding_dimension()
+    print(f"✅ Model loaded — dim: {dim}")
+
+    if dim != EXPECTED_EMBEDDING_DIM:
+        raise RuntimeError(
+            f"Embedding dimension mismatch. "
+            f"Model={EMBEDDING_MODEL_NAME} dim={dim}, "
+            f"EXPECTED_EMBEDDING_DIM={EXPECTED_EMBEDDING_DIM}. "
+            f"Your rag_documents.embedding column must match this dimension."
+        )
+
     return model
 
 
-def embed_text(model, text):
-    """Convert text → 1024-dim vector."""
-    return model.encode(text, normalize_embeddings=True).tolist()
+def embed_texts(
+    model: SentenceTransformer,
+    texts: Sequence[str],
+    batch_size: int = EMBED_BATCH_SIZE,
+) -> List[List[float]]:
+    if not texts:
+        return []
+
+    vectors = model.encode(
+        list(texts),
+        batch_size=batch_size,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+
+    return [vector.tolist() for vector in vectors]
 
 
-# ── Insert Helper ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Utility
+# ─────────────────────────────────────────────────────────────
 
-def insert_document(cursor, title, content, source,
-                    doc_type, embedding, metadata=None):
-    """
-    Upsert document — update if exists, insert if not.
-    Always keeps latest data.
-    """
+def normalize_source_part(value: Any) -> str:
+    text = str(value or "unknown").lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    text = text.strip("_")
+    return text or "unknown"
+
+
+def content_hash(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def vector_literal(embedding: List[float]) -> str:
+    return "[" + ",".join(str(float(x)) for x in embedding) + "]"
+
+
+def get_existing_hashes(cursor) -> Dict[str, str]:
     cursor.execute("""
+        SELECT
+            source,
+            metadata ->> 'content_hash' AS content_hash
+        FROM rag_documents
+    """)
+
+    return {
+        source: hash_value
+        for source, hash_value in cursor.fetchall()
+        if source and hash_value
+    }
+
+
+def upsert_document(
+    cursor,
+    doc: Dict[str, Any],
+    embedding: List[float],
+) -> None:
+    metadata = dict(doc.get("metadata") or {})
+    metadata.update({
+        "content_hash": doc["content_hash"],
+        "embedding_model": EMBEDDING_MODEL_NAME,
+        "embedding_dim": EXPECTED_EMBEDDING_DIM,
+    })
+
+    cursor.execute(
+        """
         INSERT INTO rag_documents (
-            title, content, embedding,
-            source, doc_type, metadata,
+            title,
+            content,
+            embedding,
+            source,
+            doc_type,
+            metadata,
             updated_at
-        ) VALUES (%s, %s, %s::vector, %s, %s, %s, NOW())
+        )
+        VALUES (%s, %s, %s::vector, %s, %s, %s, NOW())
         ON CONFLICT (source)
         DO UPDATE SET
+            title      = EXCLUDED.title,
             content    = EXCLUDED.content,
             embedding  = EXCLUDED.embedding,
+            doc_type   = EXCLUDED.doc_type,
             metadata   = EXCLUDED.metadata,
             updated_at = NOW()
-    """, (
-        title,
-        content,
-        str(embedding),
-        source,
-        doc_type,
-        Json(metadata) if metadata else None,
-    ))
-    return cursor.rowcount == 1
+        """,
+        (
+            doc["title"],
+            doc["content"],
+            vector_literal(embedding),
+            doc["source"],
+            doc["doc_type"],
+            Json(metadata),
+        ),
+    )
 
 
-# ── Source 1: Hardcoded CWV Guides ───────────────────────────────────────────
+def prepare_changed_docs(
+    docs: Iterable[Dict[str, Any]],
+    existing_hashes: Dict[str, str],
+    force: bool = False,
+) -> List[Dict[str, Any]]:
+    changed = []
+
+    for doc in docs:
+        doc = dict(doc)
+        doc_hash = content_hash(doc["content"])
+        doc["content_hash"] = doc_hash
+
+        if not force and existing_hashes.get(doc["source"]) == doc_hash:
+            continue
+
+        changed.append(doc)
+
+    return changed
+
+
+def embed_and_upsert_docs(
+    cursor,
+    model: SentenceTransformer,
+    docs: List[Dict[str, Any]],
+    existing_hashes: Dict[str, str],
+    force: bool = False,
+    label: str = "documents",
+) -> int:
+    changed_docs = prepare_changed_docs(
+        docs=docs,
+        existing_hashes=existing_hashes,
+        force=force,
+    )
+
+    skipped = len(docs) - len(changed_docs)
+
+    print(f"  Total {label}: {len(docs)}")
+    print(f"  Changed/new: {len(changed_docs)} | unchanged skipped: {skipped}")
+
+    if not changed_docs:
+        return 0
+
+    embeddings = embed_texts(
+        model=model,
+        texts=[doc["content"] for doc in changed_docs],
+        batch_size=EMBED_BATCH_SIZE,
+    )
+
+    for doc, embedding in zip(changed_docs, embeddings):
+        upsert_document(cursor, doc, embedding)
+
+    return len(changed_docs)
+
+
+# ─────────────────────────────────────────────────────────────
+# Source 1: Core Web Vitals Guides
+# ─────────────────────────────────────────────────────────────
 
 CWV_GUIDES = [
     {
@@ -89,440 +244,463 @@ CWV_GUIDES = [
             "Largest Contentful Paint (LCP) measures how long it takes "
             "for the largest visible content element to load. "
             "Good: under 2500ms. Needs improvement: 2500-4000ms. "
-            "Poor: over 4000ms. LCP is the most important Core Web Vital "
-            "for user experience and Google search ranking."
+            "Poor: over 4000ms. LCP is a key Core Web Vital for user experience "
+            "and search quality."
         ),
         "doc_type": "cwv_guide",
     },
     {
         "title": "LCP Common Causes",
         "content": (
-            "Common causes of slow LCP: "
-            "1. Large hero images not optimized. "
-            "2. Render-blocking JavaScript and CSS in the head. "
-            "3. Slow server response time (TTFB over 800ms). "
-            "4. Client-side rendering delaying content paint. "
-            "5. Images without proper width and height attributes causing reflow."
+            "Common causes of slow LCP include large unoptimized hero images, "
+            "late-discovered product gallery images, render-blocking JavaScript or CSS, "
+            "slow server response time, and client-side rendering delaying visible content."
         ),
         "doc_type": "cwv_guide",
     },
     {
-        "title": "LCP Fix: Optimize Hero Images",
+        "title": "LCP Fix: Prioritize Critical Images",
         "content": (
-            "To fix slow LCP caused by large images: "
-            "Convert images to WebP or AVIF format (50-80% smaller). "
-            "Add loading='eager' and fetchpriority='high' to hero image. "
-            "Use srcset for responsive images. "
-            "Preload the LCP image with <link rel=preload>. "
-            "Compress images to under 200KB for hero images."
+            "For LCP image issues, prioritize the first visible hero or product image. "
+            "Use loading='eager' and fetchpriority='high' for the LCP image only. "
+            "Use loading='lazy' for below-the-fold images. Use decoding='async'. "
+            "Use responsive srcset/sizes and modern formats such as WebP or AVIF when safe. "
+            "Avoid lazy loading the first visible LCP image."
         ),
         "doc_type": "fix_guide",
-    },
-    {
-        "title": "LCP Fix: Remove Render-Blocking Resources",
-        "content": (
-            "To fix LCP caused by render-blocking resources: "
-            "Add defer or async attribute to non-critical scripts. "
-            "Move scripts to end of body tag. "
-            "Use <link rel=preload> for critical CSS. "
-            "Inline critical CSS directly in the head. "
-            "Remove unused CSS and JavaScript files. "
-            "Expected improvement: 500ms-2000ms reduction in LCP."
-        ),
-        "doc_type": "fix_guide",
-    },
-    {
-        "title": "TBT Overview and Thresholds",
-        "content": (
-            "Total Blocking Time (TBT) measures how long the main thread "
-            "is blocked, preventing user interaction. "
-            "Good: under 200ms. Needs improvement: 200-600ms. "
-            "Poor: over 600ms. High TBT makes pages feel unresponsive. "
-            "TBT is caused by long JavaScript tasks on the main thread."
-        ),
-        "doc_type": "cwv_guide",
     },
     {
         "title": "TBT Fix: Reduce JavaScript Execution",
         "content": (
-            "To fix high TBT: "
-            "Remove unused JavaScript — use code splitting. "
-            "Defer non-critical JavaScript with defer attribute. "
-            "Break up long tasks into smaller async tasks. "
-            "Use web workers for heavy computation. "
-            "Minify and compress JavaScript files. "
-            "Remove or replace heavy third-party scripts. "
-            "Expected improvement: reducing 50KB of JS reduces TBT by 100-500ms."
+            "For TBT and unused JavaScript issues, reduce JavaScript execution by code splitting, "
+            "dynamic import, lazy loading heavy components, deferring non-critical scripts, "
+            "removing unused imports, replacing heavy third-party scripts, and breaking long tasks "
+            "into smaller asynchronous work. Do not change business logic while optimizing TBT."
         ),
         "doc_type": "fix_guide",
     },
     {
-        "title": "CLS Overview and Thresholds",
+        "title": "CLS Fix: Reserve Layout Space",
         "content": (
-            "Cumulative Layout Shift (CLS) measures unexpected layout shifts "
-            "during page load. "
-            "Good: under 0.1. Needs improvement: 0.1-0.25. "
-            "Poor: over 0.25. High CLS means elements jump around, "
-            "causing bad user experience and accidental clicks."
-        ),
-        "doc_type": "cwv_guide",
-    },
-    {
-        "title": "CLS Fix: Set Image Dimensions",
-        "content": (
-            "To fix high CLS: "
-            "Always set width and height attributes on images and videos. "
-            "Use aspect-ratio CSS property for responsive media. "
-            "Reserve space for ads and embeds with min-height. "
-            "Avoid inserting content above existing content after load. "
-            "Use transform animations instead of layout-triggering properties. "
-            "Preload web fonts to prevent font swap layout shifts."
+            "To reduce CLS, set width and height for images and videos, use aspect-ratio for "
+            "responsive media, reserve space for banners, ads, embeds, and skeleton placeholders, "
+            "avoid inserting content above existing content, and use transform animations instead "
+            "of layout-triggering properties."
         ),
         "doc_type": "fix_guide",
     },
     {
-        "title": "FCP Overview and Thresholds",
+        "title": "FCP Fix: CSS and Font Optimization",
         "content": (
-            "First Contentful Paint (FCP) measures when the first text "
-            "or image is painted on screen. "
-            "Good: under 1800ms. Needs improvement: 1800-3000ms. "
-            "Poor: over 3000ms. Fast FCP gives users confidence the page is loading."
-        ),
-        "doc_type": "cwv_guide",
-    },
-    {
-        "title": "FCP Fix: Eliminate Render-Blocking CSS",
-        "content": (
-            "To fix slow FCP: "
-            "Inline critical CSS in the head. "
-            "Load non-critical CSS asynchronously using media=print trick. "
-            "Remove unused CSS rules. "
-            "Use font-display: swap for web fonts. "
-            "Minimize server response time with caching."
+            "For FCP and render-blocking CSS issues, inline critical CSS, remove unused CSS, "
+            "avoid CSS @import, defer non-critical stylesheets, use font-display: swap for fonts, "
+            "and reduce critical CSS size."
         ),
         "doc_type": "fix_guide",
     },
     {
-        "title": "TTFB Overview and Thresholds",
+        "title": "TTFB Fix: Server and Cache Optimization",
         "content": (
-            "Time to First Byte (TTFB) measures how long the server takes "
-            "to respond to a request. "
-            "Good: under 800ms. Needs improvement: 800ms-1800ms. "
-            "Poor: over 1800ms. Slow TTFB affects all other metrics downstream."
-        ),
-        "doc_type": "cwv_guide",
-    },
-    {
-        "title": "TTFB Fix: Server Optimization",
-        "content": (
-            "To fix slow TTFB: "
-            "Enable server-side caching (Redis, Memcached). "
-            "Use a Content Delivery Network (CDN). "
-            "Optimize database queries — add indexes. "
-            "Enable HTTP/2 or HTTP/3. "
-            "Use server-side rendering (SSR) instead of client-side rendering. "
-            "Upgrade hosting plan if server is overloaded."
+            "For TTFB issues, use CDN caching, server-side caching such as Redis or Memcached, "
+            "database indexing, backend query optimization, HTTP/2 or HTTP/3, and improved server "
+            "capacity. Automatic source-code patching should be conservative unless a safe config "
+            "file such as next.config, middleware, or cache headers is available."
         ),
         "doc_type": "fix_guide",
     },
     {
         "title": "Lighthouse Performance Score Breakdown",
         "content": (
-            "Lighthouse performance score is calculated from: "
-            "FCP (10%), SI (10%), LCP (25%), TBT (30%), CLS (25%). "
-            "Score 90-100: Good. Score 50-89: Needs improvement. "
-            "Score 0-49: Poor. "
-            "Focus on LCP and TBT first for maximum score improvement. "
-            "Each 100ms reduction in LCP improves score by approximately 1-2 points."
+            "Lighthouse performance score is influenced by FCP, Speed Index, LCP, TBT, and CLS. "
+            "LCP and TBT often have the largest practical impact for e-commerce pages. "
+            "A staged remediation system should fix one high-confidence opportunity, rerun tests, "
+            "then continue with the next ranked issue."
         ),
         "doc_type": "cwv_guide",
     },
     {
-        "title": "Image Optimization for Web Performance",
-        "content": (
-            "Image optimization best practices: "
-            "Use WebP format (25-35% smaller than JPEG). "
-            "Use AVIF format (50% smaller than JPEG) for modern browsers. "
-            "Implement lazy loading for below-fold images with loading='lazy'. "
-            "Use responsive images with srcset and sizes attributes. "
-            "Compress images to under 100KB where possible. "
-            "Use image CDN for automatic format conversion and resizing."
-        ),
-        "doc_type": "fix_guide",
-    },
-    {
-        "title": "JavaScript Performance Optimization",
-        "content": (
-            "JavaScript optimization best practices: "
-            "Code split large bundles using dynamic import(). "
-            "Tree shake to remove dead code. "
-            "Defer non-critical scripts with defer attribute. "
-            "Load third-party scripts asynchronously. "
-            "Use requestIdleCallback for non-urgent tasks. "
-            "Avoid long synchronous operations over 50ms on main thread."
-        ),
-        "doc_type": "fix_guide",
-    },
-    {
-        "title": "CSS Performance Optimization",
-        "content": (
-            "CSS optimization best practices: "
-            "Remove unused CSS rules (PurgeCSS or manual audit). "
-            "Minify CSS files for production. "
-            "Avoid @import in CSS (causes additional network requests). "
-            "Use CSS containment for complex layouts. "
-            "Inline critical above-the-fold CSS. "
-            "Reduce CSS file size to under 50KB for critical path CSS."
-        ),
-        "doc_type": "fix_guide",
-    },
-    {
         "title": "Korean E-commerce Performance Context",
         "content": (
-            "Korean e-commerce sites like Decathlon Korea, Nike Korea, "
-            "Adidas Korea target mobile users with LTE/5G connections. "
-            "Korean users expect fast page loads under 3 seconds. "
-            "Mobile performance is more important than desktop for Korean market. "
-            "Korean product pages often have heavy image galleries causing slow LCP. "
-            "Third-party Korean analytics and payment scripts cause high TBT."
+            "Korean e-commerce users expect fast mobile page loads on LTE and 5G networks. "
+            "Product pages often have image galleries that affect LCP. Main pages often have "
+            "hero banners and promotional widgets. Third-party analytics, payment, or marketing "
+            "scripts may increase TBT. Fixes should be page-type aware."
         ),
         "doc_type": "context",
     },
 ]
 
 
-def embed_cwv_guides(cursor, model):
-    """Embed hardcoded CWV guides — run once only."""
-    print("\n[Source 1] Embedding CWV guides...")
-    inserted = 0
-    skipped = 0
+def build_cwv_guide_docs() -> List[Dict[str, Any]]:
+    docs = []
 
-    for doc in CWV_GUIDES:
-        embedding = embed_text(model, doc["content"])
-        ok = insert_document(
-            cursor=cursor,
-            title=doc["title"],
-            content=doc["content"],
-            source=f"cwv_guide_{doc['title'].lower().replace(' ', '_').replace(':', '')}",
-            doc_type=doc["doc_type"],
-            embedding=embedding,
-        )
-        if ok:
-            inserted += 1
-            print(f"  ✅ {doc['title']}")
-        else:
-            skipped += 1
-            print(f"  ⏭️  {doc['title']} (already exists)")
+    for guide in CWV_GUIDES:
+        source_title = normalize_source_part(guide["title"])
+        docs.append({
+            "title": guide["title"],
+            "content": guide["content"],
+            "source": f"cwv_guide_{source_title}",
+            "doc_type": guide["doc_type"],
+            "metadata": {
+                "source_kind": "static_cwv_guide",
+            },
+        })
 
-    print(f"  → inserted: {inserted} | skipped: {skipped}")
-    return inserted
+    return docs
 
 
-# ── Source 2: Lighthouse Opportunities ───────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Source 2: Page/device-aware Lighthouse Opportunities
+# ─────────────────────────────────────────────────────────────
 
-def embed_opportunities(cursor, model):
-    """
-    Embed lighthouse_opportunities from DB.
-    Uses average savings_ms across all runs.
-     unique opportunities only.
-    """
-    print("\n[Source 2] Embedding lighthouse opportunities...")
+def build_opportunity_docs(cursor) -> List[Dict[str, Any]]:
+    print("\n[Source 2] Collecting page/device-aware Lighthouse opportunities...")
 
-    # FIX: average savings, 13 unique rows only
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT
+            COALESCE(lo.opportunity_id, lo.title) AS opportunity_key,
+            lo.opportunity_id,
+            lo.title,
+            lo.description,
+            AVG(COALESCE(lo.savings_ms, 0))::int AS avg_savings,
+            MAX(COALESCE(lo.severity, 'medium')) AS severity,
+            COALESCE(lo.category, 'performance') AS category,
+            COALESCE(lr.site_type, 'unknown') AS site_type,
+            COALESCE(lr.page_type, 'unknown') AS page_type,
+            COALESCE(lr.device_type, 'unknown') AS device_type,
+            COUNT(*) AS occurrence_count,
+            MIN(lo.test_id) AS sample_test_id
+        FROM lighthouse_opportunities lo
+        JOIN lighthouse_runs lr
+          ON lo.test_id = lr.test_id
+        WHERE COALESCE(lo.savings_ms, 0) > 0
+        GROUP BY
+            COALESCE(lo.opportunity_id, lo.title),
+            lo.opportunity_id,
+            lo.title,
+            lo.description,
+            COALESCE(lo.category, 'performance'),
+            COALESCE(lr.site_type, 'unknown'),
+            COALESCE(lr.page_type, 'unknown'),
+            COALESCE(lr.device_type, 'unknown')
+        ORDER BY avg_savings DESC
+        """
+    )
+
+    rows = cursor.fetchall()
+    docs = []
+
+    for row in rows:
+        (
+            opportunity_key,
             opportunity_id,
             title,
             description,
-            AVG(savings_ms)::int as avg_savings,
+            avg_savings,
             severity,
             category,
-            MIN(test_id) as test_id
-        FROM lighthouse_opportunities
-        GROUP BY opportunity_id, title, description,
-                 severity, category
-        ORDER BY avg_savings DESC
-    """)
-    rows = cursor.fetchall()
-    print(f"  Found {len(rows)} unique opportunities")
+            site_type,
+            page_type,
+            device_type,
+            occurrence_count,
+            sample_test_id,
+        ) = row
 
-    inserted = 0
-    skipped = 0
-
-    for row in rows:
-        (opportunity_id, title, description,
-         avg_savings, severity, category, test_id) = row
+        source = (
+            "lighthouse_opportunity_"
+            f"{normalize_source_part(site_type)}_"
+            f"{normalize_source_part(page_type)}_"
+            f"{normalize_source_part(device_type)}_"
+            f"{normalize_source_part(opportunity_key)}"
+        )
 
         content = (
-            f"Performance opportunity: {title}. "
+            f"Performance opportunity on {site_type} {page_type} page for {device_type}: {title}. "
             f"{description or ''} "
-            f"Average estimated savings: {avg_savings}ms. "
-            f"Severity: {severity}. "
-            f"Category: {category}. "
-            f"Fix this to improve {category} performance "
-            f"and reduce page load time by {avg_savings}ms."
+            f"Average estimated savings: {int(avg_savings or 0)}ms. "
+            f"Severity: {severity}. Category: {category}. "
+            f"Observed {int(occurrence_count or 0)} times in Lighthouse data. "
+            f"This recommendation is page-aware and is most relevant to {page_type} pages on {device_type}. "
+            f"Use it when the current audit group has page_type={page_type}, device_type={device_type}, "
+            f"and a related opportunity such as {opportunity_id or opportunity_key}."
         )
 
-        source = f"lighthouse_opportunity_{opportunity_id}"
-        embedding = embed_text(model, content)
-
-        ok = insert_document(
-            cursor=cursor,
-            title=f"Fix: {title}",
-            content=content,
-            source=source,
-            doc_type="lighthouse_opportunity",
-            embedding=embedding,
-            metadata={
+        docs.append({
+            "title": f"Fix: {title} ({page_type}/{device_type})",
+            "content": content,
+            "source": source,
+            "doc_type": "lighthouse_opportunity",
+            "metadata": {
+                "source_kind": "lighthouse_opportunity",
                 "opportunity_id": opportunity_id,
-                "test_id": test_id,
-                "savings_ms": float(avg_savings) if avg_savings else None,
+                "opportunity_key": opportunity_key,
+                "site_type": site_type,
+                "page_type": page_type,
+                "device_type": device_type,
+                "avg_savings_ms": int(avg_savings or 0),
                 "severity": severity,
                 "category": category,
-            }
-        )
-        if ok:
-            inserted += 1
-            print(f"  ✅ {title} (avg {avg_savings}ms)")
-        else:
-            skipped += 1
-            print(f"  ⏭️  {title} (already exists)")
+                "occurrence_count": int(occurrence_count or 0),
+                "sample_test_id": sample_test_id,
+            },
+        })
 
-    print(f"  → inserted: {inserted} | skipped: {skipped}")
-    return inserted
+    print(f"  Found {len(docs)} page/device-aware opportunity docs")
+    return docs
 
 
-# ── Source 3: Competitor Benchmarks ──────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Source 3: Main-page Competitor Benchmarks
+# ─────────────────────────────────────────────────────────────
 
-def embed_competitor_benchmarks(cursor, model):
-    """
-    Generate and embed competitor benchmark comparisons.
-    """
-    print("\n[Source 3] Embedding competitor benchmarks...")
+def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
+    print("\n[Source 3] Collecting main-page competitor benchmarks...")
 
-    cursor.execute("""
-        SELECT url, page_type, device_type,
-               lcp_ms, tbt_ms, cls_score,
-               performance_score
+    cursor.execute(
+        """
+        SELECT
+            url,
+            site_type,
+            page_type,
+            device_type,
+            lcp_ms,
+            tbt_ms,
+            cls_score,
+            performance_score,
+            created_at
         FROM lighthouse_runs
-        WHERE site_type = 'decathlon'
+        WHERE site_type = ANY(%s)
+          AND page_type = 'main'
         ORDER BY created_at DESC
-        LIMIT 10
-    """)
+        LIMIT 30
+        """,
+        (list(TARGET_SITE_TYPES),),
+    )
     decathlon_rows = cursor.fetchall()
 
-    cursor.execute("""
-        SELECT url, page_type, device_type,
-               competitor_name, lcp_ms, tbt_ms,
-               cls_score, performance_score
+    cursor.execute(
+        """
+        SELECT
+            url,
+            page_type,
+            device_type,
+            competitor_name,
+            lcp_ms,
+            tbt_ms,
+            cls_score,
+            performance_score,
+            created_at
         FROM lighthouse_runs
         WHERE site_type = 'competitor'
+          AND page_type = 'main'
         ORDER BY created_at DESC
-        LIMIT 10
-    """)
+        LIMIT 30
+        """
+    )
     competitor_rows = cursor.fetchall()
 
     if not decathlon_rows or not competitor_rows:
-        print("  ⚠️  Not enough data for benchmarks — skipping")
-        return 0
+        print("  Not enough main-page benchmark data — skipping")
+        return []
 
-    inserted = 0
-    skipped = 0
+    docs = []
+    seen_sources = set()
 
     for dec in decathlon_rows:
-        (dec_url, dec_page, dec_device,
-         dec_lcp, dec_tbt, dec_cls,
-         dec_score) = dec
+        (
+            dec_url,
+            dec_site_type,
+            dec_page,
+            dec_device,
+            dec_lcp,
+            dec_tbt,
+            dec_cls,
+            dec_score,
+            dec_created_at,
+        ) = dec
 
         for comp in competitor_rows:
-            (comp_url, comp_page, comp_device,
-             comp_name, comp_lcp, comp_tbt,
-             comp_cls, comp_score) = comp
+            (
+                comp_url,
+                comp_page,
+                comp_device,
+                comp_name,
+                comp_lcp,
+                comp_tbt,
+                comp_cls,
+                comp_score,
+                comp_created_at,
+            ) = comp
 
-            if dec_page != comp_page or dec_device != comp_device:
+            if dec_page != "main" or comp_page != "main":
                 continue
 
-            lcp_diff   = (dec_lcp or 0) - (comp_lcp or 0)
-            tbt_diff   = (dec_tbt or 0) - (comp_tbt or 0)
-            score_diff = (dec_score or 0) - (comp_score or 0)
+            if dec_device != comp_device:
+                continue
+
+            safe_comp_name = normalize_source_part(comp_name)
+            safe_device = normalize_source_part(dec_device)
+
+            source = f"benchmark_main_decathlon_vs_{safe_comp_name}_{safe_device}"
+
+            if source in seen_sources:
+                continue
+
+            seen_sources.add(source)
+
+            dec_lcp_f = float(dec_lcp or 0)
+            comp_lcp_f = float(comp_lcp or 0)
+
+            dec_tbt_f = float(dec_tbt or 0)
+            comp_tbt_f = float(comp_tbt or 0)
+
+            dec_cls_f = float(dec_cls or 0)
+            comp_cls_f = float(comp_cls or 0)
+
+            dec_score_f = float(dec_score or 0)
+            comp_score_f = float(comp_score or 0)
+
+            lcp_diff = dec_lcp_f - comp_lcp_f
+            tbt_diff = dec_tbt_f - comp_tbt_f
+            cls_diff = dec_cls_f - comp_cls_f
+            score_diff = dec_score_f - comp_score_f
 
             content = (
-                f"Decathlon Korea {dec_page} page ({dec_device}) "
-                f"vs {comp_name} Korea benchmark comparison. "
-                f"Decathlon LCP: {dec_lcp}ms vs {comp_name} LCP: {comp_lcp}ms "
-                f"(difference: {lcp_diff:.0f}ms). "
-                f"Decathlon TBT: {dec_tbt}ms vs {comp_name} TBT: {comp_tbt}ms "
-                f"(difference: {tbt_diff:.0f}ms). "
-                f"Decathlon score: {dec_score} vs {comp_name} score: {comp_score} "
-                f"(difference: {score_diff:.1f} points). "
-                f"{'Decathlon is slower than competitor — improvement needed.' if lcp_diff > 0 else 'Decathlon is faster than competitor.'}"
+                f"Main page competitor benchmark for {dec_device}. "
+                f"Decathlon Korea URL: {dec_url}. Competitor: {comp_name}, URL: {comp_url}. "
+                f"Decathlon LCP {dec_lcp_f:.0f}ms vs {comp_name} LCP {comp_lcp_f:.0f}ms "
+                f"(difference {lcp_diff:.0f}ms). "
+                f"Decathlon TBT {dec_tbt_f:.0f}ms vs {comp_name} TBT {comp_tbt_f:.0f}ms "
+                f"(difference {tbt_diff:.0f}ms). "
+                f"Decathlon CLS {dec_cls_f:.4f} vs {comp_name} CLS {comp_cls_f:.4f} "
+                f"(difference {cls_diff:.4f}). "
+                f"Decathlon performance score {dec_score_f:.1f} vs {comp_name} score {comp_score_f:.1f} "
+                f"(difference {score_diff:.1f}). "
+                f"This benchmark is relevant only to main page {dec_device} recommendations. "
+                f"{'Decathlon main page is slower than this competitor on LCP.' if lcp_diff > 0 else 'Decathlon main page is not slower than this competitor on LCP.'} "
+                f"{'Decathlon main page has higher TBT than this competitor.' if tbt_diff > 0 else 'Decathlon main page does not have higher TBT than this competitor.'}"
             )
 
-            title  = f"Benchmark: Decathlon vs {comp_name} {dec_page} {dec_device}"
-            source = f"benchmark_decathlon_vs_{comp_name}_{dec_page}_{dec_device}"
-
-            embedding = embed_text(model, content)
-            ok = insert_document(
-                cursor=cursor,
-                title=title,
-                content=content,
-                source=source,
-                doc_type="competitor_benchmark",
-                embedding=embedding,
-                metadata={
-                    "decathlon_lcp":   dec_lcp,
-                    "competitor_lcp":  comp_lcp,
+            docs.append({
+                "title": f"Benchmark: Main Decathlon vs {comp_name} ({dec_device})",
+                "content": content,
+                "source": source,
+                "doc_type": "competitor_benchmark",
+                "metadata": {
+                    "source_kind": "competitor_benchmark",
+                    "site_type": dec_site_type,
+                    "page_type": "main",
+                    "device_type": dec_device,
                     "competitor_name": comp_name,
-                    "page_type":       dec_page,
-                    "device_type":     dec_device,
-                }
-            )
-            if ok:
-                inserted += 1
-                print(f"  ✅ {title}")
-            else:
-                skipped += 1
+                    "decathlon_url": dec_url,
+                    "competitor_url": comp_url,
+                    "decathlon_lcp": dec_lcp_f,
+                    "competitor_lcp": comp_lcp_f,
+                    "lcp_diff": lcp_diff,
+                    "decathlon_tbt": dec_tbt_f,
+                    "competitor_tbt": comp_tbt_f,
+                    "tbt_diff": tbt_diff,
+                    "decathlon_cls": dec_cls_f,
+                    "competitor_cls": comp_cls_f,
+                    "cls_diff": cls_diff,
+                    "decathlon_score": dec_score_f,
+                    "competitor_score": comp_score_f,
+                    "score_diff": score_diff,
+                    "decathlon_created_at": str(dec_created_at),
+                    "competitor_created_at": str(comp_created_at),
+                },
+            })
 
-    print(f"  → inserted: {inserted} | skipped: {skipped}")
-    return inserted
+    print(f"  Found {len(docs)} main-page competitor benchmark docs")
+    return docs
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────
 
-def main():
-    print("=" * 55)
-    print("RAG KNOWLEDGE BASE — EMBED PIPELINE")
-    print("=" * 55)
+def run_embed_pipeline(
+    only: str = "all",
+    force: bool = False,
+) -> int:
+    print("=" * 60)
+    print("RAG KNOWLEDGE BASE — PRODUCTION EMBED PIPELINE")
+    print("=" * 60)
+    print(f"model: {EMBEDDING_MODEL_NAME}")
+    print(f"expected_dim: {EXPECTED_EMBEDDING_DIM}")
+    print(f"batch_size: {EMBED_BATCH_SIZE}")
+    print(f"only: {only}")
+    print(f"force: {force}")
+    print("=" * 60)
 
     model = load_model()
 
     conn = None
+    total_changed = 0
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        total = 0
+        existing_hashes = get_existing_hashes(cursor)
 
-        # Source 1: CWV guides (one-time)
-        total += embed_cwv_guides(cursor, model)
-        conn.commit()
+        if only in {"all", "guides"}:
+            print("\n[Source 1] Updating CWV guides...")
+            docs = build_cwv_guide_docs()
+            changed = embed_and_upsert_docs(
+                cursor=cursor,
+                model=model,
+                docs=docs,
+                existing_hashes=existing_hashes,
+                force=force,
+                label="CWV guides",
+            )
+            conn.commit()
+            total_changed += changed
+            existing_hashes = get_existing_hashes(cursor)
+            print(f"  ✅ CWV guide docs updated: {changed}")
 
-        # Source 2: Lighthouse opportunities
-        total += embed_opportunities(cursor, model)
-        conn.commit()
+        if only in {"all", "opportunities"}:
+            docs = build_opportunity_docs(cursor)
+            changed = embed_and_upsert_docs(
+                cursor=cursor,
+                model=model,
+                docs=docs,
+                existing_hashes=existing_hashes,
+                force=force,
+                label="Lighthouse opportunity docs",
+            )
+            conn.commit()
+            total_changed += changed
+            existing_hashes = get_existing_hashes(cursor)
+            print(f"  ✅ Opportunity docs updated: {changed}")
 
-        # Source 3: Competitor benchmarks
-        total += embed_competitor_benchmarks(cursor, model)
-        conn.commit()
-
-        print(f"\n{'=' * 55}")
-        print(f"✅ RAG Knowledge Base complete!")
-        print(f"   Total new documents: {total}")
+        if only in {"all", "benchmarks"}:
+            docs = build_competitor_benchmark_docs(cursor)
+            changed = embed_and_upsert_docs(
+                cursor=cursor,
+                model=model,
+                docs=docs,
+                existing_hashes=existing_hashes,
+                force=force,
+                label="competitor benchmark docs",
+            )
+            conn.commit()
+            total_changed += changed
+            existing_hashes = get_existing_hashes(cursor)
+            print(f"  ✅ Benchmark docs updated: {changed}")
 
         cursor.execute("SELECT COUNT(*) FROM rag_documents")
-        count = cursor.fetchone()[0]
-        print(f"   Total in DB:         {count}")
-        print("=" * 55)
+        total_docs = cursor.fetchone()[0]
+
+        print("\n" + "=" * 60)
+        print("✅ RAG Knowledge Base update complete")
+        print(f"Changed/new documents embedded: {total_changed}")
+        print(f"Total rag_documents: {total_docs}")
+        print("=" * 60)
+
+        return total_changed
 
     except Exception as e:
         print(f"❌ embed.py failed: {e}")
@@ -535,5 +713,31 @@ def main():
             conn.close()
 
 
-if __name__ == '__main__':
+def main():
+    parser = argparse.ArgumentParser(
+        description="Luminara production RAG embedding updater"
+    )
+
+    parser.add_argument(
+        "--only",
+        choices=["all", "guides", "opportunities", "benchmarks"],
+        default="all",
+        help="Select which document source to update.",
+    )
+
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-embedding even when content_hash did not change.",
+    )
+
+    args = parser.parse_args()
+
+    run_embed_pipeline(
+        only=args.only,
+        force=args.force,
+    )
+
+
+if __name__ == "__main__":
     main()

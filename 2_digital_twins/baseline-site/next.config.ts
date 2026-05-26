@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone", // 🚀 SRE FIX: Required for read-only Singularity containers
   reactStrictMode: true,
   eslint: {
     ignoreDuringBuilds: true,

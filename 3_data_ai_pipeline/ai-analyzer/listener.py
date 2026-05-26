@@ -1,0 +1,622 @@
+import os
+from datetime import datetime
+from typing import Optional, Any, Dict, List
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Header
+from pydantic import BaseModel, Field, model_validator
+
+from agent import build_agent
+
+try:
+    from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id
+except ImportError:
+    from db_client import update_fix_plan_status, get_fix_plan_by_id
+
+
+load_dotenv()
+
+app = FastAPI(
+    title="Luminara Remediation Agent Listener",
+    description=(
+        "Receives CI/CD audit failure triggers and runs the AI remediation agent. "
+        "Production-safe version: no recent-time guessing, no ETL, no RAG update."
+    ),
+    version="2.0.0",
+)
+
+# ─────────────────────────────────────────────
+# Runtime Config
+# ─────────────────────────────────────────────
+
+BASE_DIR = os.getenv(
+    "LUMINARA_BASE_DIR",
+    "/abr/coss41/shared_workspace/yuyu_workspace/codebase/luminara-dashboard",
+)
+
+AI_DIR = os.getenv(
+    "LUMINARA_AI_DIR",
+    f"{BASE_DIR}/3_data_ai_pipeline/ai-analyzer",
+)
+
+RAG_SERVICE_URL = os.getenv(
+    "RAG_SERVICE_URL",
+    "http://localhost:9020",
+)
+
+# Optional security.
+# If LUMINARA_AGENT_SECRET is empty, secret checking is disabled.
+AGENT_SECRET = os.getenv("LUMINARA_AGENT_SECRET")
+
+DEFAULT_MAX_OPPORTUNITIES = int(os.getenv("AGENT_MAX_OPPORTUNITIES", "3"))
+
+
+print("🚀 Loading Remediation Agent once...")
+agent_app = build_agent()
+print("✅ Remediation Agent ready")
+
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def safe_payload_dict(payload: "TriggerPayload") -> Dict[str, Any]:
+    """
+    Return payload fields for logs without secrets.
+    """
+    return {
+        "test_id": payload.test_id,
+        "playwright_run_id": payload.playwright_run_id,
+        "failed_groups": [
+            group.model_dump()
+            for group in payload.failed_groups
+        ] if payload.failed_groups else [],
+        "pr_branch": payload.pr_branch,
+        "target_dir": payload.target_dir,
+        "thread_id": payload.thread_id,
+        "max_opportunities": payload.max_opportunities,
+        "dry_run": payload.dry_run,
+    }
+
+
+def build_group_thread_id(base_thread_id: str, group: "FailedGroup") -> str:
+    """
+    Make a unique thread_id per failed group.
+
+    Reason:
+    fix_plans.thread_id is unique, so if one PR has multiple failed groups,
+    each group needs a unique thread_id.
+    """
+    site_type = group.site_type or "unknown_site"
+    page_type = group.page_type or "unknown_page"
+    device_type = group.device_type or "unknown_device"
+
+    return f"{base_thread_id}_{site_type}_{page_type}_{device_type}"
+
+
+# ─────────────────────────────────────────────
+# Request Models
+# ─────────────────────────────────────────────
+
+class FailedGroup(BaseModel):
+    """
+    One stable audit group.
+
+    Example:
+    playwright_run_id = 10
+    page_type = product
+    device_type = mobile
+
+    Agent will use these values to find the 3 related Lighthouse runs.
+    """
+    site_type: str = Field(default="decathlon")
+    page_type: str
+    device_type: str
+    url: Optional[str] = None
+    network_profile: Optional[str] = None
+
+
+class TriggerPayload(BaseModel):
+    """
+    Supported trigger formats.
+
+    Production preferred:
+    {
+      "playwright_run_id": 10,
+      "failed_groups": [
+        {"site_type": "decathlon", "page_type": "product", "device_type": "mobile"}
+      ],
+      "pr_branch": "...",
+      "target_dir": "...",
+      "thread_id": "pr_17"
+    }
+
+    Transitional/test mode:
+    {
+      "test_id": 100,
+      "pr_branch": "...",
+      "target_dir": "...",
+      "thread_id": "manual_test"
+    }
+
+    Legacy/minimal mode:
+    {
+      "pr_branch": "...",
+      "target_dir": "...",
+      "thread_id": "pr_17"
+    }
+
+    In legacy/minimal mode, listener does NOT guess recent audits.
+    It returns missing_audit_identity safely.
+    """
+
+    # Transitional exact single run input.
+    # Agent should resolve sibling 3-run group from this test_id.
+    test_id: Optional[int] = None
+
+    # Preferred production group input.
+    playwright_run_id: Optional[int] = None
+    failed_groups: List[FailedGroup] = Field(default_factory=list)
+
+    # GitHub / workspace metadata.
+    pr_branch: Optional[str] = None
+    target_dir: Optional[str] = None
+    thread_id: Optional[str] = None
+
+    # Internal controls.
+    # Do not require these in GitHub payload.
+    max_opportunities: int = Field(default=DEFAULT_MAX_OPPORTUNITIES, ge=1, le=5)
+    dry_run: bool = False
+
+    @model_validator(mode="after")
+    def validate_basic_metadata(self):
+        missing = []
+
+        if not self.pr_branch:
+            missing.append("pr_branch")
+
+        if not self.target_dir:
+            missing.append("target_dir")
+
+        if not self.thread_id:
+            missing.append("thread_id")
+
+        if missing:
+            raise ValueError(
+                "Missing required metadata fields: " + ", ".join(missing)
+            )
+
+        return self
+
+
+# ─────────────────────────────────────────────
+# Routes
+# ─────────────────────────────────────────────
+
+@app.get("/")
+def root():
+    return {
+        "status": "Luminara AI listener is running",
+        "message": "Use POST /api/trigger-agent",
+        "version": "2.0.0",
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "time": datetime.now().isoformat(),
+        "agent_loaded": True,
+        "rag_service_url": RAG_SERVICE_URL,
+        "default_max_opportunities": DEFAULT_MAX_OPPORTUNITIES,
+        "etl_in_listener": False,
+        "rag_update_in_listener": False,
+        "recent_lookback_fallback": False,
+    }
+
+
+# ─────────────────────────────────────────────
+# Dashboard approval endpoint
+# Called by 1_dashboard_app when operator clicks "Apply"
+# Contract: AI_ACTION_CONTRACT.md
+# ─────────────────────────────────────────────
+
+class ApplyRequest(BaseModel):
+    actionId: str
+    requestedAt: Optional[str] = None
+    source: str
+    action: str
+    planSnapshot: Dict[str, Any]
+
+
+@app.post("/ai-actions/apply")
+def ai_actions_apply(payload: ApplyRequest):
+    """
+    Receive dashboard approval and set fix_plan patch_status = 'approved_to_apply'.
+
+    The dashboard sends planSnapshot.id which must be the integer fix_plan_id
+    (as a string). apply_worker polls for approved_to_apply and picks it up
+    automatically — no manual step needed.
+    """
+    plan_id_raw = payload.planSnapshot.get("id") or payload.actionId
+
+    try:
+        fix_plan_id = int(plan_id_raw)
+    except (TypeError, ValueError):
+        return {
+            "actionId": payload.actionId,
+            "accepted": False,
+            "status": "failed",
+            "message": (
+                f"planSnapshot.id must be the integer fix_plan_id as a string "
+                f"(got: '{plan_id_raw}'). "
+                f"Make sure the performance API returns the DB fix_plan id."
+            ),
+            "source": "remediation-agent",
+        }
+
+    fix_plan = get_fix_plan_by_id(fix_plan_id)
+    if not fix_plan:
+        return {
+            "actionId": payload.actionId,
+            "accepted": False,
+            "status": "failed",
+            "message": f"fix_plan_id={fix_plan_id} not found in database.",
+            "source": "remediation-agent",
+        }
+
+    current_status = fix_plan.get("patch_status")
+    if current_status in ("applying", "patch_applied", "build_testing", "pushed"):
+        return {
+            "actionId": payload.actionId,
+            "accepted": False,
+            "status": "failed",
+            "message": f"fix_plan_id={fix_plan_id} is already in progress (status={current_status}).",
+            "source": "remediation-agent",
+        }
+
+    update_fix_plan_status(fix_plan_id, "approved_to_apply")
+
+    print(
+        f"[ai-actions/apply] fix_plan_id={fix_plan_id} approved → "
+        f"patch_status=approved_to_apply  (was: {current_status})",
+        flush=True,
+    )
+
+    return {
+        "actionId": payload.actionId,
+        "accepted": True,
+        "status": "queued",
+        "message": f"fix_plan_id={fix_plan_id} queued for apply. apply_worker will pick it up within 30s.",
+        "runId": f"fix-plan-{fix_plan_id}",
+        "queuedAt": datetime.now().isoformat(),
+        "nextPollMs": 30_000,
+        "source": "remediation-agent",
+    }
+
+
+@app.post("/api/trigger-agent")
+def trigger_agent(
+    payload: TriggerPayload,
+    x_luminara_secret: Optional[str] = Header(default=None),
+):
+    triggered_at = datetime.now()
+    logs: List[Dict[str, Any]] = []
+
+    # ─────────────────────────────────────────
+    # 0. Optional secret check
+    # ─────────────────────────────────────────
+    if AGENT_SECRET:
+        if x_luminara_secret != AGENT_SECRET:
+            return {
+                "status": "unauthorized",
+                "message": "Invalid or missing X-Luminara-Secret header.",
+            }
+
+    logs.append({
+        "step": "trigger_received",
+        "time": triggered_at.isoformat(),
+        "payload": safe_payload_dict(payload),
+    })
+
+    # ─────────────────────────────────────────
+    # 1. Production preferred mode:
+    #    playwright_run_id + failed_groups
+    # ─────────────────────────────────────────
+    if payload.playwright_run_id is not None and payload.failed_groups:
+        group_results = []
+
+        for group_index, group in enumerate(payload.failed_groups, start=1):
+            group_thread_id = build_group_thread_id(
+                base_thread_id=payload.thread_id,
+                group=group,
+            )
+
+            agent_input = {
+                "mode": "audit_group",
+                "playwright_run_id": payload.playwright_run_id,
+                "site_type": group.site_type,
+                "page_type": group.page_type,
+                "device_type": group.device_type,
+                "url": group.url,
+                "network_profile": group.network_profile,
+
+                # Agent behavior.
+                "dry_run": payload.dry_run,
+                "max_opportunities": payload.max_opportunities,
+                "should_end": False,
+                "opp_index": 0,
+                "generated_patch_signatures": [],
+
+                # Metadata for dashboard/workspace.
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": group_thread_id,
+                "base_thread_id": payload.thread_id,
+                "group_index": group_index,
+                "total_groups": len(payload.failed_groups),
+            }
+
+            logs.append({
+                "step": "agent_start",
+                "mode": "audit_group",
+                "group_index": group_index,
+                "thread_id": group_thread_id,
+                "playwright_run_id": payload.playwright_run_id,
+                "group": group.model_dump(),
+            })
+
+            group_started_at = datetime.now()
+
+            try:
+                result = agent_app.invoke(agent_input)
+
+                elapsed_seconds = round(
+                    (datetime.now() - group_started_at).total_seconds(),
+                    2,
+                )
+
+                group_result = {
+                    "status": "success",
+                    "mode": "audit_group",
+                    "group_index": group_index,
+                    "thread_id": group_thread_id,
+                    "playwright_run_id": payload.playwright_run_id,
+                    "site_type": group.site_type,
+                    "page_type": group.page_type,
+                    "device_type": group.device_type,
+                    "fix_plan_ids": result.get("fix_plan_ids"),
+                    "fix_plan_id": result.get("fix_plan_id"),
+                    "confidence": result.get("confidence"),
+                    "processed": result.get("opp_index", 0),
+                    "elapsed_seconds": elapsed_seconds,
+                }
+
+                group_results.append(group_result)
+
+                logs.append({
+                    "step": "agent_completed",
+                    **group_result,
+                })
+
+            except Exception as e:
+                elapsed_seconds = round(
+                    (datetime.now() - group_started_at).total_seconds(),
+                    2,
+                )
+
+                group_result = {
+                    "status": "agent_failed",
+                    "mode": "audit_group",
+                    "group_index": group_index,
+                    "thread_id": group_thread_id,
+                    "playwright_run_id": payload.playwright_run_id,
+                    "site_type": group.site_type,
+                    "page_type": group.page_type,
+                    "device_type": group.device_type,
+                    "error": str(e),
+                    "elapsed_seconds": elapsed_seconds,
+                }
+
+                group_results.append(group_result)
+
+                logs.append({
+                    "step": "agent_failed",
+                    **group_result,
+                })
+
+        overall_status = (
+            "success"
+            if all(item["status"] == "success" for item in group_results)
+            else "partial_failed"
+        )
+
+        total_elapsed_seconds = round(
+            (datetime.now() - triggered_at).total_seconds(),
+            2,
+        )
+
+        return {
+            "status": overall_status,
+            "mode": "audit_group",
+            "playwright_run_id": payload.playwright_run_id,
+            "group_count": len(payload.failed_groups),
+            "results": group_results,
+            "pr_branch": payload.pr_branch,
+            "target_dir": payload.target_dir,
+            "thread_id": payload.thread_id,
+            "max_opportunities": payload.max_opportunities,
+            "dry_run": payload.dry_run,
+            "total_elapsed_seconds": total_elapsed_seconds,
+            "logs": logs,
+        }
+
+    # ─────────────────────────────────────────
+    # 2. Transitional mode:
+    #    exact test_id provided
+    # ─────────────────────────────────────────
+    if payload.test_id is not None:
+        agent_input = {
+            "mode": "test_id",
+            "test_id": payload.test_id,
+
+            # Agent should resolve sibling 3-run group internally.
+            "dry_run": payload.dry_run,
+            "max_opportunities": payload.max_opportunities,
+            "should_end": False,
+            "opp_index": 0,
+            "generated_patch_signatures": [],
+
+            # Metadata for dashboard/workspace.
+            "pr_branch": payload.pr_branch,
+            "target_dir": payload.target_dir,
+            "thread_id": payload.thread_id,
+        }
+
+        logs.append({
+            "step": "agent_start",
+            "mode": "test_id",
+            "test_id": payload.test_id,
+            "thread_id": payload.thread_id,
+        })
+
+        test_started_at = datetime.now()
+
+        try:
+            result = agent_app.invoke(agent_input)
+
+            elapsed_seconds = round(
+                (datetime.now() - test_started_at).total_seconds(),
+                2,
+            )
+
+            logs.append({
+                "step": "agent_completed",
+                "mode": "test_id",
+                "test_id": result.get("test_id"),
+                "fix_plan_ids": result.get("fix_plan_ids"),
+                "fix_plan_id": result.get("fix_plan_id"),
+                "confidence": result.get("confidence"),
+                "processed": result.get("opp_index", 0),
+                "elapsed_seconds": elapsed_seconds,
+            })
+
+            total_elapsed_seconds = round(
+                (datetime.now() - triggered_at).total_seconds(),
+                2,
+            )
+
+            return {
+                "status": "success",
+                "mode": "test_id",
+                "test_id": result.get("test_id", payload.test_id),
+                "fix_plan_ids": result.get("fix_plan_ids"),
+                "fix_plan_id": result.get("fix_plan_id"),
+                "confidence": result.get("confidence"),
+                "processed": result.get("opp_index", 0),
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": payload.thread_id,
+                "max_opportunities": payload.max_opportunities,
+                "dry_run": payload.dry_run,
+                "elapsed_seconds": elapsed_seconds,
+                "total_elapsed_seconds": total_elapsed_seconds,
+                "logs": logs,
+            }
+
+        except Exception as e:
+            elapsed_seconds = round(
+                (datetime.now() - test_started_at).total_seconds(),
+                2,
+            )
+
+            logs.append({
+                "step": "agent_failed",
+                "mode": "test_id",
+                "test_id": payload.test_id,
+                "error": str(e),
+                "elapsed_seconds": elapsed_seconds,
+            })
+
+            total_elapsed_seconds = round(
+                (datetime.now() - triggered_at).total_seconds(),
+                2,
+            )
+
+            return {
+                "status": "agent_failed",
+                "mode": "test_id",
+                "error": str(e),
+                "test_id": payload.test_id,
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": payload.thread_id,
+                "max_opportunities": payload.max_opportunities,
+                "dry_run": payload.dry_run,
+                "elapsed_seconds": elapsed_seconds,
+                "total_elapsed_seconds": total_elapsed_seconds,
+                "logs": logs,
+            }
+    # ─────────────────────────────────────────
+    # 3. Legacy/minimal payload:
+    #    only pr_branch + target_dir + thread_id
+    # ─────────────────────────────────────────
+    total_elapsed_seconds = round(
+        (datetime.now() - triggered_at).total_seconds(),
+        2,
+    )
+
+    logs.append({
+        "step": "missing_audit_identity",
+        "elapsed_seconds": total_elapsed_seconds,
+        "message": (
+            "No test_id and no playwright_run_id + failed_groups were provided. "
+            "Listener will not guess by recent time window."
+        ),
+    })
+
+    return {
+        "status": "missing_audit_identity",
+        "message": (
+            "Trigger payload is missing audit identity. "
+            "Provide either test_id OR playwright_run_id + failed_groups. "
+            "Recent-time lookback fallback is intentionally disabled for production safety."
+        ),
+        "required_payload_options": {
+            "preferred": {
+                "playwright_run_id": 10,
+                "failed_groups": [
+                    {
+                        "site_type": "decathlon",
+                        "page_type": "product",
+                        "device_type": "mobile",
+                    }
+                ],
+                "pr_branch": "feature/pr-branch",
+                "target_dir": "2_digital_twins/active-staging",
+                "thread_id": "pr_17",
+            },
+            "transitional": {
+                "test_id": 100,
+                "pr_branch": "feature/pr-branch",
+                "target_dir": "2_digital_twins/active-staging",
+                "thread_id": "pr_17",
+            },
+        },
+        "received": safe_payload_dict(payload),
+        "total_elapsed_seconds": total_elapsed_seconds,
+        "logs": logs,
+    }
+
+
+    # Compatibility endpoint for older manual tests.
+    @app.post("/trigger")
+    def trigger(
+        payload: TriggerPayload,
+        x_luminara_secret: Optional[str] = Header(default=None),
+    ):
+        return trigger_agent(
+            payload=payload,
+            x_luminara_secret=x_luminara_secret,
+        )

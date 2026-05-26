@@ -23,7 +23,11 @@ jobs:
       IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
       STAGING_PATH: /abr/coss41/Luminara_App/images-staging
       ARTIFACT_NAME: clone_pr_${{ github.event.pull_request.number }}.sif
-
+    # 🚨 SRE FIX: Authorize the runner to write status updates back to GitHub
+    permissions:
+      statuses: write
+      contents: read # Required to read the git tree structure
+      
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
@@ -49,6 +53,9 @@ jobs:
           audit_image_dir: ${{ env.IMAGE_DIR }}
           target_site: ${{ env.TARGET_SITE }}
           lhci_token: ${{ secrets.LHCI_BUILD_TOKEN }}
+          lhci_user: ${{ secrets.LHCI_SERVER_USER }}
+          lhci_password: ${{ secrets.LHCI_SERVER_PASS }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       # ---------------------------------------------------------
       # PHASE 3: AGENT TRIGGER OR SUCCESS HANDOFF
@@ -58,7 +65,7 @@ jobs:
         if: failure()
         run: |
           echo "❌ Audit Failed! Triggering Remediation Daemon..."
-          curl -X POST http://localhost:5000/api/trigger-agent \
+          curl -X POST http://localhost:9010/api/trigger-agent \
             -H "Content-Type: application/json" \
             -d '{
               "pr_branch": "${{ github.head_ref }}",

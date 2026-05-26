@@ -3,7 +3,8 @@ export type Product = {
   name: string;
   price: number;
   originalPrice?: number;
-  imageUrl: string;
+  imageUrl: string; // Keep this for the ProductCard thumbnails
+  images?: string[];
   category: string;
   badge?: 'new' | 'sale' | 'best';
   rating?: number;

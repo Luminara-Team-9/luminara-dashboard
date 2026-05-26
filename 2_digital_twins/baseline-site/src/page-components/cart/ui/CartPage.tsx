@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { track } from 'swetrix';
 
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
@@ -43,6 +44,11 @@ export function CartPage() {
     } else {
       newCart[index].quantity = newQuantity;
       setCartItems(newCart);
+
+      track({
+        ev: delta > 0 ? 'increase_cart_quantity' : 'decrease_cart_quantity',
+        meta: { productName: newCart[index].name },
+      });
     }
   };
 
@@ -52,22 +58,50 @@ export function CartPage() {
       newCart.splice(itemToDelete, 1);
       setCartItems(newCart);
       setItemToDelete(null);
-    }
-  };
 
-  const handleCheckout = () => {
-    setIsCheckoutLoading(true);
-    // Simulate SRE API delay (2.5 seconds)
-    setTimeout(() => {
-      setIsCheckoutLoading(false);
-      alert('결제가 완료되었습니다! (Checkout Complete)');
-    }, 2500);
+      track({
+        ev: 'remove_from_cart',
+        meta: {
+          productName: deletedItem.name,
+          lostRevenue: deletedItem.price * deletedItem.quantity, // Tracks exactly how much money was lost!
+        },
+      });
+    }
   };
 
   // 5. Dynamic Calculations
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shipping = subtotal >= 50000 || cartItems.length === 0 ? 0 : 3000;
   const total = subtotal + shipping;
+
+  // 6. Handle Checkout & Tracking
+  const handleCheckout = () => {
+    setIsCheckoutLoading(true);
+
+    // Simulate SRE API delay (2.5 seconds)
+    setTimeout(() => {
+      setIsCheckoutLoading(false);
+
+      // --- NEW: Fire the Swetrix tracking event ---
+      try {
+        track({
+          ev: 'purchase_complete',
+          meta: {
+            revenue: total,
+            currency: 'KRW',
+            total_items: cartItems.length,
+          },
+        });
+      } catch (error) {
+        console.error('Tracking failed:', error);
+      }
+
+      alert('결제가 완료되었습니다! (Checkout Complete)');
+
+      // Optional but recommended: Clear the cart after successful purchase
+      setCartItems([]);
+    }, 2500);
+  };
 
   // Wait for memory to load before showing the UI
   if (!isLoaded) return <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb' }} />;

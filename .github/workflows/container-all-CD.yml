@@ -53,7 +53,7 @@ jobs:
         def_file: ${{ fromJson(needs.detect-changes.outputs.def_files) }}
       max-parallel: 2
       fail-fast: false
-      
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -95,19 +95,15 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      # PHASE 3: PROMOTE STAGED SIF (HAPPY PATH)
+      # PHASE 3: STAGE PRE-BUILT SIF FOR ORCHESTRATION (HAPPY PATH)
       # ---------------------------------------------------------
       - name: Promote Staged Artifact
         if: steps.staging_check.outputs.found == 'true'
         run: |
           echo "✅ Found pre-built SIF from PR! Bypassing build phase."
-          mkdir -p ${{ env.TARGET_DIR }}
-          # Using cp preserves the staging file as a forensic record
-          cp "${{ steps.staging_check.outputs.pr_file }}" "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}"
-          echo "🚀 Successfully deployed ${{ env.SIF_NAME }} to ${{ env.TIER }} (${{ env.TARGET_DIR }})"
 
       # ---------------------------------------------------------
-      # PHASE 4: EMERGENCY FALLBACK BUILD
+      # PHASE 4: EMERGENCY FALLBACK BUILD TO STAGING AREA
       # ---------------------------------------------------------
       - name: Run Emergency Fallback Build
         if: steps.staging_check.outputs.found == 'false'
@@ -115,57 +111,99 @@ jobs:
         with:
           def_file_path: "${{ matrix.def_file }}"
           cache_key_suffix: "emergency_${{ env.SAFE_NAME }}"
-          # 🚨 FIX: Action outputs directly to the final deployment destination!
-          output_path: "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}"
+          output_path: "${{ env.STAGING_DIR }}/${{ env.SIF_NAME }}"
 
       # ---------------------------------------------------------
-      # PHASE 5: AUTOMATED SERVICE ORCHESTRATION
+      # PHASE 5: SERVICE MAPPING & HOT-SWAP ORCHESTRATION
       # ---------------------------------------------------------
-      - name: 🔄 Restart Fleet Service
+      - name: 🧭 Map Artifact to Systemd Service & Health URL
+        id: mapper
         run: |
-          echo "Mapping Artifact ${{ env.SAFE_NAME }} to Fleet Target..."
+          if [ "${{ env.TIER }}" = "production" ]; then
+            TIER_SHORT="prod"
+          else
+            TIER_SHORT="dev"
+          fi
           
-          # SRE Translation Map: Converts container name to bash script target
+          echo "CONTINUE_ORCHESTRATION=true" >> $GITHUB_ENV
+          echo "BACKUP_NAME=${{ env.SIF_NAME }}.bak" >> $GITHUB_ENV
+          
           case "${{ env.SAFE_NAME }}" in
-            "infrastructure_db_postgres") TARGET="postgres" ;;
-            "infrastructure_db_redis") TARGET="redis" ;;
-            "infrastructure_db_clickhouse") TARGET="clickhouse" ;;
-            "infrastructure_lhci_server") TARGET="lhci" ;;
-            "infrastructure_swetrix_rum") TARGET="swetrix" ;;
-            "infrastructure_agentic_remediation") TARGET="agent" ;;
-            *) 
-              echo "⚠️ Unknown target mapping for ${{ env.SAFE_NAME }}. Skipping auto-restart."
-              TARGET="unknown"
+            "infrastructure_db_postgres")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@postgres.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:5432" >> $GITHUB_ENV
+              ;;
+            "infrastructure_db_redis")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@redis.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:6379" >> $GITHUB_ENV
+              ;;
+            "infrastructure_db_clickhouse")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@clickhouse.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:8123/ping" >> $GITHUB_ENV
+              ;;
+            "infrastructure_lhci_server")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@lhci.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:9001/health" >> $GITHUB_ENV
+              ;;
+            "infrastructure_swetrix_rum")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@swetrix.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:5005/health" >> $GITHUB_ENV
+              ;;
+            "infrastructure_agentic_remediation")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@agent.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:9010/health" >> $GITHUB_ENV
+              ;;
+            "infrastructure_dashboard_api")
+              echo "SERVICE_NAME=luminara-${TIER_SHORT}@web_api.service" >> $GITHUB_ENV
+              echo "HEALTH_URL=http://127.0.0.1:4000/health" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "⚠️ Unknown target mapping for ${{ env.SAFE_NAME }}. Switching to unmanaged deployment."
+              echo "CONTINUE_ORCHESTRATION=false" >> $GITHUB_ENV
               ;;
           esac
-          
-          if [ "$TARGET" != "unknown" ]; then
-            echo "🚀 Triggering Zero-Downtime Restart for: $TARGET"
-            # Execute your orchestrator script (ensure path is correct and it is executable)
-            /abr/coss41/Luminara_App/luminara_up.sh restart "$TARGET"
-            
-            # Brief health check pause
-            sleep 10
-            
-            echo "🩺 Verifying instance health..."
-            if singularity instance list | grep -q "luminara_"; then
-              echo "✅ Service successfully restarted and is live!"
-            else
-              echo "❌ CRITICAL: Service failed to boot after restart."
-              exit 1
-            fi
+
+      - name: 🎒 Prepare Production Backup File
+        if: env.CONTINUE_ORCHESTRATION == 'true'
+        run: |
+          mkdir -p ${{ env.TARGET_DIR }}
+          if [ -f "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}" ]; then
+            echo "Found live production artifact. Backing up for rollback-readiness..."
+            cp "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}" "${{ env.TARGET_DIR }}/${{ env.BACKUP_NAME }}"
+          else
+            echo "No previous production artifact found. Initializing safe dummy placeholder backup..."
+            touch "${{ env.TARGET_DIR }}/${{ env.BACKUP_NAME }}"
           fi
 
+      - name: 🔄 Execute Hot-Swap & Rollback Orchestration
+        if: env.CONTINUE_ORCHESTRATION == 'true'
+        uses: ./.github/actions/systemd-hot-swap-rollback # Adjust if your action's directory name differs
+        with:
+          image_dir: "${{ env.TARGET_DIR }}"
+          staging_dir: "${{ env.STAGING_DIR }}"
+          artifact_name: "${{ env.SIF_NAME }}"
+          backup_name: "${{ env.BACKUP_NAME }}"
+          service_name: "${{ env.SERVICE_NAME }}"
+          health_url: "${{ env.HEALTH_URL }}"
+
+      - name: 🚚 Unmanaged Deployment Fallback
+        if: env.CONTINUE_ORCHESTRATION == 'false'
+        run: |
+          echo "Deploying artifact to destination directory without service tracking..."
+          mkdir -p ${{ env.TARGET_DIR }}
+          mv "${{ env.STAGING_DIR }}/${{ env.SIF_NAME }}" "${{ env.TARGET_DIR }}/${{ env.SIF_NAME }}"
+          echo "🚀 Successfully deployed unmanaged container asset ${{ env.SIF_NAME }}."
+
       # ---------------------------------------------------------
-      # PHASE 5: GLOBAL FAIL-SAFE CLEANUP
+      # PHASE 6: GLOBAL FAIL-SAFE CLEANUP
       # ---------------------------------------------------------
       - name: Cleanup
         if: always()
         run: |
-          echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
-          # The wildcard handles any parallel matrix runs perfectly
+          echo "🧹 Force-cleaning local RAM disk and runtime areas..."
           chmod -R u+rwX /dev/shm/sing_build_${{ github.run_id }}_* 2>/dev/null || true
           rm -rf /dev/shm/sing_build_${{ github.run_id }}_${{ env.SAFE_NAME }} || true
+          rm -rf ${{ env.STAGING_DIR }}/${{ env.SIF_NAME }} || true
           
           echo "🗑️ Running NFS Cache Garbage Collection..."
           find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true

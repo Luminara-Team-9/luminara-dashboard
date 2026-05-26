@@ -107,41 +107,17 @@ export function CircleBanners() {
   ];
 
   return (
-    <section
-      style={{ backgroundColor: 'white', padding: '16px 0', borderBottom: '1px solid #f3f4f6' }}
-    >
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 16px' }}>
-        <div
-          className="flex overflow-x-auto gap-2 pb-2 snap-x"
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-          }}
-        >
+    <section className="bg-white py-4 border-b border-gray-100">
+      <div className="max-w-[1200px] mx-auto px-4">
+        {/* The [&::-webkit-scrollbar]:hidden class completely kills the scrollbar on mobile browsers */}
+        <div className="flex overflow-x-auto gap-2 pb-2 snap-x snap-mandatory scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {circles.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="flex-none snap-start"
-              style={{
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '6px',
-                textDecoration: 'none',
-                flexShrink: 0,
-                width: '80px',
-                padding: '4px',
-              }}
+              className="flex-none snap-start flex flex-col items-center gap-1.5 no-underline shrink-0 w-[80px] p-1 group"
             >
-              <div
-                style={{
-                  width: '56px',
-                  height: '56px',
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  backgroundColor: '#1e3a5f',
-                }}
-              >
+              <div className="w-14 h-14 rounded-full overflow-hidden bg-[#1e3a5f] group-hover:ring-2 group-hover:ring-[#0055A4] transition-all">
                 <img
                   src={item.imageUrl}
                   alt={item.label}

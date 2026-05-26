@@ -11,8 +11,21 @@ From: swetrix/swetrix-api:latest
     # Swetrix internal API defaults to 5005
     export PORT=${PORT:-5005}
     # SRE FIX: Maximize Node.js performance
-    export NODE_ENV=production
+    export NODE_ENV=${NODE_ENV:-production}
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+    # SRE FIX: Force passthrough of runtime env vars over base Docker image defaults
+    export REDIS_HOST=${REDIS_HOST:-127.0.0.1}
+    export REDIS_PORT=${REDIS_PORT:-6379}
+    export REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    export CLICKHOUSE_HOST=${CLICKHOUSE_HOST:-127.0.0.1}
+    export CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
+    export CLICKHOUSE_USER=${CLICKHOUSE_USER:-}
+    export CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+    export CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-telemetry_data}
+    export DATABASE_URL=${DATABASE_URL:-}
+    export JWT_SECRET=${JWT_SECRET:-}
+    export APP_SECRET=${APP_SECRET:-}
 
 %post
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -24,6 +37,15 @@ From: swetrix/swetrix-api:latest
     # NPM Cache Bomb defusal (Cleans any garbage left by the base image)
     npm cache clean --force || true
 
+    # SRE FIX: Override broken npm start:prod entrypoint
+    # Add start:prod script to package.json pointing to compiled app
+    node -e "
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync('/app/package.json', 'utf8'));
+    pkg.scripts['start:prod'] = 'node dist/main.js';
+    fs.writeFileSync('/app/package.json', JSON.stringify(pkg, null, 2));
+    "
+
 %startscript
     echo "------------------------------------------------"
     echo "📈 Luminara RUM: SWETRIX API Starting"
@@ -31,6 +53,7 @@ From: swetrix/swetrix-api:latest
     echo "------------------------------------------------"
     
     # Swetrix is a compiled NestJS app. We bypass npm and execute Node directly.
+    cd /app
     exec node dist/main.js
 
 %help

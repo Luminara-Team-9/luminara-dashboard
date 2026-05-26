@@ -21,9 +21,11 @@ jobs:
     
     env:
       IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
-      KEY_DIR: /abr/coss41/Luminara_App/secure_keys
       ARTIFACT_NAME: infrastructure_digital_opt_clone.sif
       BACKUP_NAME: infrastructure_digital_opt_clone.bak.sif
+      STAGING_DIR: /abr/coss41/Luminara_App/images-staging
+      SERVICE_NAME: luminara-prod@opt_clone.service
+      HEALTH_URL: http://localhost:3003
 
     steps:
       - name: 📥 Checkout Code
@@ -35,8 +37,14 @@ jobs:
       - name: 💾 Backup Stable Container
         run: |
           echo "Backing up current optimized clone container..."
-          mkdir -p ${{ env.IMAGE_DIR }}
-          cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} || echo "ℹ️ No previous SIF found to backup."
+          mkdir -p ${{ env.IMAGE_DIR }} ${{ env.STAGING_DIR }}
+
+          if [ -f "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}" ]; then
+            echo "💾 Backing up current production container..."
+            cp ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}
+          else
+            echo "ℹ️ No existing production SIF found. Skipping backup."
+          fi
 
       # ---------------------------------------------------------
       # PHASE 2: BAKE THE RELEASE ARTIFACT (Directly from Main!)
@@ -46,54 +54,37 @@ jobs:
         with:
           def_file_path: "infrastructure/digital_opt_clone.def" 
           cache_key_suffix: "prod_optimized_clone"
-          output_path: "${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}"
+          output_path: "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}"
 
       # ---------------------------------------------------------
-      # PHASE 3: HOT-SWAP, HEALTH CHECK & AUTOMATED ROLLBACK
+      # PHASE 3: SYSTEMD-MANAGED HOT-SWAP & AUTOMATED ROLLBACK
       # ---------------------------------------------------------
-      - name: 🚀 Hot-Swap, Verify & Automated Rollback
-        run: |
-          echo "Rebooting live persistent Optimized Clone..."
-          
-          # 1. Gracefully stop the current live optimized instance
-          singularity instance stop luminara_opt_clone 2>/dev/null || true
-          
-          # 2. Boot the freshly baked Showroom container
-          singularity instance start \
-            --env-file "${{ env.KEY_DIR }}/.env.opt_clone.prod" \
-            ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_opt_clone
-            
-          echo "⏱️ Waiting 10 seconds for Next.js to boot..."
-          sleep 10
-          
-          echo "🩺 Performing Health Check..."
-          if singularity instance list | grep -q "luminara_opt_clone"; then
-            echo "✅ Health Check Passed: Container is alive and routing traffic!"
-          else
-            echo "❌ CRITICAL FAILURE: Container died immediately after booting."
-            echo "⏪ INITIATING AUTOMATED ROLLBACK TO PREVIOUS STABLE CONTAINER..."
-            
-            # Tear down the broken deployment
-            singularity instance stop luminara_opt_clone 2>/dev/null || true
-            
-            # Restore the backup artifact
-            mv ${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }} ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }}
-            
-            # Reboot the stable backup
-            singularity instance start \
-              --env-file "${{ env.KEY_DIR }}/.env.opt_clone.prod" \
-              ${{ env.IMAGE_DIR }}/${{ env.ARTIFACT_NAME }} luminara_opt_clone
-              
-            echo "🚨 Rollback complete. Production Showroom is back online, but this deployment failed."
-            exit 1
-          fi
-
+      - name: 🚀 Hot-Swap & Verify
+        uses: ./.github/actions/systemd-hot-swap
+        with:
+          image_dir: ${{ env.IMAGE_DIR }}
+          staging_dir: ${{ env.STAGING_DIR }}
+          artifact_name: ${{ env.ARTIFACT_NAME }}
+          backup_name: ${{ env.BACKUP_NAME }}
+          service_name: ${{ env.SERVICE_NAME }}
+          health_url: ${{ env.HEALTH_URL }}
       # ---------------------------------------------------------
       # PHASE 4: CLEANUP RAM DISK
       # ---------------------------------------------------------
       - name: 🧹 Garbage Collection
         if: always()
         run: |
+          echo "🧹 Cleaning up temporary artifacts..."
+
+          # 1. Clear staging (In case build finished but move failed)
+          rm -f "${{ env.STAGING_DIR }}/${{ env.ARTIFACT_NAME }}"
+          
+          # 2. Clear backup (If success, it's old; if rollback, it's already moved)
+          rm -f "${{ env.IMAGE_DIR }}/${{ env.BACKUP_NAME }}"
+
           echo "🧹 Force-cleaning local RAM disk (Fail-safe)..."
           chmod -R u+rwX /dev/shm/sing_build_*_prod_optimized_clone 2>/dev/null || true
           rm -rf /dev/shm/sing_build_*_prod_optimized_clone || true
+          rm -rf /dev/shm/sing_build_*_prod_optimized_clone || true
+
+          echo "✨ Environment is now clean."
