@@ -69,6 +69,7 @@ def safe_payload_dict(payload: "TriggerPayload") -> Dict[str, Any]:
     return {
         "test_id": payload.test_id,
         "playwright_run_id": payload.playwright_run_id,
+        "lhci_build_id": payload.lhci_build_id,
         "failed_groups": [
             group.model_dump()
             for group in payload.failed_groups
@@ -175,11 +176,8 @@ class TriggerPayload(BaseModel):
     # Agent should resolve sibling 3-run group from this test_id.
     test_id: Optional[int] = None
 
-    # 🟢 FIX: Changed from Optional[int] to Optional[str] to accept "pw_..."
-    playwright_run_id: Optional[str] = None 
-    
-    # 🟢 FIX: Added explicit support for your parsed Lighthouse ID
-    lhci_run_id: Optional[str] = None
+    playwright_run_id: Optional[str] = None
+    lhci_build_id: Optional[str] = None
     failed_groups: List[FailedGroup] = Field(default_factory=list)
 
     # GitHub / workspace metadata.
@@ -538,7 +536,120 @@ def trigger_agent(
         }
 
     # ─────────────────────────────────────────
-    # 2. Transitional mode:
+    # 2. LHCI mode:
+    #    lhci_build_id + failed_groups
+    #    Agent reads directly from lhci DB — no playwright_run_id needed
+    # ─────────────────────────────────────────
+    if payload.lhci_build_id is not None and payload.failed_groups:
+        group_results = []
+
+        for group_index, group in enumerate(payload.failed_groups, start=1):
+            group_thread_id = build_group_thread_id(
+                base_thread_id=payload.thread_id,
+                group=group,
+            )
+
+            agent_input = {
+                "mode": "audit_group",
+                "lhci_build_id": payload.lhci_build_id,
+                "playwright_run_id": None,
+                "site_type": group.site_type,
+                "page_type": group.page_type,
+                "device_type": group.device_type,
+                "url": group.url,
+                "network_profile": group.network_profile,
+
+                "dry_run": payload.dry_run,
+                "max_opportunities": payload.max_opportunities,
+                "should_end": False,
+                "opp_index": 0,
+                "generated_patch_signatures": [],
+
+                "pr_branch": payload.pr_branch,
+                "target_dir": payload.target_dir,
+                "thread_id": group_thread_id,
+                "base_thread_id": payload.thread_id,
+                "group_index": group_index,
+                "total_groups": len(payload.failed_groups),
+            }
+
+            logs.append({
+                "step": "agent_start",
+                "mode": "lhci_build",
+                "group_index": group_index,
+                "thread_id": group_thread_id,
+                "lhci_build_id": payload.lhci_build_id,
+                "group": group.model_dump(),
+            })
+
+            group_started_at = datetime.now()
+
+            try:
+                result = agent_app.invoke(agent_input)
+
+                elapsed_seconds = round(
+                    (datetime.now() - group_started_at).total_seconds(), 2
+                )
+
+                group_result = {
+                    "status": "success",
+                    "mode": "lhci_build",
+                    "group_index": group_index,
+                    "thread_id": group_thread_id,
+                    "lhci_build_id": payload.lhci_build_id,
+                    "site_type": group.site_type,
+                    "page_type": group.page_type,
+                    "device_type": group.device_type,
+                    "fix_plan_ids": result.get("fix_plan_ids"),
+                    "fix_plan_id": result.get("fix_plan_id"),
+                    "confidence": result.get("confidence"),
+                    "processed": result.get("opp_index", 0),
+                    "elapsed_seconds": elapsed_seconds,
+                }
+
+                group_results.append(group_result)
+                logs.append({"step": "agent_completed", **group_result})
+
+            except Exception as e:
+                elapsed_seconds = round(
+                    (datetime.now() - group_started_at).total_seconds(), 2
+                )
+                group_result = {
+                    "status": "agent_failed",
+                    "mode": "lhci_build",
+                    "group_index": group_index,
+                    "lhci_build_id": payload.lhci_build_id,
+                    "page_type": group.page_type,
+                    "device_type": group.device_type,
+                    "error": str(e),
+                    "elapsed_seconds": elapsed_seconds,
+                }
+                group_results.append(group_result)
+                logs.append({"step": "agent_failed", **group_result})
+
+        overall_status = (
+            "success"
+            if all(r["status"] == "success" for r in group_results)
+            else "partial_failed"
+        )
+
+        return {
+            "status": overall_status,
+            "mode": "lhci_build",
+            "lhci_build_id": payload.lhci_build_id,
+            "group_count": len(payload.failed_groups),
+            "results": group_results,
+            "pr_branch": payload.pr_branch,
+            "target_dir": payload.target_dir,
+            "thread_id": payload.thread_id,
+            "total_elapsed_seconds": round(
+                (datetime.now() - triggered_at).total_seconds(), 2
+            ),
+            "logs": logs,
+        }
+
+    # ─────────────────────────────────────────
+    # 3. Transitional mode:
     #    exact test_id provided
     # ─────────────────────────────────────────
     if payload.test_id is not None:

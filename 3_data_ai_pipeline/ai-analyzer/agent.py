@@ -63,6 +63,119 @@ def get_db_connection():
     )
 
 
+# ─────────────────────────────────────────────
+# LHCI helpers (read directly from lhci DB)
+# ─────────────────────────────────────────────
+
+def url_to_page_type(url: str) -> str:
+    from urllib.parse import urlparse
+    path = urlparse(url).path.rstrip("/")
+    if not path:
+        return "home"
+    parts = [p for p in path.split("/") if p]
+    return parts[0] if parts else "home"
+
+
+def get_device_type_from_lhr(lhr: dict) -> str:
+    config = lhr.get("configSettings", {})
+    form_factor = config.get("formFactor") or config.get("emulatedFormFactor", "mobile")
+    return "mobile" if str(form_factor).lower() == "mobile" else "desktop"
+
+
+def get_lhci_runs_for_group(lhci_cursor, lhci_build_id: str, page_type: str, device_type: str) -> list:
+    """
+    Fetch all LHCI runs for a build, filter by page_type (from URL) and device_type (from LHR).
+    Returns list of dicts with keys: run_id, url, lhr, page_type, device_type.
+    """
+    lhci_cursor.execute(
+        'SELECT id, url, lhr FROM runs WHERE "buildId" = %s ORDER BY "createdAt"',
+        (lhci_build_id,),
+    )
+    rows = lhci_cursor.fetchall()
+
+    result = []
+    for run_id, url, lhr_text in rows:
+        pt = url_to_page_type(url)
+        if pt != page_type:
+            continue
+        lhr = json.loads(lhr_text)
+        dt = get_device_type_from_lhr(lhr)
+        if dt != device_type:
+            continue
+        result.append({
+            "run_id": str(run_id),
+            "url": url,
+            "lhr": lhr,
+            "page_type": pt,
+            "device_type": dt,
+        })
+
+    return result
+
+
+def get_stable_opportunities_from_lhci(lhci_runs: list, max_opportunities: int) -> list:
+    """
+    Parse Lighthouse opportunities from in-memory LHR dicts (no DB needed).
+    Equivalent to get_stable_opportunities() but for LHCI data.
+    """
+    from ra_runtime.audit_ingestion import parse_opportunities
+
+    grouped: dict = {}
+
+    for run_index, run in enumerate(lhci_runs[:3]):
+        opps = parse_opportunities(run["lhr"], test_id=run_index + 1)
+        for opp in opps:
+            key = opp.get("opportunity_id") or opp.get("title")
+            if not key:
+                continue
+            if key not in grouped:
+                grouped[key] = {
+                    "ids": [],
+                    "test_ids": set(),
+                    "opportunity_id": opp.get("opportunity_id"),
+                    "title": opp.get("title", ""),
+                    "description": opp.get("description", ""),
+                    "savings_values": [],
+                    "severity_values": [],
+                    "category": opp.get("category", "performance"),
+                }
+            grouped[key]["ids"].append(opp.get("opportunity_id") or key)
+            grouped[key]["test_ids"].add(run_index + 1)
+            if opp.get("savings_ms"):
+                grouped[key]["savings_values"].append(int(opp["savings_ms"]))
+            grouped[key]["severity_values"].append(normalize_severity(opp.get("severity")))
+
+    opportunities = []
+    for item in grouped.values():
+        frequency = len(item["test_ids"])
+        if frequency < 2:
+            continue
+        avg_savings = int(sum(item["savings_values"]) / max(len(item["savings_values"]), 1)) if item["savings_values"] else 0
+        severity = sorted(item["severity_values"], key=severity_rank, reverse=True)[0]
+        affected_metric = infer_affected_metric(item["title"], item["category"])
+        priority_level = priority_from_savings(avg_savings, severity)
+
+        opportunities.append({
+            "id": item["ids"][0] if item["ids"] else item["opportunity_id"],
+            "opportunity_id": item["opportunity_id"],
+            "title": item["title"],
+            "description": item["description"],
+            "avg_savings_ms": avg_savings,
+            "severity": severity,
+            "category": item["category"],
+            "frequency": frequency,
+            "supporting_test_ids": sorted(list(item["test_ids"])),
+            "affected_metric": affected_metric,
+            "priority_level": priority_level,
+        })
+
+    opportunities.sort(
+        key=lambda opp: (opp["frequency"], opp["avg_savings_ms"], severity_rank(opp["severity"])),
+        reverse=True,
+    )
+    return opportunities[:max_opportunities]
+
+
 class AgentState(TypedDict, total=False):
     test_id: int
 
@@ -73,6 +186,7 @@ class AgentState(TypedDict, total=False):
 
     # 3-run audit group identity.
     playwright_run_id: Optional[int]
+    lhci_build_id: Optional[str]
     site_type: Optional[str]
     network_profile: Optional[str]
 
@@ -869,13 +983,15 @@ def get_metrics(state: AgentState) -> AgentState:
     mode = state.get("mode") or "test_id"
     test_id = state.get("test_id")
     max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
+    lhci_build_id = state.get("lhci_build_id")
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    lhci_runs_cache = None  # used by LHCI path for opportunity parsing
+
     try:
         if mode == "audit_group":
-            playwright_run_id = state.get("playwright_run_id")
             site_type = state.get("site_type") or "decathlon"
             page_type = state.get("page_type")
             device_type = state.get("device_type")
@@ -884,45 +1000,86 @@ def get_metrics(state: AgentState) -> AgentState:
                 print("  ❌ audit_group mode requires page_type and device_type")
                 return {**state, "should_end": True}
 
-            # Try exact match first (works when playwright_run_id is a real DB integer)
             group_runs = []
-            if playwright_run_id:
-                group_runs = get_group_runs_from_audit_group(
-                    cursor=cursor,
-                    playwright_run_id=playwright_run_id,
-                    site_type=site_type,
-                    page_type=page_type,
-                    device_type=device_type,
-                )
 
-            # Fallback 1: GHA sends playwright_run_id as "pw_<github_run_id>" which
-            # doesn't exist in the DB. Use the most recent stable group (>=3 runs).
-            if not group_runs:
-                print(
-                    f"  ⚠️  playwright_run_id={playwright_run_id!r} not found in DB. "
-                    f"Falling back to latest stable group for "
-                    f"{site_type}/{page_type}/{device_type}..."
-                )
-                group_runs = get_latest_stable_group_runs(
-                    cursor=cursor,
-                    site_type=site_type,
-                    page_type=page_type,
-                    device_type=device_type,
-                )
+            if lhci_build_id:
+                # ── LHCI path: read directly from lhci DB ─────────────────
+                print(f"  → LHCI path: build_id={lhci_build_id[:8]}... page={page_type} device={device_type}")
+                from ra_runtime.db_client import get_lhci_connection
+                from ra_runtime.audit_ingestion import parse_metrics as parse_lhci_metrics
 
-            # Fallback 2: no stable 3-run group exists yet — use whatever runs
-            # are available for this page/device combination.
-            if not group_runs:
-                print(
-                    f"  ⚠️  No stable 3-run group found. "
-                    f"Using any available runs for {site_type}/{page_type}/{device_type}..."
-                )
-                group_runs = get_any_runs_for_group(
-                    cursor=cursor,
-                    site_type=site_type,
-                    page_type=page_type,
-                    device_type=device_type,
-                )
+                lhci_conn = get_lhci_connection()
+                lhci_cursor = lhci_conn.cursor()
+                try:
+                    lhci_runs_cache = get_lhci_runs_for_group(
+                        lhci_cursor, lhci_build_id, page_type, device_type
+                    )
+                finally:
+                    lhci_conn.close()
+
+                if not lhci_runs_cache:
+                    print(f"  ❌ No LHCI runs found for build={lhci_build_id} page={page_type} device={device_type}")
+                    return {**state, "should_end": True}
+
+                for i, run in enumerate(lhci_runs_cache[:3], start=1):
+                    m = parse_lhci_metrics(run["lhr"])
+                    group_runs.append({
+                        "test_id": i,
+                        "playwright_run_id": lhci_build_id,
+                        "url": run["url"],
+                        "site_type": site_type,
+                        "page_type": run["page_type"],
+                        "device_type": run["device_type"],
+                        "network_profile": None,
+                        "run_number": i,
+                        "lcp_ms": m.get("lcp_ms"),
+                        "tbt_ms": m.get("tbt_ms"),
+                        "cls_score": m.get("cls_score"),
+                        "performance_score": m.get("performance_score"),
+                        "fcp_ms": m.get("fcp_ms"),
+                        "si_ms": m.get("si_ms"),
+                        "tti_ms": m.get("tti_ms"),
+                        "ttfb_ms": m.get("ttfb_ms"),
+                        "inp_ms": m.get("inp_ms"),
+                    })
+
+            else:
+                # ── core_db path (legacy / test_id mode fallback) ──────────
+                playwright_run_id = state.get("playwright_run_id")
+
+                if playwright_run_id:
+                    group_runs = get_group_runs_from_audit_group(
+                        cursor=cursor,
+                        playwright_run_id=playwright_run_id,
+                        site_type=site_type,
+                        page_type=page_type,
+                        device_type=device_type,
+                    )
+
+                if not group_runs:
+                    print(
+                        f"  ⚠️  playwright_run_id={playwright_run_id!r} not found in DB. "
+                        f"Falling back to latest stable group for "
+                        f"{site_type}/{page_type}/{device_type}..."
+                    )
+                    group_runs = get_latest_stable_group_runs(
+                        cursor=cursor,
+                        site_type=site_type,
+                        page_type=page_type,
+                        device_type=device_type,
+                    )
+
+                if not group_runs:
+                    print(
+                        f"  ⚠️  No stable 3-run group found. "
+                        f"Using any available runs for {site_type}/{page_type}/{device_type}..."
+                    )
+                    group_runs = get_any_runs_for_group(
+                        cursor=cursor,
+                        site_type=site_type,
+                        page_type=page_type,
+                        device_type=device_type,
+                    )
 
         else:
             if not test_id:
@@ -945,7 +1102,6 @@ def get_metrics(state: AgentState) -> AgentState:
         if len(group_runs) < 3:
             print(f"  ⚠️  Only {len(group_runs)} run(s) found — proceeding with reduced confidence.")
 
-        # Keep exactly first 3 ordered runs for stable group.
         group_runs = group_runs[:3]
 
         supporting_test_ids = [row["test_id"] for row in group_runs]
@@ -983,28 +1139,30 @@ def get_metrics(state: AgentState) -> AgentState:
             "test_ids": supporting_test_ids,
             "representative_test_id": representative_test_id,
             "run_count": len(group_runs),
-
-            # Median values are safer than single-run values.
             "avg_lcp_ms": median_or_none([r.get("lcp_ms") for r in group_runs]),
             "avg_tbt_ms": median_or_none([r.get("tbt_ms") for r in group_runs]),
             "avg_cls_score": median_cls_or_none([r.get("cls_score") for r in group_runs]),
             "avg_performance": median_or_none([r.get("performance_score") for r in group_runs]),
-
             "fcp_ms": median_or_none([r.get("fcp_ms") for r in group_runs]),
             "si_ms": median_or_none([r.get("si_ms") for r in group_runs]),
             "tti_ms": median_or_none([r.get("tti_ms") for r in group_runs]),
             "ttfb_ms": median_or_none([r.get("ttfb_ms") for r in group_runs]),
             "inp_ms": median_or_none([r.get("inp_ms") for r in group_runs]),
-
             "failed_metrics": failed_metrics,
             "failed_metric_counts": failed_metric_counts,
         }
 
-        opportunities = get_stable_opportunities(
-            cursor=cursor,
-            test_ids=supporting_test_ids,
-            max_opportunities=max_opportunities,
-        )
+        # Opportunities: parse in memory from LHCI, or query core_db
+        if lhci_runs_cache:
+            opportunities = get_stable_opportunities_from_lhci(
+                lhci_runs_cache[:3], max_opportunities
+            )
+        else:
+            opportunities = get_stable_opportunities(
+                cursor=cursor,
+                test_ids=supporting_test_ids,
+                max_opportunities=max_opportunities,
+            )
 
         if not opportunities:
             print("  ❌ No stable opportunities found across 3 runs.")
@@ -1017,6 +1175,7 @@ def get_metrics(state: AgentState) -> AgentState:
         group_key = f"{playwright_run_id}_{site_type}_{page_type}_{device_type}"
 
         print(f"  ✅ mode: {mode}")
+        print(f"  ✅ lhci_build_id: {lhci_build_id or 'N/A'}")
         print(f"  ✅ playwright_run_id: {playwright_run_id}")
         print(f"  ✅ group_key: {group_key}")
         print(f"  ✅ supporting_test_ids: {supporting_test_ids}")
@@ -1044,6 +1203,7 @@ def get_metrics(state: AgentState) -> AgentState:
             "representative_test_id": representative_test_id,
             "supporting_test_ids": supporting_test_ids,
             "playwright_run_id": playwright_run_id,
+            "lhci_build_id": lhci_build_id,
             "site_type": site_type,
             "page_type": page_type,
             "device_type": device_type,
