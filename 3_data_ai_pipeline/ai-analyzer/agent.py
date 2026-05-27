@@ -558,8 +558,14 @@ def get_group_runs_from_audit_group(
 ) -> list:
     """
     Production mode — find runs by exact playwright_run_id.
-    playwright_run_id may be int or str; PostgreSQL handles implicit casting.
+    playwright_run_id must be castable to int (DB column is INTEGER).
+    Returns [] immediately if the value is a non-numeric string like 'pw_12345'.
     """
+    try:
+        int(playwright_run_id)
+    except (TypeError, ValueError):
+        return []
+
     cursor.execute(
         """
         SELECT
