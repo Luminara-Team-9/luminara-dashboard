@@ -225,16 +225,22 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
             env=AI_ENV if use_ai_identity else None,
         )
 
-    # Stash patch changes so git pull --rebase doesn't refuse
+    # Stash patch changes so we can reset the workspace cleanly
     git(["stash"])
 
-    # Sync workspace with latest remote base branch first
-    pull = git(["pull", "--rebase", "origin", branch_name])
-    if pull.returncode != 0:
+    # Reset workspace to exact state of origin base branch.
+    # This prevents previous fix plan commits from bleeding into new branches.
+    fetch = git(["fetch", "origin"])
+    if fetch.returncode != 0:
         git(["stash", "pop"])
-        return False, f"git pull --rebase failed:\n{pull.stderr}"
+        return False, f"git fetch failed:\n{fetch.stderr}"
 
-    # Restore the patch
+    reset = git(["reset", "--hard", f"origin/{branch_name}"])
+    if reset.returncode != 0:
+        git(["stash", "pop"])
+        return False, f"git reset --hard origin/{branch_name} failed:\n{reset.stderr}"
+
+    # Restore the patch on top of the clean base
     git(["stash", "pop"])
 
     # Create (or reset) the fix branch at current HEAD

@@ -300,10 +300,11 @@ def ai_actions_apply(payload: ApplyRequest):
             "source": "remediation-agent",
         }
 
-    update_fix_plan_status(fix_plan_id, "approved_to_apply")
+    approved_by = payload.source or "unknown"
+    update_fix_plan_status(fix_plan_id, "approved_to_apply", approved_by=approved_by)
 
     print(
-        f"[ai-actions/apply] fix_plan_id={fix_plan_id} approved → "
+        f"[ai-actions/apply] fix_plan_id={fix_plan_id} approved by '{approved_by}' → "
         f"patch_status=approved_to_apply  (was: {current_status})",
         flush=True,
     )

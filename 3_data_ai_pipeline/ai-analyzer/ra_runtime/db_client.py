@@ -389,6 +389,7 @@ def update_fix_plan_status(
     status: str,
     error_message: Optional[str] = None,
     extra_event: Optional[Dict[str, Any]] = None,
+    approved_by: Optional[str] = None,
 ) -> None:
     """
     Update patch_status of a Fix Plan.
@@ -403,6 +404,9 @@ def update_fix_plan_status(
     - approved_to_push
     - pr_created
     - failed
+
+    approved_by: who approved this fix plan (e.g. 'dashboard', 'cli').
+    Only written on the approved_to_apply transition; other callers leave it None.
     """
     if status not in VALID_FIX_PLAN_STATUSES:
         raise ValueError(f"Invalid fix_plan status: {status}")
@@ -421,10 +425,11 @@ def update_fix_plan_status(
                     SET
                         patch_status = %s,
                         rejection_reason = %s,
+                        approved_by = COALESCE(%s, approved_by),
                         updated_at = NOW()
                     WHERE id = %s
                     """,
-                    (status, error_message, fix_plan_id),
+                    (status, error_message, approved_by, fix_plan_id),
                 )
             else:
                 cur.execute(
@@ -432,16 +437,20 @@ def update_fix_plan_status(
                     UPDATE fix_plans
                     SET
                         patch_status = %s,
+                        approved_by = COALESCE(%s, approved_by),
                         updated_at = NOW()
                     WHERE id = %s
                     """,
-                    (status, fix_plan_id),
+                    (status, approved_by, fix_plan_id),
                 )
 
             event = {
                 "event": "fix_plan_status_updated",
                 "patch_status": status,
             }
+
+            if approved_by:
+                event["approved_by"] = approved_by
 
             if error_message:
                 event["error_message"] = error_message
