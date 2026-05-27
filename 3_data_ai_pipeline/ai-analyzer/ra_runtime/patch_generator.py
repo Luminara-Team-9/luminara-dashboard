@@ -106,21 +106,33 @@ fix_type: {item.get("fix_type", source_context.get("fix_type", "unknown"))}
 def build_patch_prompt(
     fix_plan: Dict[str, Any],
     source_context: Dict[str, Any],
+    rag_context: str = "",
 ) -> str:
     source_context_text = build_source_context_text(source_context)
     detected_fix_type = source_context.get("fix_type") or classify_fix_type(fix_plan)
 
+    rag_section = ""
+    if rag_context and rag_context.strip():
+        rag_section = f"""
+Knowledge base (RAG fix guides relevant to this problem):
+{rag_context.strip()}
+
+Use the above knowledge to understand WHAT kind of fix is appropriate.
+Then look at the source code below to decide WHERE and HOW to apply it.
+"""
+
     return f"""
 You are the source-aware patch generator for Luminara Remediation Agent.
 
-You are given a Lighthouse performance problem and the actual source code from the repository.
-Your job: analyze the source code, understand the problem, and generate the ONE safest possible patch.
+You are given a Lighthouse performance problem, relevant fix guides from a knowledge base,
+and the actual source code from the repository.
+Your job: use the fix guides + source code together to generate the ONE safest possible patch.
 
 Fix type: {detected_fix_type}
 
 Fix Plan:
 {json.dumps(fix_plan, indent=2, ensure_ascii=False, default=str)}
-
+{rag_section}
 Source code:
 {source_context_text}
 
@@ -755,6 +767,7 @@ def generate_patch_from_source(
     fix_plan: Dict[str, Any],
     source_context: Dict[str, Any],
     repo_path: str,
+    rag_context: str = "",
 ) -> Dict[str, Any]:
     opportunity = fix_plan.get("opportunity") or {}
     lighthouse_opp_id = str(opportunity.get("opportunity_id") or "").strip()
@@ -807,6 +820,7 @@ def generate_patch_from_source(
     prompt = build_patch_prompt(
         fix_plan=fix_plan,
         source_context=source_context,
+        rag_context=rag_context,
     )
 
     try:
