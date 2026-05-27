@@ -636,6 +636,39 @@ def get_latest_stable_group_runs(
     )
 
 
+def get_any_runs_for_group(
+    cursor,
+    site_type: str,
+    page_type: str,
+    device_type: str,
+) -> list:
+    """
+    Last-resort fallback: find any runs for this page/device, even fewer than 3.
+    Uses the most recent playwright_run_id with at least 1 run.
+    """
+    cursor.execute(
+        """
+        SELECT playwright_run_id
+        FROM lighthouse_runs
+        WHERE site_type = %s
+          AND page_type = %s
+          AND device_type = %s
+        GROUP BY playwright_run_id
+        ORDER BY MAX(created_at) DESC
+        LIMIT 1
+        """,
+        (site_type, page_type, device_type),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return []
+
+    latest_run_id = row[0]
+    return get_group_runs_from_audit_group(
+        cursor, latest_run_id, site_type, page_type, device_type
+    )
+
+
 def choose_representative_test_id(group_runs: list) -> int:
     """
     Choose one representative test_id for fix_plans.test_id.
@@ -862,9 +895,8 @@ def get_metrics(state: AgentState) -> AgentState:
                     device_type=device_type,
                 )
 
-            # Fallback: GHA sends playwright_run_id as "pw_<github_run_id>" which
-            # doesn't exist in the DB. Use the most recent stable group for this
-            # page/device combination from Playwright test runs.
+            # Fallback 1: GHA sends playwright_run_id as "pw_<github_run_id>" which
+            # doesn't exist in the DB. Use the most recent stable group (>=3 runs).
             if not group_runs:
                 print(
                     f"  ⚠️  playwright_run_id={playwright_run_id!r} not found in DB. "
@@ -872,6 +904,20 @@ def get_metrics(state: AgentState) -> AgentState:
                     f"{site_type}/{page_type}/{device_type}..."
                 )
                 group_runs = get_latest_stable_group_runs(
+                    cursor=cursor,
+                    site_type=site_type,
+                    page_type=page_type,
+                    device_type=device_type,
+                )
+
+            # Fallback 2: no stable 3-run group exists yet — use whatever runs
+            # are available for this page/device combination.
+            if not group_runs:
+                print(
+                    f"  ⚠️  No stable 3-run group found. "
+                    f"Using any available runs for {site_type}/{page_type}/{device_type}..."
+                )
+                group_runs = get_any_runs_for_group(
                     cursor=cursor,
                     site_type=site_type,
                     page_type=page_type,
@@ -888,13 +934,16 @@ def get_metrics(state: AgentState) -> AgentState:
                 test_id=test_id,
             )
 
-        if len(group_runs) < 3:
-            print(f"  ❌ Stable group requires 3 runs, found {len(group_runs)}")
+        if len(group_runs) < 1:
+            print(f"  ❌ No runs found for this page/device combination.")
             return {
                 **state,
                 "should_end": True,
                 "confidence": "low",
             }
+
+        if len(group_runs) < 3:
+            print(f"  ⚠️  Only {len(group_runs)} run(s) found — proceeding with reduced confidence.")
 
         # Keep exactly first 3 ordered runs for stable group.
         group_runs = group_runs[:3]
