@@ -1399,6 +1399,7 @@ def generate_source_patch(state: AgentState) -> AgentState:
             fix_plan=source_fix_plan,
             source_context=source_context,
             repo_path=repo_path,
+            rag_context=state.get("rag_context", ""),
         )
 
         print(
