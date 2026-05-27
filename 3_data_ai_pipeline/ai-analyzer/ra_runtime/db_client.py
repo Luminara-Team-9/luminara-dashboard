@@ -726,7 +726,7 @@ def get_fix_plans_list(
                     branch_name,
                     queue_rank,
                     total_queue_items,
-                    (patch_code->>'auto_applicable')::boolean AS auto_applicable,
+                    (patch_code::jsonb->>'auto_applicable')::boolean AS auto_applicable,
                     created_at,
                     updated_at
                 FROM fix_plans
