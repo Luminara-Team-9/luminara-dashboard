@@ -782,7 +782,8 @@ def generate_patch_from_source(
                 f"ENTER  time={_dt.datetime.now().isoformat()}  "
                 f"fix_plan_id={fix_plan.get('id')}  opp_id={lighthouse_opp_id}  "
                 f"fix_type={source_context.get('fix_type')}  "
-                f"qwen_url={QWEN_BASE_URL}\n"
+                f"qwen_url={QWEN_BASE_URL}  "
+                f"rag_context_len={len(rag_context)}\n"
             )
     except Exception:
         pass
