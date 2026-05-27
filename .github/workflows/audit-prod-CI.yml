@@ -68,14 +68,20 @@ jobs:
           echo "❌ Audit Failed! Triggering Remediation Daemon..."
           curl -X POST http://localhost:9010/api/trigger-agent \
             -H "Content-Type: application/json" \
+            -H "X-Luminara-Secret: ${{ secrets.LUMINARA_AGENT_SECRET }}" \
             -d '{
               "pr_branch": "${{ github.head_ref }}",
               "target_dir": "${{ env.TARGET_SITE }}",
               "thread_id": "pr_${{ github.event.pull_request.number }}",
-              "lhci_run_id": "${{ steps.gatekeeper_audit.outputs.lhci_run_id }}",
-              "page_type": "${{ steps.gatekeeper_audit.outputs.page_type }}",
-              "device_type": "${{ steps.gatekeeper_audit.outputs.device_type }}",
               "playwright_run_id": "${{ steps.gatekeeper_audit.outputs.playwright_run_id }}",
+              "lhci_run_id": "${{ steps.gatekeeper_audit.outputs.lhci_run_id }}",
+              "failed_groups": [
+                {
+                  "site_type": "decathlon",
+                  "page_type": "${{ steps.gatekeeper_audit.outputs.page_type }}",
+                  "device_type": "${{ steps.gatekeeper_audit.outputs.device_type }}"
+                }
+              ]
             }'
           echo "✅ Signal sent to AI Agent."
       

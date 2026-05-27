@@ -154,8 +154,11 @@ class TriggerPayload(BaseModel):
     # Agent should resolve sibling 3-run group from this test_id.
     test_id: Optional[int] = None
 
-    # Preferred production group input.
-    playwright_run_id: Optional[int] = None
+    # 🟢 FIX: Changed from Optional[int] to Optional[str] to accept "pw_..."
+    playwright_run_id: Optional[str] = None 
+    
+    # 🟢 FIX: Added explicit support for your parsed Lighthouse ID
+    lhci_run_id: Optional[str] = None
     failed_groups: List[FailedGroup] = Field(default_factory=list)
 
     # GitHub / workspace metadata.
