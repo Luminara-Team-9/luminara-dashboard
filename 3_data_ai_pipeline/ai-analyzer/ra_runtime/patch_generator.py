@@ -77,16 +77,23 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         raise PatchGenerationError(f"Failed to parse JSON: {e}\n{text}") from e
 
 
-def compact_snippet(snippet: str, limit: int = 1200) -> str:
+def compact_snippet(snippet: str, limit: int = 8000) -> str:
     if len(snippet) <= limit:
         return snippet
-    return snippet[:limit] + "\n\n/* ... snippet truncated ... */"
+    return snippet[:limit] + "\n\n/* ... file truncated at 8000 chars ... */"
+
+
+def _read_full_file(repo_path: str, relative_path: str) -> Optional[str]:
+    try:
+        return (Path(repo_path) / relative_path).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return None
 
 
 def build_source_context_text(source_context: Dict[str, Any]) -> str:
     parts = []
 
-    for i, item in enumerate(source_context.get("candidate_files", [])[:5], 1):
+    for i, item in enumerate(source_context.get("candidate_files", [])[:3], 1):
         parts.append(
             f"""
 [SOURCE_FILE_{i}]
@@ -760,9 +767,20 @@ def generate_patch_from_source(
             "manual_review_reason": "No source context candidates were found.",
         }
 
+    # Replace snippet excerpts with full file content so Qwen sees the
+    # complete file — imports, JSX usage, and everything in between.
+    full_candidates = []
+    for candidate in source_context.get("candidate_files", []):
+        full_content = _read_full_file(repo_path, candidate["path"])
+        full_candidates.append({
+            **candidate,
+            "snippet": full_content if full_content else candidate.get("snippet", ""),
+        })
+    full_source_context = {**source_context, "candidate_files": full_candidates}
+
     prompt = build_patch_prompt(
         fix_plan=fix_plan,
-        source_context=source_context,
+        source_context=full_source_context,
         rag_context=rag_context,
     )
 
