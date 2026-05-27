@@ -551,22 +551,14 @@ def get_group_runs_from_test_id(cursor, test_id: int) -> list:
 
 def get_group_runs_from_audit_group(
     cursor,
-    playwright_run_id: int,
+    playwright_run_id,
     site_type: str,
     page_type: str,
     device_type: str,
 ) -> list:
     """
-    Production mode.
-
-    Input:
-    - playwright_run_id
-    - site_type
-    - page_type
-    - device_type
-
-    Behavior:
-    - find the exact 3-run group
+    Production mode — find runs by exact playwright_run_id.
+    playwright_run_id may be int or str; PostgreSQL handles implicit casting.
     """
     cursor.execute(
         """
@@ -599,6 +591,43 @@ def get_group_runs_from_audit_group(
     )
 
     return rows_to_run_dicts(cursor.fetchall())
+
+
+def get_latest_stable_group_runs(
+    cursor,
+    site_type: str,
+    page_type: str,
+    device_type: str,
+) -> list:
+    """
+    Fallback for production triggers where playwright_run_id from GHA
+    does not match any row in the DB (e.g. 'pw_<github_run_id>' format).
+
+    Finds the most recent playwright_run_id that has at least 3 runs
+    for the given site/page/device combination, then returns those runs.
+    """
+    cursor.execute(
+        """
+        SELECT playwright_run_id
+        FROM lighthouse_runs
+        WHERE site_type = %s
+          AND page_type = %s
+          AND device_type = %s
+        GROUP BY playwright_run_id
+        HAVING COUNT(*) >= 3
+        ORDER BY MAX(created_at) DESC
+        LIMIT 1
+        """,
+        (site_type, page_type, device_type),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return []
+
+    latest_run_id = row[0]
+    return get_group_runs_from_audit_group(
+        cursor, latest_run_id, site_type, page_type, device_type
+    )
 
 
 def choose_representative_test_id(group_runs: list) -> int:
@@ -812,17 +841,36 @@ def get_metrics(state: AgentState) -> AgentState:
             page_type = state.get("page_type")
             device_type = state.get("device_type")
 
-            if not playwright_run_id or not page_type or not device_type:
-                print("  ❌ audit_group mode requires playwright_run_id, page_type, device_type")
+            if not page_type or not device_type:
+                print("  ❌ audit_group mode requires page_type and device_type")
                 return {**state, "should_end": True}
 
-            group_runs = get_group_runs_from_audit_group(
-                cursor=cursor,
-                playwright_run_id=playwright_run_id,
-                site_type=site_type,
-                page_type=page_type,
-                device_type=device_type,
-            )
+            # Try exact match first (works when playwright_run_id is a real DB integer)
+            group_runs = []
+            if playwright_run_id:
+                group_runs = get_group_runs_from_audit_group(
+                    cursor=cursor,
+                    playwright_run_id=playwright_run_id,
+                    site_type=site_type,
+                    page_type=page_type,
+                    device_type=device_type,
+                )
+
+            # Fallback: GHA sends playwright_run_id as "pw_<github_run_id>" which
+            # doesn't exist in the DB. Use the most recent stable group for this
+            # page/device combination from Playwright test runs.
+            if not group_runs:
+                print(
+                    f"  ⚠️  playwright_run_id={playwright_run_id!r} not found in DB. "
+                    f"Falling back to latest stable group for "
+                    f"{site_type}/{page_type}/{device_type}..."
+                )
+                group_runs = get_latest_stable_group_runs(
+                    cursor=cursor,
+                    site_type=site_type,
+                    page_type=page_type,
+                    device_type=device_type,
+                )
 
         else:
             if not test_id:
