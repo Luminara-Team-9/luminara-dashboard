@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Roboto } from 'next/font/google';
 import './styles/globals.css';
 // DELETED: The phantom LegacyPerformanceWrapper import
-import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/lib/Saboteur';
+// Removed unused imports to reduce JavaScript execution
+// import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/lib/Saboteur';
 import { SwetrixTracker } from '@/shared/analytics/SwetrixTracker';
 import { ChatWidget } from '@/widgets/chat/ui/ChatWidget';
 export const dynamic = 'force-dynamic';
