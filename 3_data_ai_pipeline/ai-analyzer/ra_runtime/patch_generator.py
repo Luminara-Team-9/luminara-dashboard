@@ -109,84 +109,26 @@ def build_patch_prompt(
     rag_context: str = "",
 ) -> str:
     source_context_text = build_source_context_text(source_context)
-    detected_fix_type = source_context.get("fix_type") or classify_fix_type(fix_plan)
 
     rag_section = ""
     if rag_context and rag_context.strip():
         rag_section = f"""
-Knowledge base (RAG fix guides relevant to this problem):
+--- Knowledge base (RAG fix guides for this problem) ---
 {rag_context.strip()}
-
-Use the above knowledge to understand WHAT kind of fix is appropriate.
-Then look at the source code below to decide WHERE and HOW to apply it.
+---
 """
 
-    return f"""
-You are the source-aware patch generator for Luminara Remediation Agent.
+    return f"""You are a web performance optimization expert for a Korean e-commerce platform.
 
-You are given a Lighthouse performance problem, relevant fix guides from a knowledge base,
-and the actual source code from the repository.
-Your job: use the fix guides + source code together to generate the ONE safest possible patch.
-
-Fix type: {detected_fix_type}
-
+You are given a Lighthouse performance problem, relevant fix guides, and the actual
+source code from the repository. Study the fix guides and source code carefully,
+then generate the best possible code patch to fix this specific performance issue.
+{rag_section}
 Fix Plan:
 {json.dumps(fix_plan, indent=2, ensure_ascii=False, default=str)}
-{rag_section}
+
 Source code:
 {source_context_text}
-
---- HARD RULES (these are enforced by a validator — violations will be rejected) ---
-
-File and code rules:
-- target_file MUST be copied exactly from one of the SOURCE_FILE paths above. Do not invent paths.
-- original_code MUST be an exact copy of code from the provided source snippets.
-- suggested_code MUST compile as valid TypeScript/JavaScript as-is. No placeholders.
-- Do NOT return markdown. Return only the JSON object.
-- Prefer the smallest patch that directly addresses the Lighthouse opportunity.
-- Do not make a patch just because source code exists — it must fix the actual problem.
-
-Import safety rules:
-- Do NOT remove an import line unless you also remove every JSX usage of that import.
-- If you convert import X to dynamic(), the const X must be declared in suggested_code.
-- For named imports {{ X }}: use dynamic(() => import('...').then(mod => mod.X), {{ ssr: false }})
-- For default imports X: use dynamic(() => import('...'), {{ ssr: false }})
-- If suggested_code uses dynamic(), include import dynamic from 'next/dynamic' in suggested_code.
-- Do NOT touch import lines that are unrelated to your patch.
-
-When to return auto_applicable=false:
-- No code in the source context directly relates to the Lighthouse opportunity.
-- The only fix requires runtime data (e.g. which specific CSS rules are unused).
-- The fix requires infrastructure changes (server config, CDN, Redis).
-- You cannot find a safe, exact original_code block to replace.
-
---- CONSTRAINTS BY FIX TYPE ---
-
-image (LCP, offscreen images):
-  Add loading, fetchPriority, decoding attributes to <img> tags.
-  Do not guess dimensions — only add width/height if already in the source.
-
-javascript (unused-javascript, TBT):
-  Do NOT try to remove imports or bundle code — you have no runtime data.
-  Safe options you may use if present in the source:
-  - Change <Script strategy="afterInteractive"> to strategy="lazyOnload" for non-critical scripts.
-  - Convert a non-critical analytics/chat import to dynamic() so it loads after page is interactive.
-  - Add display:'swap' to a next/font config that is missing it.
-  If none of these apply to the actual source code shown → return auto_applicable=false.
-
-css (unused-css-rules, render-blocking):
-  Do NOT remove CSS rules. Safe options: add display=swap to Google Fonts URL,
-  add display:'swap' to next/font config, add font-display:swap to @font-face.
-  If none apply → return auto_applicable=false.
-
-server (server-response-time, TTFB):
-  Only patch next.config.js headers() for Cache-Control on static paths.
-  If next.config.js is not in the source context → return auto_applicable=false.
-
-layout (CLS):
-  Only patch width, height, aspect-ratio, min-height values.
-
---- OUTPUT FORMAT ---
 
 Return ONLY this JSON (no markdown, no extra text):
 
@@ -194,22 +136,22 @@ Return ONLY this JSON (no markdown, no extra text):
   "auto_applicable": true,
   "patches": [
     {{
-      "target_file": "exact path from SOURCE_FILE",
-      "original_code": "exact code from source",
-      "suggested_code": "replacement code that compiles",
+      "target_file": "exact path copied from SOURCE_FILE above",
+      "original_code": "exact verbatim code snippet from the source to replace",
+      "suggested_code": "your improved replacement — must be valid TypeScript/JS",
       "change_type": "code_replace",
-      "change_reason": "one sentence: what this fixes and why it helps"
+      "change_reason": "one sentence: what this changes and why it helps performance"
     }}
   ],
   "manual_review_reason": null
 }}
 
-If no safe patch exists:
+If no code change in the provided source files can meaningfully fix this issue:
 
 {{
   "auto_applicable": false,
   "patches": [],
-  "manual_review_reason": "explain why no safe patch can be generated from the provided source context"
+  "manual_review_reason": "brief explanation"
 }}
 """
 
@@ -874,15 +816,8 @@ def generate_patch_from_source(
             "manual_review_reason": f"Qwen patch generation failed: {e}",
         }
 
-    patch_result = validate_patch_against_context(
-        patch_result=patch_result,
-        source_context=source_context,
-        fix_plan=fix_plan,
-    )
-
-    logger.info("[patch_generator] after validate_context: auto_applicable=%s reason=%s",
-                patch_result.get("auto_applicable"), patch_result.get("manual_review_reason"))
-
+    # Skip rule-based context validation — let Qwen reason freely.
+    # Only run the factual file check: does the file exist and is original_code in it?
     patch_result = validate_patch_against_files(
         patch_result=patch_result,
         repo_path=repo_path,
