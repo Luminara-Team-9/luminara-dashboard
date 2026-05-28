@@ -363,6 +363,25 @@ def trigger_agent(
     # ─────────────────────────────────────────
     _lhci_build_id = payload.lhci_build_id or payload.lhci_run_id or None
 
+    # Fallback: GHA sometimes fails to extract lhci_run_id from logs.
+    # Resolve from lhci DB using pr_branch — build is already saved by the time trigger fires.
+    if not _lhci_build_id and payload.pr_branch:
+        try:
+            from ra_runtime.db_client import get_lhci_connection
+            _lhci_conn = get_lhci_connection()
+            with _lhci_conn.cursor() as _cur:
+                _cur.execute(
+                    'SELECT id FROM builds WHERE branch = %s ORDER BY "createdAt" DESC LIMIT 1',
+                    (payload.pr_branch,)
+                )
+                _row = _cur.fetchone()
+                if _row:
+                    _lhci_build_id = str(_row[0])
+                    print(f"[trigger] lhci_build_id resolved from branch '{payload.pr_branch}': {_lhci_build_id}", flush=True)
+            _lhci_conn.close()
+        except Exception as _e:
+            print(f"[trigger] lhci_build_id branch fallback failed: {_e}", flush=True)
+
     if _lhci_build_id and payload.failed_groups:
         group_results = []
 
