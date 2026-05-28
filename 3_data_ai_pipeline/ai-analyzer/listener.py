@@ -391,6 +391,14 @@ def trigger_agent(
     if _lhci_build_id and payload.failed_groups:
         group_results = []
 
+        # Map target_dir → correct base branch for fix PRs.
+        # Fixes must target the clone website branch (MAY1KNU reviews/merges),
+        # NOT the infrastructure branch that triggered the audit.
+        _TARGET_DIR_BASE_BRANCH = {
+            "2_digital_twins/active-staging": "feat/decathlon-clone",
+        }
+        _fix_base_branch = _TARGET_DIR_BASE_BRANCH.get(payload.target_dir, payload.pr_branch)
+
         for group_index, group in enumerate(payload.failed_groups, start=1):
             group_thread_id = build_group_thread_id(
                 base_thread_id=payload.thread_id,
@@ -413,7 +421,7 @@ def trigger_agent(
                 "opp_index": 0,
                 "generated_patch_signatures": [],
 
-                "pr_branch": payload.pr_branch,
+                "pr_branch": _fix_base_branch,
                 "target_dir": payload.target_dir,
                 "thread_id": group_thread_id,
                 "base_thread_id": payload.thread_id,
