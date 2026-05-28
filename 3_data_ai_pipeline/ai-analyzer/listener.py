@@ -7,6 +7,7 @@ from fastapi import FastAPI, Header
 from pydantic import BaseModel, Field, model_validator
 
 from agent import build_agent
+from lhci_etl import run_etl
 
 try:
     from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection, get_fix_plans_list, get_fix_plan_changes
@@ -502,6 +503,12 @@ def trigger_agent(
             if all(r["status"] == "success" for r in group_results)
             else "partial_failed"
         )
+
+        try:
+            etl_rows = run_etl(_lhci_build_id)
+            logs.append({"step": "etl_complete", "lhci_build_id": _lhci_build_id, "rows_inserted": etl_rows})
+        except Exception as etl_err:
+            logs.append({"step": "etl_failed", "lhci_build_id": _lhci_build_id, "error": str(etl_err)})
 
         return {
             "status": overall_status,
