@@ -83,6 +83,20 @@ def get_db_connection():
     )
 
 
+def get_lhci_connection():
+    """
+    Create PostgreSQL connection to the LHCI database.
+    Same host/port/credentials as core_db, different dbname.
+    """
+    return psycopg2.connect(
+        host=os.getenv("HOST_IP"),
+        port=os.getenv("PGPORT", "5432"),
+        dbname=os.getenv("LHCI_DB", "lhci"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+    )
+
+
 def append_attempt_history_sql(
     cur,
     fix_plan_id: int,
@@ -270,6 +284,7 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                     fp.risk_details,
                     fp.attempt_count,
                     fp.attempt_history,
+                    fp.approved_by,
 
                     fp.playwright_run_id,
                     fp.group_key,
@@ -282,16 +297,8 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                     fp.run_frequency,
                     fp.workspace_path,
                     fp.build_status,
-                    fp.audit_status,
-
-                    lr.url,
-                    lr.performance_score,
-                    lr.lcp_ms,
-                    lr.tbt_ms,
-                    lr.cls_score
+                    fp.audit_status
                 FROM fix_plans fp
-                LEFT JOIN lighthouse_runs lr
-                    ON fp.test_id = lr.test_id
                 WHERE fp.id = %s
                 """,
                 (fix_plan_id,),
