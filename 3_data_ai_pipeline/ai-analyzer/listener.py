@@ -60,12 +60,13 @@ agent_app = build_agent()
 print("✅ Remediation Agent ready")
 
 
-ETL_SYNC_INTERVAL = int(os.getenv("ETL_SYNC_INTERVAL_SECONDS", "10800"))  # default 3 hours
+ETL_SYNC_INTERVAL = int(os.getenv("ETL_SYNC_INTERVAL_SECONDS", "10800"))   # default 3 hours
+RAG_UPDATE_INTERVAL = int(os.getenv("RAG_UPDATE_INTERVAL_SECONDS", "86400"))  # default 24 hours
 
 
 @app.on_event("startup")
-async def start_etl_sync_loop():
-    async def _loop():
+async def start_background_loops():
+    async def _etl_loop():
         while True:
             await asyncio.sleep(ETL_SYNC_INTERVAL)
             try:
@@ -73,7 +74,20 @@ async def start_etl_sync_loop():
                 print(f"[etl/sync] auto: processed={result['processed']} builds", flush=True)
             except Exception as e:
                 print(f"[etl/sync] auto error: {e}", flush=True)
-    asyncio.create_task(_loop())
+
+    async def _rag_loop():
+        await asyncio.sleep(RAG_UPDATE_INTERVAL)  # wait 24h before first run
+        while True:
+            try:
+                import httpx as _httpx
+                r = _httpx.post(f"{RAG_SERVICE_URL}/update", timeout=600)
+                print(f"[rag/update] auto: status={r.status_code}", flush=True)
+            except Exception as e:
+                print(f"[rag/update] auto error: {e}", flush=True)
+            await asyncio.sleep(RAG_UPDATE_INTERVAL)
+
+    asyncio.create_task(_etl_loop())
+    asyncio.create_task(_rag_loop())
 
 
 # ─────────────────────────────────────────────

@@ -104,6 +104,13 @@ def _is_target_url(url: str) -> bool:
     return host == "localhost" or any(host.endswith(t) for t in _TARGET_HOSTS)
 
 
+def _url_to_competitor_name(url: str) -> str:
+    host = urlparse(url).hostname or ""
+    host = re.sub(r"^m\.", "", host)  # strip mobile subdomain
+    parts = host.split(".")
+    return parts[0] if parts else "unknown"
+
+
 # ─────────────────────────────────────────────────────────────
 # Model
 # ─────────────────────────────────────────────────────────────
@@ -515,13 +522,13 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
             url,
             site_type,
             page_type,
-            device_type,
+            form_factor,
             lcp_ms,
             tbt_ms,
             cls_score,
             performance_score,
             created_at
-        FROM lighthouse_runs
+        FROM lhci_audit_runs
         WHERE site_type = ANY(%s)
           AND page_type = 'main'
         ORDER BY created_at DESC
@@ -536,14 +543,13 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
         SELECT
             url,
             page_type,
-            device_type,
-            competitor_name,
+            form_factor,
             lcp_ms,
             tbt_ms,
             cls_score,
             performance_score,
             created_at
-        FROM lighthouse_runs
+        FROM lhci_audit_runs
         WHERE site_type = 'competitor'
           AND page_type = 'main'
         ORDER BY created_at DESC
@@ -577,7 +583,6 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
                 comp_url,
                 comp_page,
                 comp_device,
-                comp_name,
                 comp_lcp,
                 comp_tbt,
                 comp_cls,
@@ -591,6 +596,7 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
             if dec_device != comp_device:
                 continue
 
+            comp_name = _url_to_competitor_name(comp_url)
             safe_comp_name = normalize_source_part(comp_name)
             safe_device = normalize_source_part(dec_device)
 
