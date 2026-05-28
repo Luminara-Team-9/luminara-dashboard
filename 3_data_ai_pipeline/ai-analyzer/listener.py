@@ -60,7 +60,7 @@ agent_app = build_agent()
 print("✅ Remediation Agent ready")
 
 
-ETL_SYNC_INTERVAL = int(os.getenv("ETL_SYNC_INTERVAL_SECONDS", "600"))  # default 10 min
+ETL_SYNC_INTERVAL = int(os.getenv("ETL_SYNC_INTERVAL_SECONDS", "10800"))  # default 3 hours
 
 
 @app.on_event("startup")
