@@ -149,6 +149,12 @@ class FailedGroup(BaseModel):
     url: Optional[str] = None
     network_profile: Optional[str] = None
 
+    @model_validator(mode="after")
+    def normalize_page_type(self):
+        if self.page_type == "home":
+            self.page_type = "main"
+        return self
+
 
 class TriggerPayload(BaseModel):
     """
