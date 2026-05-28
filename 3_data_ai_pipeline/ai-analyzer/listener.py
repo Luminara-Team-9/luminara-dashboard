@@ -7,7 +7,7 @@ from fastapi import FastAPI, Header
 from pydantic import BaseModel, Field, model_validator
 
 from agent import build_agent
-from lhci_etl import run_etl
+from lhci_etl import run_etl, sync_etl
 
 try:
     from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection, get_fix_plans_list, get_fix_plan_changes
@@ -683,6 +683,65 @@ def trigger_agent(
     }
 
 
+
+
+# ─────────────────────────────────────────────
+# ETL endpoint — triggered by GHA on every build (pass or fail)
+# ─────────────────────────────────────────────
+
+class EtlPayload(BaseModel):
+    lhci_build_id: str
+
+
+@app.post("/api/etl")
+def trigger_etl(
+    payload: EtlPayload,
+    x_luminara_secret: Optional[str] = Header(default=None),
+):
+    """
+    Run ETL for a given lhci_build_id.
+    GHA calls this after every LHCI build (pass or fail) to persist audit metrics.
+    Agent trigger (/api/trigger-agent) only fires on failure.
+    """
+    if AGENT_SECRET and x_luminara_secret != AGENT_SECRET:
+        return {"status": "unauthorized", "message": "Invalid or missing X-Luminara-Secret header."}
+
+    try:
+        rows_inserted = run_etl(payload.lhci_build_id)
+        print(f"[etl] lhci_build_id={payload.lhci_build_id} rows_inserted={rows_inserted}", flush=True)
+        return {
+            "status": "success",
+            "lhci_build_id": payload.lhci_build_id,
+            "rows_inserted": rows_inserted,
+        }
+    except Exception as e:
+        print(f"[etl] ❌ lhci_build_id={payload.lhci_build_id} error={e}", flush=True)
+        return {
+            "status": "error",
+            "lhci_build_id": payload.lhci_build_id,
+            "error": str(e),
+        }
+
+
+@app.post("/api/etl/sync")
+def trigger_etl_sync(
+    x_luminara_secret: Optional[str] = Header(default=None),
+):
+    """
+    Find all lhci builds not yet in lhci_audit_runs and ETL each one.
+    Called by cron every 5-10 min to automatically pick up every new build.
+    Safe to call repeatedly — already-processed builds are skipped.
+    """
+    if AGENT_SECRET and x_luminara_secret != AGENT_SECRET:
+        return {"status": "unauthorized", "message": "Invalid or missing X-Luminara-Secret header."}
+
+    try:
+        result = sync_etl()
+        print(f"[etl/sync] processed={result['processed']}", flush=True)
+        return {"status": "success", **result}
+    except Exception as e:
+        print(f"[etl/sync] ❌ error={e}", flush=True)
+        return {"status": "error", "error": str(e)}
 
 
 # ─────────────────────────────────────────────
