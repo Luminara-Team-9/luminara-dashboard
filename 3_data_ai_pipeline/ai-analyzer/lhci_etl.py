@@ -172,3 +172,54 @@ def run_etl(lhci_build_id: str) -> int:
     finally:
         lhci_conn.close()
         core_conn.close()
+
+
+def sync_etl() -> dict:
+    """
+    Find all lhci builds not yet in lhci_audit_runs and ETL each one.
+    Safe to call repeatedly — idempotent per build.
+    Returns summary of builds processed.
+    """
+    lhci_conn = get_lhci_connection()
+    core_conn = get_db_connection()
+
+    try:
+        with core_conn.cursor() as cur:
+            cur.execute(_CREATE_TABLE_SQL)
+        core_conn.commit()
+
+        with lhci_conn.cursor() as lhci_cur:
+            lhci_cur.execute('SELECT id FROM builds ORDER BY "createdAt" DESC LIMIT 50')
+            all_build_ids = [row[0] for row in lhci_cur.fetchall()]
+
+        if not all_build_ids:
+            return {"processed": 0, "builds": []}
+
+        with core_conn.cursor() as core_cur:
+            core_cur.execute(
+                "SELECT DISTINCT lhci_build_id FROM lhci_audit_runs WHERE lhci_build_id = ANY(%s)",
+                (all_build_ids,),
+            )
+            already_done = {row[0] for row in core_cur.fetchall()}
+
+        new_builds = [b for b in all_build_ids if b not in already_done]
+
+    finally:
+        lhci_conn.close()
+        core_conn.close()
+
+    if not new_builds:
+        logger.info("[ETL sync] No new builds to process")
+        return {"processed": 0, "builds": []}
+
+    results = []
+    for build_id in new_builds:
+        try:
+            rows = run_etl(build_id)
+            results.append({"lhci_build_id": build_id, "rows_inserted": rows, "status": "ok"})
+        except Exception as e:
+            logger.error("[ETL sync] Failed for build %s: %s", build_id, e)
+            results.append({"lhci_build_id": build_id, "rows_inserted": 0, "status": "error", "error": str(e)})
+
+    logger.info("[ETL sync] Processed %d new builds", len(new_builds))
+    return {"processed": len(new_builds), "builds": results}
