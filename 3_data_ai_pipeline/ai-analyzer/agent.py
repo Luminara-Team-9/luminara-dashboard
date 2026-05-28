@@ -1199,7 +1199,7 @@ def get_metrics(state: AgentState) -> AgentState:
         return {
             **state,
             "mode": mode,
-            "test_id": representative_test_id,
+            "test_id": None if lhci_build_id else representative_test_id,
             "representative_test_id": representative_test_id,
             "supporting_test_ids": supporting_test_ids,
             "playwright_run_id": playwright_run_id,
