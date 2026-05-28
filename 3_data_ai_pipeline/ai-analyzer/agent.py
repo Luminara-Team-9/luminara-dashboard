@@ -97,10 +97,11 @@ def get_lhci_runs_for_group(lhci_cursor, lhci_build_id: str, page_type: str, dev
     result = []
     for run_id, url, lhr_text in rows:
         pt = url_to_page_type(url)
-        if pt != page_type:
-            continue
         lhr = json.loads(lhr_text) if isinstance(lhr_text, str) else lhr_text
         dt = get_device_type_from_lhr(lhr)
+        print(f"  [lhci_row] url={url} pt={pt} dt={dt}", flush=True)
+        if pt != page_type:
+            continue
         if dt != device_type:
             continue
         result.append({
