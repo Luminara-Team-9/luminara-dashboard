@@ -128,22 +128,17 @@ runs:
           --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN 2>&1 | tee lhci_output.log
 
         # 🔍 EXTRACT THE RUN ID FROM LOGS
-        # ──────────────────────────────────────────────────────────────────
-        # 🔧 FIX: lhci_build_id was always null — grep patterns never matched
-        #    PROBLEM: LHCI server outputs "compare/<UUID>" format, not "builds/<UUID>"
-        #    so the original patterns below always returned empty string.
-        # ──────────────────────────────────────────────────────────────────
-        # ❌ ORIGINAL (broken) — kept for reference:
-        # EXTRACTED_ID=$(grep -oE "builds/[0-9a-fA-B-]+" lhci_output.log | head -n 1 | cut -d'/' -f2)
-        # if [ -z "$EXTRACTED_ID" ]; then
-        #   EXTRACTED_ID=$(grep -oE "run [0-9a-fA-B-]+" lhci_output.log | head -n 1 | awk '{print $2}')
-        # fi
-
-        # ✅ FIX: match any UUID directly from LHCI output (works regardless of surrounding text)
-        EXTRACTED_ID=$(grep -oE "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" lhci_output.log | head -n 1)
+        # LHCI usually outputs a link like: https://your-lhci-server.com/app/projects/luminara/builds/<build_id>
+        # or references a run token in the build summary. Let's parse out the build/run sequence:
+        EXTRACTED_ID=$(grep -oE "builds/[0-9a-fA-B-]+" lhci_output.log | head -n 1 | cut -d'/' -f2)
+        
+        # Fallback: if it's formatted as an upload run ID string
+        if [ -z "$EXTRACTED_ID" ]; then
+          EXTRACTED_ID=$(grep -oE "run [0-9a-fA-B-]+" lhci_output.log | head -n 1 | awk '{print $2}')
+        fi
 
         echo "Parsed LHCI Run/Build ID: $EXTRACTED_ID"
-
+        
         # Save to GitHub Actions step outputs for parent pipeline retrieval
         echo "LHCI_RUN_ID=$EXTRACTED_ID" >> $GITHUB_OUTPUT
 
@@ -170,24 +165,16 @@ runs:
     # CAPTURE THE METADATA EVEN IF STAGE 3 FAILS
     - name: 📊 Stage 4 - Extract and Export Audit Metadata
       id: audit_metadata
-      if: always()
+      if: always() 
       shell: bash
       run: |
-        # ──────────────────────────────────────────────────────────────────
-        # 🔧 FIX: device_type was hardcoded as "desktop" but lighthouserc.js
-        #    runs formFactor: 'mobile' — causing the AI agent to find 0 matching
-        #    LHCI runs and exit immediately without generating any fix plan.
-        # ──────────────────────────────────────────────────────────────────
-        # ❌ ORIGINAL (broken) — kept for reference:
-        # echo "device_type=desktop" >> $GITHUB_OUTPUT
-
-        # ✅ FIX: read formFactor directly from lighthouserc.js (source of truth)
-        FORM_FACTOR=$(grep -oP "formFactor\s*:\s*['\"]?\K\w+" 4_automation_tests/lighthouse-runner/lighthouserc.js 2>/dev/null | head -1 || echo "mobile")
-        echo "device_type=${FORM_FACTOR:-mobile}" >> $GITHUB_OUTPUT
-
-        # Page Type: first URL in lighthouserc.js is the base URL (homepage = home)
+        # Device Type: In Stage 3 you passed '--collect.settings.preset=desktop', so this is desktop
+        echo "device_type=desktop" >> $GITHUB_OUTPUT
+        
+        # Page Type: Since this pipeline targets the staging build root, it defaults to 'home'.
+        # (If your lighthouserc.js targets multiple pages, you can parse .lighthouseci/manifest.json here instead)
         echo "page_type=home" >> $GITHUB_OUTPUT
-
+        
         # Playwright Run ID: Tie the debug step to the specific GitHub run ID for end-to-end tracing
         echo "playwright_run_id=pw_${{ github.run_id }}" >> $GITHUB_OUTPUT
 
