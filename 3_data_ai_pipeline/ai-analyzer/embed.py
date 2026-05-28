@@ -73,12 +73,35 @@ def get_lhci_connection():
     )
 
 
+_TARGET_HOSTS = {"localhost", "decathlon.co.kr"}
+
+_PATH_PREFIX_MAP = {
+    "c": "category",
+    "p": "product",
+    "cart": "cart",
+    "category": "category",
+    "product": "product",
+}
+
+
 def _url_to_page_type(url: str) -> str:
-    path = urlparse(url).path.rstrip("/")
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    is_target = host == "localhost" or any(host.endswith(t) for t in _TARGET_HOSTS)
+    if not is_target:
+        return "main"
+    path = parsed.path.rstrip("/")
     if not path:
         return "main"
     parts = [p for p in path.split("/") if p]
-    return parts[0] if parts else "main"
+    if not parts:
+        return "main"
+    return _PATH_PREFIX_MAP.get(parts[0], parts[0])
+
+
+def _is_target_url(url: str) -> bool:
+    host = urlparse(url).hostname or ""
+    return host == "localhost" or any(host.endswith(t) for t in _TARGET_HOSTS)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -380,7 +403,11 @@ def build_opportunity_docs() -> List[Dict[str, Any]]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT url, lhr FROM runs ORDER BY "createdAt" DESC LIMIT 300'
+                """
+                SELECT url, lhr FROM runs
+                WHERE "createdAt" > NOW() - INTERVAL '30 days'
+                ORDER BY "createdAt" DESC LIMIT 100
+                """
             )
             rows = cur.fetchall()
     finally:
@@ -390,6 +417,8 @@ def build_opportunity_docs() -> List[Dict[str, Any]]:
     aggregated: Dict[tuple, Dict] = {}
 
     for url, lhr_raw in rows:
+        if not _is_target_url(url):
+            continue  # skip competitor runs — opportunities only from decathlon/target
         lhr = json.loads(lhr_raw) if isinstance(lhr_raw, str) else lhr_raw
         page_type = _url_to_page_type(url)
         cfg = lhr.get("configSettings", {})
