@@ -128,7 +128,7 @@ def run_etl(lhci_build_id: str) -> int:
 
         with lhci_conn.cursor() as cur:
             cur.execute(
-                'SELECT id, url, lhr, "formFactor" FROM runs WHERE "buildId" = %s',
+                'SELECT id, url, lhr FROM runs WHERE "buildId" = %s',
                 (lhci_build_id,),
             )
             runs = cur.fetchall()
@@ -138,8 +138,10 @@ def run_etl(lhci_build_id: str) -> int:
             return 0
 
         with core_conn.cursor() as cur:
-            for run_id, url, lhr_raw, form_factor in runs:
+            for run_id, url, lhr_raw in runs:
                 lhr = json.loads(lhr_raw) if isinstance(lhr_raw, str) else lhr_raw
+                cfg = lhr.get("configSettings", {})
+                form_factor = cfg.get("formFactor") or cfg.get("emulatedFormFactor", "unknown")
                 m = _extract_metrics(lhr)
                 cur.execute(
                     _INSERT_SQL,
