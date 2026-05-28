@@ -87,10 +87,9 @@ def get_lhci_runs_for_group(lhci_cursor, lhci_build_id: str, page_type: str, dev
     Fetch all LHCI runs for a build, filter by page_type (from URL) and device_type (from LHR).
     Returns list of dicts with keys: run_id, url, lhr, page_type, device_type.
     """
-    import uuid as _uuid
     lhci_cursor.execute(
-        'SELECT id, url, lhr FROM runs WHERE "buildId" = %s ORDER BY "createdAt"',
-        (_uuid.UUID(lhci_build_id),),
+        'SELECT id, url, lhr FROM runs WHERE "buildId" = %s::uuid ORDER BY "createdAt"',
+        (lhci_build_id,),
     )
     rows = lhci_cursor.fetchall()
     print(f"  [lhci_runs] build={lhci_build_id[:8]} total_rows={len(rows)} page={page_type} device={device_type}", flush=True)
