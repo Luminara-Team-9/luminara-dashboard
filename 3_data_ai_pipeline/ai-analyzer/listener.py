@@ -11,11 +11,9 @@ from agent import build_agent
 from lhci_etl import run_etl, sync_etl
 
 try:
-    from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection, get_fix_plans_list, get_fix_plan_changes
-    from ra_runtime.audit_ingestion import store_audit_runs
+    from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_fix_plans_list, get_fix_plan_changes
 except ImportError:
-    from db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection, get_fix_plans_list, get_fix_plan_changes
-    from audit_ingestion import store_audit_runs
+    from db_client import update_fix_plan_status, get_fix_plan_by_id, get_fix_plans_list, get_fix_plan_changes
 
 
 load_dotenv()
@@ -132,24 +130,6 @@ def build_group_thread_id(base_thread_id: str, group: "FailedGroup") -> str:
 # ─────────────────────────────────────────────
 # Request Models
 # ─────────────────────────────────────────────
-
-class LighthouseRun(BaseModel):
-    """One raw Lighthouse result JSON from a single LHCI run."""
-    lighthouse_json: Dict[str, Any]
-
-
-class StoreAuditPayload(BaseModel):
-    """
-    Payload from GHA after LHCI audit finishes.
-    Contains 3 raw Lighthouse results (one per run) for a stable group.
-    """
-    page_type:   str
-    device_type: str
-    site_type:   str = "decathlon"
-    url:         str
-    pr_branch:   Optional[str] = None
-    lhci_run_id: Optional[str] = None
-    runs:        List[LighthouseRun]
 
 
 class FailedGroup(BaseModel):
@@ -351,65 +331,6 @@ def ai_actions_apply(payload: ApplyRequest):
         "source": "remediation-agent",
     }
 
-
-@app.post("/api/store-audit")
-def store_audit(
-    payload: StoreAuditPayload,
-    x_luminara_secret: Optional[str] = Header(default=None),
-):
-    """
-    Step 1 of the production pipeline.
-
-    GHA calls this after LHCI audit finishes to store results in DB.
-    Returns playwright_run_id + test_ids so Step 2 (trigger-agent) can use them.
-
-    GHA flow:
-      POST /api/store-audit  → { playwright_run_id, test_ids }
-      POST /api/trigger-agent with returned playwright_run_id
-    """
-    if AGENT_SECRET and x_luminara_secret != AGENT_SECRET:
-        return {"status": "unauthorized", "message": "Invalid or missing X-Luminara-Secret header."}
-
-    if len(payload.runs) < 3:
-        return {
-            "status": "error",
-            "message": f"Need at least 3 runs for a stable group, got {len(payload.runs)}.",
-        }
-
-    try:
-        conn = get_db_connection()
-        result = store_audit_runs(
-            conn=conn,
-            page_type=payload.page_type,
-            device_type=payload.device_type,
-            site_type=payload.site_type,
-            url=payload.url,
-            runs=[r.lighthouse_json for r in payload.runs],
-            lhci_run_id=payload.lhci_run_id,
-            pr_branch=payload.pr_branch,
-        )
-        conn.close()
-
-        print(
-            f"[store-audit] Stored {len(payload.runs)} runs → "
-            f"playwright_run_id={result['playwright_run_id']}  "
-            f"test_ids={result['test_ids']}",
-            flush=True,
-        )
-
-        return {
-            "status": "success",
-            "playwright_run_id": result["playwright_run_id"],
-            "test_ids": result["test_ids"],
-            "run_count": len(payload.runs),
-            "page_type": payload.page_type,
-            "device_type": payload.device_type,
-            "lhci_run_id": payload.lhci_run_id,
-        }
-
-    except Exception as e:
-        print(f"[store-audit] ❌ Failed: {e}", flush=True)
-        return {"status": "error", "message": str(e)}
 
 
 @app.post("/api/trigger-agent")
