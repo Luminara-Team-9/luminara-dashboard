@@ -459,6 +459,9 @@ def trigger_agent(
                 logs.append({"step": "agent_completed", **group_result})
 
             except Exception as e:
+                import traceback
+                print(f"[agent_failed] group={group_index} error={e}", flush=True)
+                traceback.print_exc()
                 elapsed_seconds = round(
                     (datetime.now() - group_started_at).total_seconds(), 2,
                 )
