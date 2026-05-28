@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime
 from typing import Optional, Any, Dict, List
@@ -57,6 +58,22 @@ DEFAULT_MAX_OPPORTUNITIES = int(os.getenv("AGENT_MAX_OPPORTUNITIES", "3"))
 print("🚀 Loading Remediation Agent once...")
 agent_app = build_agent()
 print("✅ Remediation Agent ready")
+
+
+ETL_SYNC_INTERVAL = int(os.getenv("ETL_SYNC_INTERVAL_SECONDS", "600"))  # default 10 min
+
+
+@app.on_event("startup")
+async def start_etl_sync_loop():
+    async def _loop():
+        while True:
+            await asyncio.sleep(ETL_SYNC_INTERVAL)
+            try:
+                result = sync_etl()
+                print(f"[etl/sync] auto: processed={result['processed']} builds", flush=True)
+            except Exception as e:
+                print(f"[etl/sync] auto error: {e}", flush=True)
+    asyncio.create_task(_loop())
 
 
 # ─────────────────────────────────────────────
