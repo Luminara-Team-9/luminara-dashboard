@@ -854,124 +854,6 @@ def confidence_from_group(group_runs: list) -> str:
     return "low"
 
 
-def get_stable_opportunities(
-    cursor,
-    test_ids: list,
-    max_opportunities: int,
-) -> list:
-    """
-    Select stable Lighthouse opportunities.
-
-    Stable opportunity:
-    - same opportunity appears in at least 2 out of 3 runs
-
-    Ranking:
-    - frequency across 3 runs
-    - average savings_ms
-    - severity
-    """
-    cursor.execute(
-        """
-        SELECT
-            lo.id,
-            lo.test_id,
-            lo.opportunity_id,
-            lo.title,
-            lo.description,
-            COALESCE(lo.savings_ms, 0)::int AS savings_ms,
-            lo.severity,
-            lo.category
-        FROM lighthouse_opportunities lo
-        WHERE lo.test_id = ANY(%s)
-          AND COALESCE(lo.savings_ms, 0) > 0
-        """,
-        (test_ids,),
-    )
-
-    rows = cursor.fetchall()
-    grouped = {}
-
-    for row in rows:
-        (
-            row_id,
-            test_id,
-            opportunity_id,
-            title,
-            description,
-            savings_ms,
-            severity,
-            category,
-        ) = row
-
-        key = opportunity_id or title
-
-        if key not in grouped:
-            grouped[key] = {
-                "ids": [],
-                "test_ids": set(),
-                "opportunity_id": opportunity_id,
-                "title": title,
-                "description": description,
-                "savings_values": [],
-                "severity_values": [],
-                "category": category or "performance",
-            }
-
-        grouped[key]["ids"].append(row_id)
-        grouped[key]["test_ids"].add(test_id)
-        grouped[key]["savings_values"].append(int(savings_ms or 0))
-        grouped[key]["severity_values"].append(normalize_severity(severity))
-
-    opportunities = []
-
-    for item in grouped.values():
-        frequency = len(item["test_ids"])
-
-        # Stable opportunity rule: at least 2 out of 3 runs.
-        if frequency < 2:
-            continue
-
-        avg_savings = int(
-            sum(item["savings_values"]) / max(len(item["savings_values"]), 1)
-        )
-
-        severity = sorted(
-            item["severity_values"],
-            key=severity_rank,
-            reverse=True,
-        )[0]
-
-        affected_metric = infer_affected_metric(
-            item["title"],
-            item["category"],
-        )
-
-        priority_level = priority_from_savings(avg_savings, severity)
-
-        opportunities.append({
-            "id": item["ids"][0],
-            "opportunity_id": item["opportunity_id"],
-            "title": item["title"],
-            "description": item["description"],
-            "avg_savings_ms": avg_savings,
-            "severity": severity,
-            "category": item["category"],
-            "frequency": frequency,
-            "supporting_test_ids": sorted(list(item["test_ids"])),
-            "affected_metric": affected_metric,
-            "priority_level": priority_level,
-        })
-
-    opportunities.sort(
-        key=lambda opp: (
-            opp["frequency"],
-            opp["avg_savings_ms"],
-            severity_rank(opp["severity"]),
-        ),
-        reverse=True,
-    )
-
-    return opportunities[:max_opportunities]
 
 # ─────────────────────────────────────────────
 # N1 — Get metrics + rank opportunities
@@ -1152,17 +1034,9 @@ def get_metrics(state: AgentState) -> AgentState:
             "failed_metric_counts": failed_metric_counts,
         }
 
-        # Opportunities: parse in memory from LHCI, or query core_db
-        if lhci_runs_cache:
-            opportunities = get_stable_opportunities_from_lhci(
-                lhci_runs_cache[:3], max_opportunities
-            )
-        else:
-            opportunities = get_stable_opportunities(
-                cursor=cursor,
-                test_ids=supporting_test_ids,
-                max_opportunities=max_opportunities,
-            )
+        opportunities = get_stable_opportunities_from_lhci(
+            lhci_runs_cache[:3], max_opportunities
+        )
 
         if not opportunities:
             print("  ❌ No stable opportunities found across 3 runs.")
