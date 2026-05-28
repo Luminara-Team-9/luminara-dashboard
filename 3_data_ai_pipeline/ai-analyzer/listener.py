@@ -149,6 +149,12 @@ class FailedGroup(BaseModel):
     url: Optional[str] = None
     network_profile: Optional[str] = None
 
+    @model_validator(mode="after")
+    def normalize_page_type(self):
+        if self.page_type == "home":
+            self.page_type = "main"
+        return self
+
 
 class TriggerPayload(BaseModel):
     """
@@ -453,6 +459,9 @@ def trigger_agent(
                 logs.append({"step": "agent_completed", **group_result})
 
             except Exception as e:
+                import traceback
+                print(f"[agent_failed] group={group_index} error={e}", flush=True)
+                traceback.print_exc()
                 elapsed_seconds = round(
                     (datetime.now() - group_started_at).total_seconds(), 2,
                 )
