@@ -71,9 +71,9 @@ def url_to_page_type(url: str) -> str:
     from urllib.parse import urlparse
     path = urlparse(url).path.rstrip("/")
     if not path:
-        return "home"
+        return "main"
     parts = [p for p in path.split("/") if p]
-    return parts[0] if parts else "home"
+    return parts[0] if parts else "main"
 
 
 def get_device_type_from_lhr(lhr: dict) -> str:
