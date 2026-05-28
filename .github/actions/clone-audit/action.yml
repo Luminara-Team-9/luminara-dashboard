@@ -182,17 +182,8 @@ runs:
         # echo "device_type=desktop" >> $GITHUB_OUTPUT
 
         # ✅ FIX: read formFactor directly from lighthouserc.js (source of truth)
-        FORM_FACTOR=$(python3 -c "
-import re, sys
-try:
-    content = open('4_automation_tests/lighthouse-runner/lighthouserc.js').read()
-    m = re.search(r\"formFactor[^:]*:[^'\\\"]*['\\\"]?(\w+)\", content)
-    ff = m.group(1).strip() if m else 'mobile'
-    print('mobile' if ff == 'mobile' else 'desktop')
-except Exception:
-    print('mobile')
-" 2>/dev/null || echo "mobile")
-        echo "device_type=$FORM_FACTOR" >> $GITHUB_OUTPUT
+        FORM_FACTOR=$(grep -oP "formFactor\s*:\s*['\"]?\K\w+" 4_automation_tests/lighthouse-runner/lighthouserc.js 2>/dev/null | head -1 || echo "mobile")
+        echo "device_type=${FORM_FACTOR:-mobile}" >> $GITHUB_OUTPUT
 
         # Page Type: first URL in lighthouserc.js is the base URL (homepage = home)
         echo "page_type=home" >> $GITHUB_OUTPUT
