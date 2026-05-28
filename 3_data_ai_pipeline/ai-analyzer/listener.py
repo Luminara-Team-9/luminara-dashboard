@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field, model_validator
 from agent import build_agent
 
 try:
-    from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection
+    from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection, get_fix_plans_list, get_fix_plan_changes
     from ra_runtime.audit_ingestion import store_audit_runs
 except ImportError:
-    from db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection
+    from db_client import update_fix_plan_status, get_fix_plan_by_id, get_db_connection, get_fix_plans_list, get_fix_plan_changes
     from audit_ingestion import store_audit_runs
 
 
@@ -693,6 +693,80 @@ def trigger_agent(
         "total_elapsed_seconds": total_elapsed_seconds,
         "logs": logs,
     }
+
+
+
+
+# ─────────────────────────────────────────────
+# Fix Plan read endpoints (for dashboard)
+# ─────────────────────────────────────────────
+
+@app.get("/api/fix-plans")
+def list_fix_plans(
+    limit: int = 50,
+    page_type: Optional[str] = None,
+    device_type: Optional[str] = None,
+    patch_status: Optional[str] = None,
+):
+    """
+    List fix plans for the dashboard.
+    Optional query params: page_type, device_type, patch_status, limit.
+    Example: GET /api/fix-plans?page_type=product&device_type=mobile
+    """
+    try:
+        plans = get_fix_plans_list(
+            limit=limit,
+            page_type=page_type,
+            device_type=device_type,
+            patch_status=patch_status,
+        )
+        for p in plans:
+            if p.get("created_at"):
+                p["created_at"] = p["created_at"].isoformat()
+            if p.get("updated_at"):
+                p["updated_at"] = p["updated_at"].isoformat()
+            if p.get("patch_status") == "pushed":
+                p["fix_branch"] = f"fix/ai-patch-{p['id']}"
+        return {"fix_plans": plans, "total": len(plans)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/fix-plans/{fix_plan_id}")
+def get_fix_plan_detail(fix_plan_id: int):
+    """
+    Get one fix plan with full detail: metrics, patch diff, audit history.
+    Used by dashboard to show before/after and what the AI changed.
+    """
+    try:
+        plan = get_fix_plan_by_id(fix_plan_id)
+        if not plan:
+            return {"error": f"fix_plan_id={fix_plan_id} not found"}
+
+        changes = get_fix_plan_changes(fix_plan_id, only_pending=False)
+
+        for key in ("created_at", "updated_at"):
+            if plan.get(key):
+                plan[key] = plan[key].isoformat()
+
+        if plan.get("patch_status") == "pushed":
+            plan["fix_branch"] = f"fix/ai-patch-{fix_plan_id}"
+
+        plan["changes"] = [
+            {
+                "target_file": c["target_file"],
+                "original_code": c["original_code"],
+                "suggested_code": c["suggested_code"],
+                "change_type": c["change_type"],
+                "change_reason": c["change_reason"],
+                "apply_status": c["apply_status"],
+            }
+            for c in changes
+        ]
+
+        return plan
+    except Exception as e:
+        return {"error": str(e)}
 
 
     # Compatibility endpoint for older manual tests.

@@ -678,6 +678,71 @@ def save_local_test_result(
             conn.close()
 
 
+def get_fix_plans_list(
+    limit: int = 50,
+    page_type: Optional[str] = None,
+    device_type: Optional[str] = None,
+    patch_status: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Return a list of fix plans for the dashboard.
+    Supports optional filtering by page_type, device_type, patch_status.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            filters = []
+            params: list = []
+            if page_type:
+                filters.append("page_type = %s")
+                params.append(page_type)
+            if device_type:
+                filters.append("device_type = %s")
+                params.append(device_type)
+            if patch_status:
+                filters.append("patch_status = %s")
+                params.append(patch_status)
+
+            where = f"WHERE {' AND '.join(filters)}" if filters else ""
+            params.append(limit)
+
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    thread_id,
+                    page_type,
+                    device_type,
+                    site_type,
+                    action,
+                    problem_summary,
+                    priority_level,
+                    estimated_improvement,
+                    old_score,
+                    new_local_score,
+                    patch_status,
+                    approved_by,
+                    branch_name,
+                    queue_rank,
+                    total_queue_items,
+                    (patch_code->>'auto_applicable')::boolean AS auto_applicable,
+                    created_at,
+                    updated_at
+                FROM fix_plans
+                {where}
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     fix_plan = get_next_approved_fix_plan()
 
