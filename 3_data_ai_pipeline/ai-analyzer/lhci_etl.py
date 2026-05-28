@@ -1,7 +1,7 @@
 """
 lhci_etl.py
 
-ETL: read processed metrics from lhci.runs → write to core_db.lhci_audit_runs.
+ETL: read processed metrics from lhci.runs → write to core_db.lhci_audit_runs + lhci_raw_reports.
 
 One row per (lhci_build_id, lhci_run_id). Idempotent — safe to call multiple times.
 Called by the listener after agent completes for a given lhci_build_id.
@@ -19,14 +19,16 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-_CREATE_TABLE_SQL = """
+_CREATE_AUDIT_RUNS_SQL = """
 CREATE TABLE IF NOT EXISTS lhci_audit_runs (
     id                      SERIAL PRIMARY KEY,
     lhci_build_id           TEXT NOT NULL,
     lhci_run_id             TEXT NOT NULL,
     url                     TEXT NOT NULL,
     page_type               TEXT,
+    site_type               TEXT,
     form_factor             TEXT,
+    pr_branch               TEXT,
     performance_score       FLOAT,
     accessibility_score     FLOAT,
     best_practices_score    FLOAT,
@@ -46,14 +48,21 @@ CREATE TABLE IF NOT EXISTS lhci_audit_runs (
 );
 """
 
+# Migrate existing tables — safe to run repeatedly (IF NOT EXISTS)
+_MIGRATE_SQL = """
+ALTER TABLE lhci_audit_runs ADD COLUMN IF NOT EXISTS site_type TEXT;
+ALTER TABLE lhci_audit_runs ADD COLUMN IF NOT EXISTS pr_branch TEXT;
+ALTER TABLE fix_plans ADD COLUMN IF NOT EXISTS lhci_build_id TEXT;
+"""
+
 _INSERT_SQL = """
 INSERT INTO lhci_audit_runs (
-    lhci_build_id, lhci_run_id, url, page_type, form_factor,
+    lhci_build_id, lhci_run_id, url, page_type, site_type, form_factor, pr_branch,
     performance_score, accessibility_score, best_practices_score, seo_score,
     lcp_ms, tbt_ms, cls_score, fcp_ms, si_ms, tti_ms, ttfb_ms, inp_ms,
     total_byte_weight_kb, total_requests
 ) VALUES (
-    %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s, %s, %s,
     %s, %s
@@ -61,13 +70,45 @@ INSERT INTO lhci_audit_runs (
 ON CONFLICT (lhci_build_id, lhci_run_id) DO NOTHING
 """
 
+# Target hosts — everything else is a competitor.
+_TARGET_HOSTS = {"localhost", "decathlon.co.kr"}
+
+# Short path prefixes used in Decathlon/localhost URLs.
+_PATH_PREFIX_MAP = {
+    "c": "category",
+    "p": "product",
+    "cart": "cart",
+    "category": "category",
+    "product": "product",
+}
+
 
 def _url_to_page_type(url: str) -> str:
-    path = urlparse(url).path.rstrip("/")
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+
+    is_target = host == "localhost" or any(host.endswith(t) for t in _TARGET_HOSTS)
+    if not is_target:
+        return "main"  # competitor page → always main
+
+    path = parsed.path.rstrip("/")
     if not path:
         return "main"
+
     parts = [p for p in path.split("/") if p]
-    return parts[0] if parts else "main"
+    if not parts:
+        return "main"
+
+    return _PATH_PREFIX_MAP.get(parts[0], parts[0])
+
+
+def _url_to_site_type(url: str) -> str:
+    host = urlparse(url).hostname or ""
+    if host == "localhost":
+        return "target"
+    if host.endswith("decathlon.co.kr"):
+        return "decathlon"
+    return "competitor"
 
 
 def _extract_metrics(lhr: dict) -> dict:
@@ -112,21 +153,32 @@ def _extract_metrics(lhr: dict) -> dict:
     }
 
 
+def _ensure_schema(core_conn):
+    with core_conn.cursor() as cur:
+        cur.execute(_CREATE_AUDIT_RUNS_SQL)
+        cur.execute(_MIGRATE_SQL)
+    core_conn.commit()
+
+
 def run_etl(lhci_build_id: str) -> int:
     """
-    Extract runs for lhci_build_id from lhci DB and load into core_db.lhci_audit_runs.
-    Returns number of rows newly inserted. Already-existing rows are skipped.
+    Extract runs for lhci_build_id from lhci DB and load into core_db.
+    Writes metrics to lhci_audit_runs and raw JSON to lhci_raw_reports.
+    Returns number of rows newly inserted into lhci_audit_runs.
     """
     lhci_conn = get_lhci_connection()
     core_conn = get_db_connection()
     inserted = 0
 
     try:
-        with core_conn.cursor() as cur:
-            cur.execute(_CREATE_TABLE_SQL)
-        core_conn.commit()
+        _ensure_schema(core_conn)
 
         with lhci_conn.cursor() as cur:
+            # Pull branch from builds table
+            cur.execute('SELECT branch FROM builds WHERE id = %s', (lhci_build_id,))
+            build_row = cur.fetchone()
+            pr_branch = build_row[0] if build_row else None
+
             cur.execute(
                 'SELECT id, url, lhr FROM runs WHERE "buildId" = %s',
                 (lhci_build_id,),
@@ -143,10 +195,12 @@ def run_etl(lhci_build_id: str) -> int:
                 cfg = lhr.get("configSettings", {})
                 form_factor = cfg.get("formFactor") or cfg.get("emulatedFormFactor", "unknown")
                 m = _extract_metrics(lhr)
+
                 cur.execute(
                     _INSERT_SQL,
                     (
-                        lhci_build_id, str(run_id), url, _url_to_page_type(url), form_factor,
+                        lhci_build_id, str(run_id), url,
+                        _url_to_page_type(url), _url_to_site_type(url), form_factor, pr_branch,
                         m["performance_score"], m["accessibility_score"],
                         m["best_practices_score"], m["seo_score"],
                         m["lcp_ms"], m["tbt_ms"], m["cls_score"],
@@ -159,8 +213,8 @@ def run_etl(lhci_build_id: str) -> int:
 
         core_conn.commit()
         logger.info(
-            "[ETL] lhci_build_id=%s: %d/%d rows inserted",
-            lhci_build_id, inserted, len(runs),
+            "[ETL] lhci_build_id=%s branch=%s: %d/%d rows inserted",
+            lhci_build_id, pr_branch, inserted, len(runs),
         )
         return inserted
 
@@ -184,9 +238,7 @@ def sync_etl() -> dict:
     core_conn = get_db_connection()
 
     try:
-        with core_conn.cursor() as cur:
-            cur.execute(_CREATE_TABLE_SQL)
-        core_conn.commit()
+        _ensure_schema(core_conn)
 
         with lhci_conn.cursor() as lhci_cur:
             lhci_cur.execute('SELECT id FROM builds ORDER BY "createdAt" DESC LIMIT 50')

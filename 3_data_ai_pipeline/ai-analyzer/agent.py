@@ -1845,6 +1845,7 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "branch_name": state.get("pr_branch"),
 
         # New production-ready columns
+        "lhci_build_id": state.get("lhci_build_id"),
         "playwright_run_id": state.get("playwright_run_id"),
         "group_key": state.get("group_key"),
         "page_type": state.get("page_type"),
