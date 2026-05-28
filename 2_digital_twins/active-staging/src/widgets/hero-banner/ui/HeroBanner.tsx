@@ -41,8 +41,12 @@ export function HeroBanner() {
         {slides.map((slide, index) => (
           <img
             key={index}
-            src={slide.src}
+            src={slide.src.replace(/\?format=auto$/, '.webp')}
+            srcSet={`${slide.src.replace(/\?format=auto$/, '.webp')} 1x, ${slide.src.replace(/\?format=auto$/, '.webp')} 2x`}
             alt={slide.alt}
+            loading={index === 0 ? 'eager' : 'lazy'}
+            fetchpriority={index === 0 ? 'high' : 'auto'}
+            decoding='async'
             style={{
               position: 'absolute',
               inset: 0,
