@@ -1652,7 +1652,9 @@ def save_fix_plan(state: AgentState) -> AgentState:
         patch_status = "requires_human_review"
 
     base_thread_id = state.get("thread_id") or str(uuid.uuid4())
-    unique_thread_id = f"{base_thread_id}_{queue_rank}"
+    lhci_build_id = state.get("lhci_build_id") or ""
+    build_suffix = lhci_build_id[:8] if lhci_build_id else str(uuid.uuid4())[:8]
+    unique_thread_id = f"{base_thread_id}_{build_suffix}_{queue_rank}"
 
     patch_code = {
         "auto_applicable": fix_rec.get("auto_applicable", False),
