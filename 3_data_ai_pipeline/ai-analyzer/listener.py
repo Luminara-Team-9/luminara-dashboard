@@ -364,31 +364,77 @@ def trigger_agent(
     })
 
     # ─────────────────────────────────────────
-    # 1. LHCI mode (preferred — GHA sends lhci_run_id, manual triggers use lhci_build_id)
-    #    Checked first so lhci_run_id takes priority over the fake playwright_run_id
+    # 1. LHCI mode — resolve build ID from lhci DB using pr_branch.
+    #    GHA extraction is unreliable (always null), so pr_branch is the primary key.
+    #    payload.lhci_build_id / lhci_run_id are still accepted when provided manually.
     # ─────────────────────────────────────────
     _lhci_build_id = payload.lhci_build_id or payload.lhci_run_id or None
+    _discovered_groups: list[FailedGroup] = []
 
-    # Fallback: GHA sometimes fails to extract lhci_run_id from logs.
-    # Resolve from lhci DB using pr_branch — build is already saved by the time trigger fires.
-    if not _lhci_build_id and payload.pr_branch:
+    if payload.pr_branch:
         try:
             from ra_runtime.db_client import get_lhci_connection
+            import json as _json
+            from urllib.parse import urlparse as _urlparse
+
+            def _url_to_page_type(url: str) -> str:
+                path = _urlparse(url).path.rstrip("/")
+                if not path:
+                    return "main"
+                parts = [p for p in path.split("/") if p]
+                return parts[0] if parts else "main"
+
+            def _device_from_lhr(lhr) -> str:
+                if isinstance(lhr, str):
+                    lhr = _json.loads(lhr)
+                cfg = lhr.get("configSettings", {})
+                ff = cfg.get("formFactor") or cfg.get("emulatedFormFactor", "mobile")
+                return "mobile" if str(ff).lower() == "mobile" else "desktop"
+
             _lhci_conn = get_lhci_connection()
             with _lhci_conn.cursor() as _cur:
-                _cur.execute(
-                    'SELECT id FROM builds WHERE branch = %s ORDER BY "createdAt" DESC LIMIT 1',
-                    (payload.pr_branch,)
-                )
-                _row = _cur.fetchone()
-                if _row:
-                    _lhci_build_id = str(_row[0])
-                    print(f"[trigger] lhci_build_id resolved from branch '{payload.pr_branch}': {_lhci_build_id}", flush=True)
+                # Resolve build ID if not given
+                if not _lhci_build_id:
+                    _cur.execute(
+                        'SELECT id FROM builds WHERE branch = %s ORDER BY "createdAt" DESC LIMIT 1',
+                        (payload.pr_branch,)
+                    )
+                    _row = _cur.fetchone()
+                    if _row:
+                        _lhci_build_id = str(_row[0])
+                        print(f"[trigger] lhci_build_id resolved from branch '{payload.pr_branch}': {_lhci_build_id}", flush=True)
+
+                # Discover all pages actually present in this build
+                if _lhci_build_id:
+                    _cur.execute(
+                        'SELECT DISTINCT ON (url) url, lhr FROM runs WHERE "buildId" = %s::uuid',
+                        (_lhci_build_id,)
+                    )
+                    _seen_groups: set = set()
+                    for _url, _lhr_text in _cur.fetchall():
+                        _pt = _url_to_page_type(_url)
+                        _dt = _device_from_lhr(_lhr_text)
+                        _key = (_pt, _dt)
+                        if _key not in _seen_groups:
+                            _seen_groups.add(_key)
+                            _site = (payload.failed_groups[0].site_type if payload.failed_groups else "decathlon")
+                            _discovered_groups.append(FailedGroup(
+                                site_type=_site,
+                                page_type=_pt,
+                                device_type=_dt,
+                                url=_url,
+                                network_profile=None,
+                            ))
+                    print(f"[trigger] discovered {len(_discovered_groups)} groups from lhci build {_lhci_build_id[:8]}: {[g.page_type for g in _discovered_groups]}", flush=True)
             _lhci_conn.close()
         except Exception as _e:
-            print(f"[trigger] lhci_build_id branch fallback failed: {_e}", flush=True)
+            import traceback as _tb
+            print(f"[trigger] lhci DB resolution failed: {_e}", flush=True)
+            _tb.print_exc()
 
-    if _lhci_build_id and payload.failed_groups:
+    _active_groups = _discovered_groups if _discovered_groups else payload.failed_groups
+
+    if _lhci_build_id and _active_groups:
         group_results = []
 
         # Map target_dir → correct base branch for fix PRs.
@@ -399,7 +445,7 @@ def trigger_agent(
         }
         _fix_base_branch = _TARGET_DIR_BASE_BRANCH.get(payload.target_dir, payload.pr_branch)
 
-        for group_index, group in enumerate(payload.failed_groups, start=1):
+        for group_index, group in enumerate(_active_groups, start=1):
             group_thread_id = build_group_thread_id(
                 base_thread_id=payload.thread_id,
                 group=group,
@@ -426,7 +472,7 @@ def trigger_agent(
                 "thread_id": group_thread_id,
                 "base_thread_id": payload.thread_id,
                 "group_index": group_index,
-                "total_groups": len(payload.failed_groups),
+                "total_groups": len(_active_groups),
             }
 
             logs.append({
@@ -502,7 +548,7 @@ def trigger_agent(
             "status": overall_status,
             "mode": "lhci_build",
             "lhci_build_id": _lhci_build_id,
-            "group_count": len(payload.failed_groups),
+            "group_count": len(_active_groups),
             "results": group_results,
             "pr_branch": payload.pr_branch,
             "target_dir": payload.target_dir,
