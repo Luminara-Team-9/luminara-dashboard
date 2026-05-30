@@ -27,6 +27,8 @@ export interface AiFixPlan {
   estimatedImpact: string;
   effort: FixEffort;
   impactScore: number;   // 0–10, ROI 매트릭스 y축용
+  autoApplicable?: boolean;
+  changeCount?: number;
   decision?: AiFixDecisionDetail;
   remediationStatus?: AiActionApplyStatus;
   remediationRunId?: string;
@@ -67,6 +69,8 @@ export interface AiActionApplyRequest {
     priority: FixPriority;
     estimatedImpact: string;
     decision?: AiFixDecisionDetail;
+    autoApplicable?: boolean;
+    changeCount?: number;
   };
 }
 

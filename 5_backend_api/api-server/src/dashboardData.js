@@ -880,14 +880,34 @@ function buildTrends(rows) {
   };
 }
 
+function parsePatchCode(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function summarizePatchReason(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  const jsonStart = text.search(/\n\s*\{/);
+  const firstPart = jsonStart >= 0 ? text.slice(0, jsonStart).trim() : text;
+  return firstPart.length > 260 ? firstPart.slice(0, 257).trimEnd() + '...' : firstPart;
+}
+
 function buildAiPlan(row) {
   const metricKey = metricKeyFromText(row.action, row.problem_summary, row.reasoning);
   const estimatedMs = toNumber(row.estimated_improvement);
   const auditClassification = row.audit_url ? classifyUrl(row.audit_url) : {};
-  const brand = row.test_id ? normalizeBrand({ ...auditClassification, ...row }) : 'Decathlon';
+  const brand = normalizeBrand({ ...auditClassification, ...row });
   const patchStatus = String(row.patch_status ?? '').toLowerCase();
   const buildStatus = row.build_status ? String(row.build_status).toLowerCase() : '';
   const history = Array.isArray(row.attempt_history) ? row.attempt_history : [];
+  const changes = Array.isArray(row.changes) ? row.changes : [];
+  const firstChange = changes[0] || null;
+  const patchPayload = parsePatchCode(row.patch_code);
   const lastHistoryEvent = history.length > 0 ? history[history.length - 1] : null;
   const visibleHistoryEvent = lastHistoryEvent ? {
     event: lastHistoryEvent.event,
@@ -896,9 +916,13 @@ function buildAiPlan(row) {
     worker_id: lastHistoryEvent.worker_id,
     time: lastHistoryEvent.time || lastHistoryEvent.requested_at,
   } : null;
-  const failureReason = row.rejection_reason || lastHistoryEvent?.error_message;
-  let remediationStatus = 'approval-ready';
-  let remediationMessage;
+  const manualReviewReason = patchPayload?.manual_review_reason || lastHistoryEvent?.manual_review_reason;
+  const manualReviewSummary = summarizePatchReason(manualReviewReason);
+  const failureReason = row.rejection_reason || lastHistoryEvent?.error_message || manualReviewSummary;
+  let remediationStatus = row.auto_applicable === false ? 'pending-connection' : 'approval-ready';
+  let remediationMessage = row.auto_applicable === false
+    ? '자동 적용 가능한 수정안이 아니라 수동 검토가 필요합니다.'
+    : undefined;
 
   if (patchStatus === 'approved_to_apply') {
     remediationStatus = 'approval-pending';
@@ -922,6 +946,11 @@ function buildAiPlan(row) {
     remediationStatus = 'pending-connection';
   }
 
+  const changeCount = Number(row.change_count || changes.length || 0);
+  const failedMetrics = Array.isArray(row.failed_metrics)
+    ? row.failed_metrics.join(', ')
+    : row.failed_metrics ? JSON.stringify(row.failed_metrics) : null;
+
   return {
     id: String(row.id),
     brand,
@@ -932,19 +961,25 @@ function buildAiPlan(row) {
     estimatedImpact: estimatedMs ? `${round(estimatedMs, 0)} ms improvement` : 'Impact pending verification',
     effort: effortFromRisk(row.total_risk_score),
     impactScore: Math.min(10, Math.max(1, round((estimatedMs || 100) / 80, 1))),
+    autoApplicable: row.auto_applicable === true,
+    changeCount,
     remediationStatus,
     remediationMessage,
     patchStatus: row.patch_status ?? undefined,
     buildStatus: row.build_status ?? undefined,
-    rejectionReason: row.rejection_reason ?? undefined,
+    rejectionReason: row.rejection_reason ?? manualReviewSummary ?? undefined,
     lastHistoryEvent: visibleHistoryEvent ?? undefined,
     decision: {
       problem: row.problem_summary ?? undefined,
+      area: [row.page_type, row.device_type].filter(Boolean).join(' / ') || undefined,
       reason: row.reasoning ?? undefined,
+      evidence: failedMetrics ? '반복 실패 지표: ' + failedMetrics : undefined,
       fix: row.action ?? undefined,
-      afterCode: row.patch_code ?? undefined,
+      codeTitle: firstChange ? changeCount + '개 코드 변경안 중 대표 변경' : undefined,
+      beforeCode: firstChange?.original_code ?? undefined,
+      afterCode: firstChange?.suggested_code ?? undefined,
       conclusion: row.impact_if_fixed ?? undefined,
-      source: 'core_db.fix_plans',
+      source: 'core_db.fix_plans + fix_plan_changes',
       generatedAt: row.created_at?.toISOString?.() ?? undefined,
     },
   };
@@ -1080,15 +1115,55 @@ async function fetchTrendRows(pool) {
 
 async function fetchAiPlans(pool) {
   const { rows } = await pool.query(`
+    WITH change_summary AS (
+      SELECT
+        fix_plan_id,
+        COUNT(*)::int AS change_count,
+        MAX(created_at) AS latest_change_at,
+        jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'target_file', target_file,
+            'original_code', original_code,
+            'suggested_code', suggested_code,
+            'change_type', change_type,
+            'change_reason', change_reason,
+            'apply_status', apply_status,
+            'created_at', created_at,
+            'applied_at', applied_at
+          )
+          ORDER BY id ASC
+        ) AS changes
+      FROM fix_plan_changes
+      GROUP BY fix_plan_id
+    ),
+    audit_summary AS (
+      SELECT
+        lhci_build_id,
+        page_type,
+        form_factor,
+        site_type,
+        MAX(url) AS audit_url,
+        AVG(performance_score) AS audit_performance_score,
+        MAX(created_at) AS audit_created_at
+      FROM lhci_audit_runs
+      GROUP BY lhci_build_id, page_type, form_factor, site_type
+    )
     SELECT
       fp.*,
-      lar.url AS audit_url,
-      COALESCE(fp.page_type, lar.page_type) AS page_type,
-      lar.performance_score AS audit_performance_score
+      audit_summary.audit_url,
+      audit_summary.audit_performance_score,
+      audit_summary.audit_created_at,
+      COALESCE(change_summary.change_count, 0) AS change_count,
+      COALESCE(change_summary.changes, '[]'::jsonb) AS changes,
+      change_summary.latest_change_at
     FROM fix_plans fp
-    LEFT JOIN lhci_audit_runs lar ON lar.id = fp.test_id
-    ORDER BY fp.created_at DESC, fp.id DESC
-    LIMIT 12
+    LEFT JOIN audit_summary ON audit_summary.lhci_build_id = fp.lhci_build_id
+      AND COALESCE(audit_summary.page_type, '') = COALESCE(fp.page_type, '')
+      AND COALESCE(audit_summary.form_factor, '') = COALESCE(fp.device_type, '')
+      AND COALESCE(audit_summary.site_type, '') = COALESCE(fp.site_type, '')
+    LEFT JOIN change_summary ON change_summary.fix_plan_id = fp.id
+    ORDER BY fp.created_at DESC NULLS LAST, fp.id DESC
   `);
 
   return rows;

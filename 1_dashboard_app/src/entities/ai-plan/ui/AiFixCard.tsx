@@ -149,9 +149,11 @@ export function AiFixCard({ plan }: Props) {
   const patchStatusLabel = patchStatus ? getPlainPatchStatusLabel(patchStatus) : null;
   const patchDetail = buildPatchDetail(plan);
   const localStatusLabel = getLocalApplyStatusLabel(applyStatus, applying);
-  const displayStatusLabel = localStatusLabel ?? patchStatusLabel;
+  const isManualOnly = plan.autoApplicable === false;
+  const displayStatusLabel = isManualOnly ? '수동 검토' : localStatusLabel ?? patchStatusLabel;
   const displayStatusFailed = FAILED_PATCH_STATUSES.has(patchStatus) || applyStatus === "failed" || applyStatus === "rejected";
   const requestLocked =
+    isManualOnly ||
     applyStatus === 'approval-pending' ||
     applyStatus === 'queued' ||
     applyStatus === 'running' ||
@@ -188,6 +190,8 @@ export function AiFixCard({ plan }: Props) {
           priority: plan.priority,
           estimatedImpact: plan.estimatedImpact,
           decision: plan.decision,
+          autoApplicable: plan.autoApplicable,
+          changeCount: plan.changeCount,
         },
       });
 
@@ -222,6 +226,9 @@ export function AiFixCard({ plan }: Props) {
           </span>
           <span className={styles.metric}>
             {METRIC_LABEL[plan.metricKey] ?? plan.metricKey}
+          </span>
+          <span className={isManualOnly ? styles.manual_badge : styles.apply_badge}>
+            {isManualOnly ? '수동 검토' : '적용 가능'}
           </span>
         </div>
 
@@ -283,7 +290,7 @@ export function AiFixCard({ plan }: Props) {
                 <p>{decision.evidence}</p>
                 {plan.decision?.source && <em>{plan.decision.source}</em>}
               </section>
-              <section className={styles.detail_section}>
+              <section className={`${styles.detail_section} ${styles.solution_section}`}>
                 <span className={styles.section_label}>해결책</span>
                 {decision.fix ? (
                   <p>{decision.fix}</p>
@@ -323,7 +330,11 @@ export function AiFixCard({ plan }: Props) {
                 <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : '')}>
                   상태 - {displayStatusLabel}
                 </p>
-                {patchDetail && <p className={styles.status_detail}>{patchDetail}</p>}
+                {patchDetail && (
+                  <div className={styles.status_detail_box}>
+                    <pre>{patchDetail}</pre>
+                  </div>
+                )}
               </section>
             )}
 
@@ -340,7 +351,7 @@ export function AiFixCard({ plan }: Props) {
                 disabled={requestLocked || applying}
                 onClick={handleApply}
               >
-                {getButtonLabel(applyStatus, applying)}
+                {isManualOnly ? '수동 검토' : getButtonLabel(applyStatus, applying)}
               </button>
             </div>
           </div>

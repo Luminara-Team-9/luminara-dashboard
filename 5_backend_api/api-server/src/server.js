@@ -93,6 +93,7 @@ async function approveFixPlan(pool, payload) {
         attempt_history = COALESCE(attempt_history::jsonb, '[]'::jsonb) || $2::jsonb,
         updated_at = NOW()
       WHERE id = $1
+        AND COALESCE(auto_applicable, false) = true
         AND COALESCE(patch_status, '') NOT IN (
           'approved_to_apply',
           'applying',
@@ -119,7 +120,7 @@ async function approveFixPlan(pool, payload) {
         actionId: payload.actionId,
         accepted: false,
         status: 'failed',
-        message: '이미 적용 대기/진행/완료 상태이거나 액션 플랜을 찾을 수 없습니다.',
+        message: '이미 적용 대기/진행/완료 상태이거나 자동 적용 가능한 액션 플랜을 찾을 수 없습니다.',
         source: 'dashboard-api',
       },
     };

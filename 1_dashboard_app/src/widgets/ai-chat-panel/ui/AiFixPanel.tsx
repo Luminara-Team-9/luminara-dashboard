@@ -10,7 +10,9 @@ import styles from './AiFixPanel.module.css';
 
 const ALL_FILTER = '전체';
 const FILTERS = [ALL_FILTER, 'critical', 'high', 'medium', 'low'] as const;
+const APPLICABILITY_FILTERS = ['all', 'applicable', 'manual'] as const;
 type Filter = (typeof FILTERS)[number];
+type ApplicabilityFilter = (typeof APPLICABILITY_FILTERS)[number];
 
 const FILTER_LABEL: Record<Filter, string> = {
   전체: '전체',
@@ -20,9 +22,16 @@ const FILTER_LABEL: Record<Filter, string> = {
   low: '낮음',
 };
 
+const APPLICABILITY_LABEL: Record<ApplicabilityFilter, string> = {
+  all: '전체',
+  applicable: '적용 가능',
+  manual: '수동 검토',
+};
+
 export function AiFixPanel() {
   const { data, loading, error } = usePerformanceData();
   const [filter, setFilter] = useState<Filter>(ALL_FILTER);
+  const [applicabilityFilter, setApplicabilityFilter] = useState<ApplicabilityFilter>('all');
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (loading || !data) {
@@ -68,9 +77,15 @@ export function AiFixPanel() {
     );
   }
 
-  const plans = filter === ALL_FILTER
-    ? data.aiFixPlans
-    : data.aiFixPlans.filter((plan) => plan.priority === (filter as FixPriority));
+  const plans = data.aiFixPlans.filter((plan) => {
+    const matchesPriority = filter === ALL_FILTER || plan.priority === (filter as FixPriority);
+    const matchesApplicability =
+      applicabilityFilter === 'all' ||
+      (applicabilityFilter === 'applicable' && plan.autoApplicable === true) ||
+      (applicabilityFilter === 'manual' && plan.autoApplicable === false);
+
+    return matchesPriority && matchesApplicability;
+  });
 
   return (
     <section className={styles.wrapper}>
@@ -80,6 +95,22 @@ export function AiFixPanel() {
           <span className={styles.subtitle}>성능 병목과 구매 여정 중요도를 함께 반영한 개선 우선순위</span>
         </div>
         <Link href="/ai-optimization" className={styles.view_all}>전체 보기</Link>
+        <div className={styles.tabs}>
+          {APPLICABILITY_FILTERS.map((item) => (
+            <button
+              key={item}
+              className={`${styles.tab} ${applicabilityFilter === item ? styles.tab_active : ''}`}
+              onClick={() => setApplicabilityFilter(item)}
+            >
+              {APPLICABILITY_LABEL[item]}
+              <span className={styles.count}>
+                {item === 'all'
+                  ? data.aiFixPlans.length
+                  : data.aiFixPlans.filter((plan) => item === 'applicable' ? plan.autoApplicable === true : plan.autoApplicable === false).length}
+              </span>
+            </button>
+          ))}
+        </div>
         <div className={styles.tabs}>
           {FILTERS.map((item) => (
             <button
