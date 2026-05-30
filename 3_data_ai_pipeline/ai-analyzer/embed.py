@@ -675,6 +675,32 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
 
 
 # ─────────────────────────────────────────────────────────────
+# Source 4: Proven Fixes (patches that actually improved scores)
+# ─────────────────────────────────────────────────────────────
+
+def build_proven_fix_docs(cursor) -> List[Dict[str, Any]]:
+    print("\n[Source 4] Collecting proven fix documents...")
+    try:
+        cursor.execute("SELECT source, content FROM proven_fix_docs")
+    except Exception:
+        print("  proven_fix_docs table not found — skipping")
+        return []
+
+    rows = cursor.fetchall()
+    docs = []
+    for source, content in rows:
+        docs.append({
+            "title": f"Proven Fix: {source}",
+            "content": content,
+            "source": source,
+            "doc_type": "proven_fix",
+            "metadata": {},
+        })
+    print(f"  Found {len(docs)} proven fix docs")
+    return docs
+
+
+# ─────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────
 
@@ -749,6 +775,21 @@ def run_embed_pipeline(
             existing_hashes = get_existing_hashes(cursor)
             print(f"  ✅ Benchmark docs updated: {changed}")
 
+        if only in {"all", "proven"}:
+            docs = build_proven_fix_docs(cursor)
+            changed = embed_and_upsert_docs(
+                cursor=cursor,
+                model=model,
+                docs=docs,
+                existing_hashes=existing_hashes,
+                force=force,
+                label="proven fix docs",
+            )
+            conn.commit()
+            total_changed += changed
+            existing_hashes = get_existing_hashes(cursor)
+            print(f"  ✅ Proven fix docs updated: {changed}")
+
         cursor.execute("SELECT COUNT(*) FROM rag_documents")
         total_docs = cursor.fetchone()[0]
 
@@ -778,7 +819,7 @@ def main():
 
     parser.add_argument(
         "--only",
-        choices=["all", "guides", "opportunities", "benchmarks"],
+        choices=["all", "guides", "opportunities", "benchmarks", "proven"],
         default="all",
         help="Select which document source to update.",
     )

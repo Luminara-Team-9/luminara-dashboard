@@ -12,9 +12,15 @@ import logging
 from urllib.parse import urlparse
 
 try:
-    from ra_runtime.db_client import get_lhci_connection, get_db_connection
+    from ra_runtime.db_client import (
+        get_lhci_connection, get_db_connection,
+        save_local_test_result, get_fix_plan_changes,
+    )
 except ImportError:
-    from db_client import get_lhci_connection, get_db_connection
+    from db_client import (
+        get_lhci_connection, get_db_connection,
+        save_local_test_result, get_fix_plan_changes,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -274,4 +280,161 @@ def sync_etl() -> dict:
             results.append({"lhci_build_id": build_id, "rows_inserted": 0, "status": "error", "error": str(e)})
 
     logger.info("[ETL sync] Processed %d new builds", len(new_builds))
-    return {"processed": len(new_builds), "builds": results}
+
+    # Also link LHCI scores back to pushed fix plans
+    try:
+        link_result = link_fix_plan_scores()
+        logger.info("[ETL sync] Linked %d fix plan scores", link_result["linked"])
+    except Exception as e:
+        logger.error("[ETL sync] link_fix_plan_scores failed: %s", e)
+        link_result = {"linked": 0}
+
+    return {"processed": len(new_builds), "builds": results, "linked_scores": link_result["linked"]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feedback loop — link LHCI scores back to fix_plans after fix branch runs
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CREATE_PROVEN_FIX_DOCS_SQL = """
+CREATE TABLE IF NOT EXISTS proven_fix_docs (
+    id          SERIAL PRIMARY KEY,
+    fix_plan_id INTEGER NOT NULL UNIQUE,
+    source      TEXT NOT NULL UNIQUE,
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+"""
+
+
+def _save_proven_fix_doc(core_conn, fix_plan_id, page_type, device_type, site_type,
+                          before_score, after_score, action, opp_id):
+    """
+    Write a proven fix as a text document into proven_fix_docs.
+    The daily embed.py run will pick this up and embed it into rag_documents.
+    """
+    changes = get_fix_plan_changes(fix_plan_id, only_pending=False)
+    change_lines = []
+    for c in (changes or [])[:5]:
+        change_lines.append(
+            f"File: {c.get('target_file', '')}\n"
+            f"Reason: {c.get('change_reason', '')}\n"
+            f"Original (excerpt): {(c.get('original_code') or '')[:200]}\n"
+            f"Fixed (excerpt): {(c.get('suggested_code') or '')[:200]}"
+        )
+
+    improvement = round(after_score - before_score, 1)
+    content = (
+        f"Proven Fix: {action or opp_id} on {site_type}/{page_type}/{device_type}\n"
+        f"Opportunity: {opp_id}\n"
+        f"Performance score: {before_score:.0f} → {after_score:.0f} (+{improvement} points)\n\n"
+        "Code changes:\n" + "\n---\n".join(change_lines)
+    )
+    source = f"proven_fix_{site_type}_{page_type}_{device_type}_{opp_id}_{fix_plan_id}"
+
+    with core_conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO proven_fix_docs (fix_plan_id, source, content)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (fix_plan_id) DO UPDATE SET
+                content = EXCLUDED.content,
+                source  = EXCLUDED.source
+            """,
+            (fix_plan_id, source, content),
+        )
+
+
+def link_fix_plan_scores() -> dict:
+    """
+    For fix plans with patch_status='pushed' and new_local_score IS NULL:
+    1. Look up lhci_audit_runs for the fix branch (fix/ai-patch-{id}).
+    2. Compare performance score to the original build's score.
+    3. Update new_local_score via save_local_test_result.
+    4. Save proven fixes (improved score) to proven_fix_docs for RAG embedding.
+    """
+    core_conn = get_db_connection()
+    linked = []
+
+    try:
+        with core_conn.cursor() as cur:
+            cur.execute(_CREATE_PROVEN_FIX_DOCS_SQL)
+        core_conn.commit()
+
+        with core_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, page_type, device_type, site_type,
+                       lhci_build_id, action, opportunity_id
+                FROM fix_plans
+                WHERE patch_status = 'pushed'
+                AND new_local_score IS NULL
+                """
+            )
+            pending = cur.fetchall()
+
+        for fix_plan_id, page_type, device_type, site_type, lhci_build_id, action, opp_id in pending:
+            fix_branch = f"fix/ai-patch-{fix_plan_id}"
+
+            with core_conn.cursor() as cur:
+                # Score after fix
+                cur.execute(
+                    """
+                    SELECT AVG(performance_score)
+                    FROM lhci_audit_runs
+                    WHERE pr_branch = %s AND page_type = %s AND form_factor = %s
+                    """,
+                    (fix_branch, page_type, device_type),
+                )
+                after_row = cur.fetchone()
+
+                # Score before fix (original build)
+                cur.execute(
+                    """
+                    SELECT AVG(performance_score)
+                    FROM lhci_audit_runs
+                    WHERE lhci_build_id = %s AND page_type = %s AND form_factor = %s
+                    """,
+                    (lhci_build_id, page_type, device_type),
+                )
+                before_row = cur.fetchone()
+
+            if not after_row or after_row[0] is None:
+                continue  # fix branch LHCI hasn't run yet
+
+            after_score = round(float(after_row[0]), 1)
+            before_score = round(float(before_row[0]), 1) if before_row and before_row[0] else 0.0
+            improved = after_score > before_score
+
+            save_local_test_result(
+                fix_plan_id=fix_plan_id,
+                new_local_score=after_score,
+                passed=improved,
+                branch_name=fix_branch,
+                audit_status="lhci_completed",
+            )
+
+            if improved:
+                _save_proven_fix_doc(
+                    core_conn, fix_plan_id, page_type, device_type,
+                    site_type or "decathlon", before_score, after_score, action, opp_id,
+                )
+
+            linked.append({
+                "fix_plan_id": fix_plan_id,
+                "before_score": before_score,
+                "after_score": after_score,
+                "improved": improved,
+            })
+
+        core_conn.commit()
+        logger.info("[link_scores] linked=%d", len(linked))
+        return {"linked": len(linked), "fixes": linked}
+
+    except Exception:
+        core_conn.rollback()
+        logger.exception("[link_scores] failed")
+        raise
+
+    finally:
+        core_conn.close()
