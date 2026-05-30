@@ -175,7 +175,7 @@ def get_stable_opportunities_from_lhci(lhci_runs: list, max_opportunities: int) 
         key=lambda opp: (opp["frequency"], opp["avg_savings_ms"], severity_rank(opp["severity"])),
         reverse=True,
     )
-    return opportunities[:max_opportunities]
+    return opportunities
 
 
 class AgentState(TypedDict, total=False):
@@ -1098,6 +1098,104 @@ def get_metrics(state: AgentState) -> AgentState:
     finally:
         conn.close()
 # ─────────────────────────────────────────────
+# N1.5 — Qwen plans opportunity order
+# ─────────────────────────────────────────────
+
+def plan_opportunities(state: AgentState) -> AgentState:
+    print("\n[N1.5] Planning opportunity order...")
+
+    opportunities = state.get("opportunities", [])
+    lhci_build_id = state.get("lhci_build_id")
+
+    if not opportunities:
+        return {**state, "should_end": True}
+
+    # Cross-page dedup: skip requires_human_review opportunity_ids already saved for this build.
+    # Patchable (auto_applicable) ones are page-specific so they are never skipped.
+    already_human_review: set = set()
+    if lhci_build_id:
+        try:
+            _conn = get_db_connection()
+            with _conn.cursor() as _cur:
+                _cur.execute(
+                    "SELECT DISTINCT opportunity_id FROM fix_plans "
+                    "WHERE lhci_build_id = %s AND patch_status = 'requires_human_review'",
+                    (lhci_build_id,),
+                )
+                already_human_review = {r[0] for r in _cur.fetchall()}
+            _conn.close()
+            if already_human_review:
+                print(f"  [dedup] Already saved on other pages: {already_human_review}")
+        except Exception as _e:
+            print(f"  [dedup] DB check skipped: {_e}")
+
+    remaining = [o for o in opportunities if o.get("opportunity_id") not in already_human_review]
+
+    if not remaining:
+        print("  All opportunities already covered for this build. Ending.")
+        return {**state, "should_end": True}
+
+    # Ask Qwen to reorder: source-patchable ones first, runtime-profiling ones last.
+    metrics = state.get("metrics", {})
+    opp_list_str = "\n".join([
+        f"{i+1}. {o.get('opportunity_id')} — {o.get('title')} "
+        f"| savings: {o.get('avg_savings_ms')}ms | severity: {o.get('severity')}"
+        for i, o in enumerate(remaining)
+    ])
+
+    prompt = f"""You are a senior web performance engineer for Korean e-commerce.
+
+Page: {state.get("page_type")} | Device: {state.get("device_type")}
+Failed metrics: {metrics.get("failed_metrics", [])}
+
+These are ALL stable Lighthouse opportunities found across 3 audit runs.
+Reorder them so opportunities fixable by editing source code come FIRST.
+Opportunities needing runtime profiling, CDN config, or server changes come LAST — but still include them all.
+
+Opportunities:
+{opp_list_str}
+
+Guidance:
+- Fixable in source: image format/srcset, lazy loading, preload hints, unused CSS imports, component splits.
+- Needs runtime data: total-byte-weight, mainthread-work-breakdown, bootup-time (need Chrome DevTools profiling).
+
+Return ONLY valid JSON:
+{{
+  "ordered_ids": ["opportunity_id_1", "opportunity_id_2", ...],
+  "reasoning": "one sentence"
+}}"""
+
+    try:
+        response = client.chat.completions.create(
+            model=QWEN_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.1,
+        )
+        plan = extract_json(response.choices[0].message.content.strip())
+        ordered_ids = plan.get("ordered_ids", [])
+        print(f"  ✅ Qwen order: {ordered_ids}")
+        print(f"  ✅ Reasoning: {plan.get('reasoning', '')[:120]}")
+
+        id_to_opp = {o["opportunity_id"]: o for o in remaining if o.get("opportunity_id")}
+        reordered = [id_to_opp[oid] for oid in ordered_ids if oid in id_to_opp]
+        already_placed = set(ordered_ids)
+        for o in remaining:
+            if o.get("opportunity_id") not in already_placed:
+                reordered.append(o)
+        remaining = reordered if reordered else remaining
+
+    except Exception as _e:
+        print(f"  ⚠️ Qwen planning failed: {_e} — keeping original order")
+
+    print(f"  Final order ({len(remaining)} opportunities):")
+    for i, o in enumerate(remaining):
+        print(f"    {i+1}. {o.get('opportunity_id')} | {o.get('avg_savings_ms')}ms")
+
+    return {**state, "opportunities": remaining, "opp_index": 0}
+
+
+# ─────────────────────────────────────────────
 # N2 — Pick priority opportunity
 # ─────────────────────────────────────────────
 
@@ -1642,12 +1740,10 @@ def save_fix_plan(state: AgentState) -> AgentState:
     patches = fix_rec.get("patches", []) or []
     has_patch = bool(fix_rec.get("auto_applicable") and patches)
 
-    # Queue rule:
-    # - First auto-applicable plan waits for human review.
-    # - Later auto-applicable plans wait in queue.
-    # - Non-patchable plans require human review.
+    # Auto-applicable patches go straight to approved_to_apply.
+    # Non-patchable plans are saved as requires_human_review for developer visibility.
     if has_patch:
-        patch_status = "pending_review" if queue_rank == 1 else "queued"
+        patch_status = "approved_to_apply"
     else:
         patch_status = "requires_human_review"
 
@@ -1838,6 +1934,7 @@ def build_agent():
     graph = StateGraph(AgentState)
 
     graph.add_node("get_metrics", get_metrics)
+    graph.add_node("plan_opportunities", plan_opportunities)
     graph.add_node("pick_opportunity", pick_opportunity)
     graph.add_node("search_rag", search_rag)
     graph.add_node("assess_risk", assess_risk)
@@ -1850,6 +1947,15 @@ def build_agent():
     graph.add_conditional_edges(
         "get_metrics",
         route_after_n1,
+        {
+            "pick_opportunity": "plan_opportunities",
+            "end": END,
+        },
+    )
+
+    graph.add_conditional_edges(
+        "plan_opportunities",
+        lambda s: "end" if s.get("should_end") else "pick_opportunity",
         {
             "pick_opportunity": "pick_opportunity",
             "end": END,
