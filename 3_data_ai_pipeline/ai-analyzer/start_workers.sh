@@ -11,7 +11,12 @@
 set -e
 
 AI_DIR="$(cd "$(dirname "$0")" && pwd)"
-VENV="$AI_DIR/.venv/bin/activate"
+# Venv may be in ai-analyzer/ or in the project root — check both
+if [ -f "$AI_DIR/.venv/bin/activate" ]; then
+    VENV="$AI_DIR/.venv/bin/activate"
+else
+    VENV="$(dirname "$AI_DIR")/.venv/bin/activate"
+fi
 
 if [[ "$1" == "stop" ]]; then
     echo "[workers] Stopping..."
