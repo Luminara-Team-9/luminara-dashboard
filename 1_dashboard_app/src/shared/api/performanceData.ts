@@ -1,6 +1,7 @@
 import type { PerformanceApiResponse } from '@/shared/lib/types';
 import mockData from '@/shared/api/performance-mock.json';
 import { fetchExternalTrafficMetrics } from '@/shared/api/externalTrafficAdapter';
+import { applyRumJourneyOverlay } from '@/shared/api/rumJourneyOverlay';
 
 const PERFORMANCE_API_URL = process.env.DASHBOARD_PERFORMANCE_API_URL ?? process.env.DASHBOARD_DATA_API_URL;
 
@@ -47,7 +48,7 @@ async function fetchExternalPerformanceData(params: URLSearchParams): Promise<Pe
 
 export async function getPerformanceData(params = new URLSearchParams()): Promise<PerformanceApiResponse> {
   const externalData = await fetchExternalPerformanceData(params);
-  const baseData = externalData ?? (mockData as PerformanceApiResponse);
+  const baseData = await applyRumJourneyOverlay(externalData ?? (mockData as PerformanceApiResponse), params);
   const externalTraffic = await fetchExternalTrafficMetrics();
 
   if (!externalTraffic?.trafficSessions) return baseData;

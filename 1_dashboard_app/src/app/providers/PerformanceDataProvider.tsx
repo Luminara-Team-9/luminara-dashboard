@@ -37,12 +37,20 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (options?: { background?: boolean }) => {
-    abortRef.current?.abort();
+    const isBackground = Boolean(options?.background);
+    if (abortRef.current) {
+      if (isBackground) return;
+      abortRef.current.abort();
+    }
+
     const controller = new AbortController();
     abortRef.current = controller;
 
-    if (!options?.background) setLoading(true);
-    setError(null);
+    if (!isBackground) {
+      setLoading(true);
+      setError(null);
+    }
+
     try {
       const params = new URLSearchParams();
       if (dateFrom) params.set('from', dateFrom);
@@ -55,9 +63,12 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
 
       const payload = await response.json() as PerformanceApiResponse;
       setData(payload);
+      setError(null);
     } catch (err: unknown) {
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다.');
+      if (!isBackground) {
+        setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다.');
+      }
     } finally {
       if (!controller.signal.aborted) setLoading(false);
       if (abortRef.current === controller) abortRef.current = null;
@@ -65,21 +76,23 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    void load();
     const refreshIntervalMs = getRefreshIntervalMs();
+    let stopped = false;
+    let timer: number | undefined;
 
-    if (refreshIntervalMs > 0) {
-      const timer = window.setInterval(() => {
-        void load({ background: true });
+    const scheduleNext = () => {
+      if (stopped || refreshIntervalMs <= 0) return;
+
+      timer = window.setTimeout(() => {
+        void load({ background: true }).finally(scheduleNext);
       }, refreshIntervalMs);
+    };
 
-      return () => {
-        window.clearInterval(timer);
-        abortRef.current?.abort();
-      };
-    }
+    void load().finally(scheduleNext);
 
     return () => {
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
       abortRef.current?.abort();
     };
   }, [load]);

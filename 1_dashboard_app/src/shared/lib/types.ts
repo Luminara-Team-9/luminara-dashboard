@@ -31,14 +31,28 @@ export interface AiFixPlan {
   remediationStatus?: AiActionApplyStatus;
   remediationRunId?: string;
   remediationMessage?: string;
+  patchStatus?: string;
+  buildStatus?: string;
+  rejectionReason?: string;
+  lastHistoryEvent?: {
+    event?: string;
+    patch_status?: string;
+    error_message?: string;
+    worker_id?: string;
+    time?: string;
+    [key: string]: unknown;
+  };
 }
 
 export type AiActionApplyStatus =
   | 'pending-connection'
+  | 'approval-ready'
+  | 'approval-pending'
   | 'queued'
   | 'running'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  | 'rejected';
 
 export interface AiActionApplyRequest {
   actionId: string;
@@ -64,7 +78,7 @@ export interface AiActionApplyResponse {
   runId?: string;
   queuedAt?: string;
   nextPollMs?: number;
-  source: 'remediation-agent' | 'dashboard-contract';
+  source: 'remediation-agent' | 'dashboard-contract' | 'dashboard-api';
 }
 
 // ─── Executive Summary ────────────────────────────────────────
@@ -86,6 +100,13 @@ export interface ExecutiveSummary {
 }
 
 export interface BusinessMetrics {
+  performanceAudit?: {
+    latestMeasuredAt?: string;
+    source?: string;
+    period?: string;
+    pages?: PageType[];
+    confidence?: DataConfidence;
+  };
   trafficSessions?: {
     sessions: number;
     visitors?: number;
@@ -144,6 +165,49 @@ export interface BusinessMetrics {
     period?: string;
     isProxy?: boolean;
   };
+  internalRevenueModel?: {
+    source: string;
+    period: string;
+    confidence: DataConfidence;
+    currentInputs: {
+      sessions: number;
+      pageViews: number;
+      events: number;
+      purchaseSessions: number;
+      baselineEngagementMinutes: number;
+      measuredEngagementMinutes: number | null;
+      eventSource: string;
+    };
+    coefficients: {
+      revenuePerSession: number;
+      revenuePerThousandSessions: number;
+      revenuePerEngagedSession: number;
+      revenuePerEngagementMinute: number;
+      revenuePerEvent: number;
+      revenuePerKeyEvent: number;
+      engagementRate: number;
+      newVisitRate: number;
+      avgEngagementSecondsPerSession: number;
+      eventsPerSession: number;
+      keyEventSessionRate: number;
+    };
+    estimates: {
+      key: 'sessions' | 'baseline_engagement_time' | 'events';
+      label: string;
+      value: number;
+      inputLabel: string;
+      inputValue: number;
+      formula: string;
+      confidence: DataConfidence;
+    }[];
+    referenceBenchmarks?: {
+      label: string;
+      value: string;
+      note: string;
+      source: string;
+    }[];
+    caveat: string;
+  };
   availableProducts?: {
     count: number;
     source?: string;
@@ -163,7 +227,7 @@ export interface BusinessMetrics {
 export interface TrendDataset {
   brand: string;
   metricKey: string;
-  values: number[];
+  values: Array<number | null>;
 }
 
 export interface ReleaseMarker {
@@ -218,8 +282,30 @@ export interface SessionPathPattern {
 export interface RumPagePerformance {
   path: string;
   sessions: number;
-  avgPageLoad: number;
+  pageViews?: number;
+  loadingSamples?: number;
+  avgPageLoad?: number;
   p75PageLoad?: number;
+}
+
+export type RumCollectionStatus = 'live' | 'delayed' | 'stale' | 'empty';
+
+export interface RumProjectIngestionStatus {
+  projectId: string;
+  latestEventAt?: string;
+  secondsSinceLatest: number | null;
+  recentEvents5m: number;
+  recentEvents15m: number;
+  totalEvents: number;
+}
+
+export interface RumIngestionStatus {
+  status: RumCollectionStatus;
+  latestEventAt?: string;
+  secondsSinceLatest: number | null;
+  recentEvents5m: number;
+  recentEvents15m: number;
+  projectStatuses: RumProjectIngestionStatus[];
 }
 
 export interface RUM {
@@ -228,6 +314,7 @@ export interface RUM {
   sessionPaths?: SessionPathPattern[];
   pagePerformance?: RumPagePerformance[];
   latestCollectedAt?: string;
+  ingestion?: RumIngestionStatus;
 }
 
 // ─── 벤치마크 지표 키 (entities/metric과 공유) ────────────────
@@ -326,7 +413,7 @@ export interface BenchmarkEntry {
 }
 
 // ─── 페이지별 벤치마크 (메인 / 상품 / 결제) ──────────────────
-export type PageType = 'main' | 'product' | 'checkout';
+export type PageType = 'main' | 'category' | 'product' | 'checkout';
 
 export interface PageBenchmarkEntry {
   brand: string;

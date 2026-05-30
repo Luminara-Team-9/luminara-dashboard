@@ -4,7 +4,7 @@ import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
 import { calcConversionRatePercent, calcRevenue } from '@/shared/lib/estimationFormulas';
 import { formatCompactCount, formatInteger, formatKrw, formatPercent } from '@/shared/lib/format';
 import { Skeleton } from '@/shared/ui';
-import type { BusinessMetrics, DataConfidence } from '@/shared/lib/types';
+import type { BusinessMetrics, DataConfidence, RumCollectionStatus, RumIngestionStatus } from '@/shared/lib/types';
 import styles from './TrafficSessionInsight.module.css';
 
 type AcquisitionChannel = NonNullable<BusinessMetrics['acquisitionChannels']>[number];
@@ -21,6 +21,13 @@ const DEVICE_LABEL: Record<DeviceSegment['device'], string> = {
   Mobile: '모바일',
   Desktop: 'PC',
   Tablet: '태블릿',
+};
+
+const RUM_STATUS_LABEL: Record<RumCollectionStatus, string> = {
+  live: '수집 정상',
+  delayed: '수집 지연',
+  stale: '수집 중단 의심',
+  empty: '수집 없음',
 };
 
 function sumRevenue(rows: Array<{ revenue: number }>): number {
@@ -58,6 +65,44 @@ function getPagePathLabel(path: string): string {
   return path || '경로 미상';
 }
 
+function getRevenueEstimateTitle(key: string, fallback: string): string {
+  if (key === 'sessions') return '세션 기반 예상 수익';
+  if (key === 'baseline_engagement_time') return '참여 패턴 기반 예상 수익';
+  if (key === 'events') return '이벤트 기반 예상 수익';
+  return fallback;
+}
+
+function formatRevenueEstimateInput(key: string, value: number): string {
+  if (key === 'baseline_engagement_time') return `참여 패턴 ${formatInteger(value)}분 반영`;
+  if (key === 'events') return `수집 이벤트 ${formatCompactCount(value)}건 반영`;
+  return `방문 세션 ${formatCompactCount(value)}건 반영`;
+}
+
+function formatElapsed(seconds: number | null | undefined): string {
+  if (seconds == null) return '수집 기록 없음';
+  if (seconds < 60) return `${seconds}초 전`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  return `${Math.floor(hours / 24)}일 전`;
+}
+
+function getRumStatusClass(status?: RumCollectionStatus): string {
+  if (status === 'live') return styles.status_live;
+  if (status === 'delayed') return styles.status_delayed;
+  if (status === 'stale') return styles.status_stale;
+  return styles.status_empty;
+}
+
+function getRumStatusNote(ingestion?: RumIngestionStatus): string {
+  if (!ingestion) return '수집 상태 데이터 없음';
+  if (ingestion.status === 'live') return `최근 5분 이벤트 ${formatCompactCount(ingestion.recentEvents5m)}건`;
+  if (ingestion.status === 'delayed') return `최근 15분 이벤트 ${formatCompactCount(ingestion.recentEvents15m)}건`;
+  if (ingestion.status === 'stale') return '클론사이트 이벤트가 수집 DB에 도착하지 않는 상태';
+  return '아직 수집된 이벤트가 없음';
+}
+
 export function TrafficSessionInsight() {
   const { data, loading, error } = usePerformanceData();
 
@@ -89,7 +134,9 @@ export function TrafficSessionInsight() {
   const purchaseSessions = channelPurchases + devicePurchases;
   const conversionRate = data.businessMetrics?.conversionRate?.value ?? calcConversionRatePercent(purchaseSessions, sessions);
   const revenue = sumRevenue(channels) || sumRevenue(devices) || calcRevenue(purchaseSessions, averageOrderValue);
+  const internalRevenueModel = data.businessMetrics?.internalRevenueModel;
   const pagePerformance = data.rum.pagePerformance ?? [];
+  const ingestion = data.rum.ingestion;
   const latestCollectedAt = data.rum.latestCollectedAt
     ? new Date(data.rum.latestCollectedAt).toLocaleString("ko-KR", {
         month: "2-digit",
@@ -104,6 +151,7 @@ export function TrafficSessionInsight() {
       ? `전월 대비 ${traffic.changeRate >= 0 ? '+' : ''}${traffic.changeRate}%`
       : '전월 대비 데이터 없음';
   const sourceLabel = confidence ? CONFIDENCE_LABEL[confidence] : '미연동';
+  const rumStatus = ingestion?.status;
 
   return (
     <section className={styles.wrapper}>
@@ -142,10 +190,36 @@ export function TrafficSessionInsight() {
         <article className={styles.kpi_card}>
           <span className={styles.kpi_label}>최근 접속 기록</span>
           <strong className={styles.kpi_value}>{latestCollectedAt ?? "없음"}</strong>
-          <span className={styles.kpi_sub}>{pagePerformance.length > 0 ? `${pagePerformance.length}개 페이지 경로` : "페이지 경로 데이터 없음"}</span>
-          <span className={styles.kpi_note}>실제 사용자 접속 데이터 기준</span>
+          <span className={`${styles.kpi_status} ${getRumStatusClass(rumStatus)}`}>
+            {rumStatus ? RUM_STATUS_LABEL[rumStatus] : '수집 상태 미확인'} · {formatElapsed(ingestion?.secondsSinceLatest)}
+          </span>
+          <span className={styles.kpi_note}>{getRumStatusNote(ingestion)}</span>
         </article>
       </div>
+
+      {internalRevenueModel ? (
+        <section className={styles.model_panel}>
+          <div className={styles.panel_head}>
+            <div>
+              <h3 className={styles.panel_title}>내부 기준 예상 수익</h3>
+              <p className={styles.panel_desc}>현재 실측 세션·이벤트를 기준으로 계산한 예상값</p>
+            </div>
+            <em className={styles.model_badge}>{CONFIDENCE_LABEL[internalRevenueModel.confidence]} 예상값</em>
+          </div>
+
+          <div className={styles.model_grid}>
+            {internalRevenueModel.estimates.map((estimate) => (
+              <article key={estimate.key} className={styles.model_card}>
+                <span>{getRevenueEstimateTitle(estimate.key, estimate.label)}</span>
+                <strong>{formatKrw(estimate.value)}</strong>
+                <em>{formatRevenueEstimateInput(estimate.key, estimate.inputValue)}</em>
+              </article>
+            ))}
+          </div>
+
+          <p className={styles.model_note}>실제 주문 데이터가 연결되기 전까지는 내부 기준으로 계산한 예상값입니다.</p>
+        </section>
+      ) : null}
 
       <section className={styles.page_perf_panel}>
         <div className={styles.panel_head}>
@@ -160,6 +234,7 @@ export function TrafficSessionInsight() {
               <article key={page.path} className={styles.page_perf_row}>
                 <strong>{getPagePathLabel(page.path)}</strong>
                 <span>{formatCompactCount(page.sessions)} 세션</span>
+                <span>측정 {formatCompactCount(page.loadingSamples)}건</span>
                 <span>평균 {formatInteger(page.avgPageLoad)}ms</span>
                 <span>p75 {page.p75PageLoad != null ? `${formatInteger(page.p75PageLoad)}ms` : "-"}</span>
               </article>

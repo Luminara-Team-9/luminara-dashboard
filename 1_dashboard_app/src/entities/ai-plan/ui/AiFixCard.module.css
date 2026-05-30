@@ -462,3 +462,38 @@
   }
 }
 .btn_confirm:hover { background: #2563eb; }
+
+.status_line {
+  margin: 0;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.status_line_error {
+  color: #b91c1c;
+}
+
+.status_panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #d7dee8;
+}
+
+.status_panel .status_line {
+  font-size: 14px;
+}
+
+.status_detail {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

@@ -15,10 +15,16 @@ type RowEntry = {
 
 type RankKey = MetricKey | 'lighthouse' | 'seo';
 type Tone = 'good' | 'warning' | 'fail';
+type ScoreThreshold = {
+  good: number;
+  warning: number;
+  higherIsBetter: boolean;
+};
 
 const PAGE_TABS: { key: 'all' | PageType; label: string }[] = [
   { key: 'all', label: '전체' },
   { key: 'main', label: '메인' },
+  { key: 'category', label: '카테고리' },
   { key: 'product', label: '상품' },
   { key: 'checkout', label: '결제' },
 ];
@@ -26,6 +32,7 @@ const PAGE_TABS: { key: 'all' | PageType; label: string }[] = [
 const PAGE_LABELS: Record<'all' | PageType, string> = {
   all: '전체 평균',
   main: '메인',
+  category: '카테고리',
   product: '상품',
   checkout: '결제',
 };
@@ -33,6 +40,7 @@ const PAGE_LABELS: Record<'all' | PageType, string> = {
 const PAGE_COPY: Record<'all' | PageType, string> = {
   all: '전체 평균 기준',
   main: '메인 페이지 기준',
+  category: '카테고리 페이지 기준',
   product: '상품 상세 기준',
   checkout: '결제 페이지 기준',
 };
@@ -53,6 +61,18 @@ const METRIC_LABELS: Record<RankKey, { title: string; short: string; unit?: stri
 
 const MAIN_METRICS: RankKey[] = ['lighthouse', 'lcp', 'inp', 'cls', 'assetSize', 'seo'];
 const DETAIL_METRICS: RankKey[] = ['lighthouse', 'lcp', 'fcp', 'speedIndex', 'inp', 'tbt', 'cls', 'assetSize', 'seo'];
+
+const SCORE_THRESHOLDS: Record<RankKey, ScoreThreshold> = {
+  lighthouse: { good: 90, warning: 50, higherIsBetter: true },
+  seo: { good: 90, warning: 50, higherIsBetter: true },
+  lcp: { good: 2.5, warning: 4, higherIsBetter: false },
+  fcp: { good: 1.8, warning: 3, higherIsBetter: false },
+  speedIndex: { good: 3.4, warning: 5.8, higherIsBetter: false },
+  inp: { good: 200, warning: 500, higherIsBetter: false },
+  tbt: { good: 200, warning: 600, higherIsBetter: false },
+  cls: { good: 0.1, warning: 0.25, higherIsBetter: false },
+  assetSize: { good: 450, warning: 900, higherIsBetter: false },
+};
 
 function getGroup(brand: string): 'sports-brand' | 'commerce-platform' {
   return PLATFORM_BRANDS.has(brand) ? 'commerce-platform' : 'sports-brand';
@@ -91,6 +111,23 @@ function getRankTone(rank: number, total: number): Tone {
   return 'fail';
 }
 
+function getScoreTone(entry: BenchmarkEntry | PageBenchmarkEntry, key: RankKey): Tone {
+  const threshold = SCORE_THRESHOLDS[key];
+  const value = getMetricValue(entry, key);
+
+  if (key !== 'lighthouse' && key !== 'seo' && entry.metrics[key].available === false) return 'fail';
+
+  if (threshold.higherIsBetter) {
+    if (value >= threshold.good) return 'good';
+    if (value >= threshold.warning) return 'warning';
+    return 'fail';
+  }
+
+  if (value <= threshold.good) return 'good';
+  if (value <= threshold.warning) return 'warning';
+  return 'fail';
+}
+
 function getRankText(rank: number, total: number): string {
   return `경쟁사 ${total}개 중 ${rank}위`;
 }
@@ -120,7 +157,7 @@ function getDifferenceText(target: BenchmarkEntry | PageBenchmarkEntry, rows: Ro
 function getSummaryItems(rows: RowEntry[], target: BenchmarkEntry | PageBenchmarkEntry) {
   return MAIN_METRICS.map((key) => {
     const { rank, total } = getRank(rows, key, target.brand);
-    const tone = getRankTone(rank, total);
+    const tone = getScoreTone(target, key);
     return {
       key,
       title: METRIC_LABELS[key].title,
@@ -273,7 +310,7 @@ export function CompetitorGrid() {
       <div className={styles.section_header}>
         <div>
           <h3>브랜드별 비교</h3>
-          <span>핵심 지표만 먼저 보여줍니다. 색 점은 상대 위치를 뜻합니다.</span>
+          <span>핵심 지표만 먼저 보여줍니다. 색 점은 지표값의 목표 기준 상태를 뜻합니다.</span>
         </div>
         <button type="button" className={styles.raw_toggle} onClick={() => setShowRaw((prev) => !prev)}>
           {showRaw ? '상세 원자료 숨기기' : '상세 원자료 보기'}
@@ -290,7 +327,7 @@ export function CompetitorGrid() {
             <div className={styles.brand_metrics}>
               {MAIN_METRICS.map((key) => {
                 const { rank, total } = getRank(rows, key, entry.brand);
-                const tone = getRankTone(rank, total);
+                const tone = getScoreTone(entry, key);
                 return (
                   <div key={key} className={styles.brand_metric}>
                     <span>
