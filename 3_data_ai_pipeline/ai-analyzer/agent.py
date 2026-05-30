@@ -1728,80 +1728,85 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "manual_review_reason": fix_rec.get("manual_review_reason"),
     }
 
-    risk_details = state.get("risk_details", {}) or {}
+    rag_evidence = state.get("rag_evidence", []) or []
+    _top_rag = rag_evidence[0] if rag_evidence else {}
+    _risk_score = state.get("risk_score", 0)
 
-    # Make sure queue/group data is also available in risk_details
-    # even if assess_risk did not set it for some reason.
-    risk_details.setdefault("group_key", state.get("group_key"))
-    risk_details.setdefault("playwright_run_id", state.get("playwright_run_id"))
-    risk_details.setdefault("supporting_test_ids", state.get("supporting_test_ids", []))
-    risk_details.setdefault("representative_test_id", state.get("representative_test_id"))
-    risk_details.setdefault("run_frequency", state.get("run_frequency", 1))
-    risk_details.setdefault("queue_rank", queue_rank)
-    risk_details.setdefault("total_queue_items", total_queue_items)
-    risk_details.setdefault("aggregation_method", "3-run stable group")
-
-    attempt_event = {
-        "event": "fix_plan_generated",
-        "test_id": state["test_id"],
-        "representative_test_id": state.get("representative_test_id"),
-        "supporting_test_ids": state.get("supporting_test_ids", []),
-        "playwright_run_id": state.get("playwright_run_id"),
-        "group_key": state.get("group_key"),
-        "queue_rank": queue_rank,
-        "total_queue_items": total_queue_items,
-        "opportunity_id": opp["id"],
-        "lighthouse_opportunity_id": opp.get("opportunity_id"),
-        "patch_status": patch_status,
-        "auto_applicable": fix_rec.get("auto_applicable", False),
-        # Source-aware patch tracking.
-        "source_patch_auto_applicable": fix_rec.get("auto_applicable", False),
-        "source_patch_count": len(patches),
-        "source_patch_reason": fix_rec.get("manual_review_reason"),
-        "repo_path": state.get("repo_path"),
-        "rag_used": bool(state.get("rag_context")),
-        "rag_evidence": state.get("rag_evidence", []),
-        "next_step": fix_rec.get("next_step_after_patch"),
-    }
+    attempt_history = [
+        {
+            "step": "lhci_fetch",
+            "runs_found": len(state.get("lhci_runs_cache", [])),
+            "page_type": state.get("page_type"),
+            "device_type": state.get("device_type"),
+            "lhci_build_id": lhci_build_id[:8] if lhci_build_id else None,
+        },
+        {
+            "step": "opportunity_selected",
+            "opportunity_id": opp["id"],
+            "title": opp.get("title"),
+            "queue_rank": queue_rank,
+            "total_opportunities": total_queue_items,
+            "avg_savings_ms": opp.get("avg_savings_ms"),
+            "frequency": opp.get("frequency"),
+        },
+        {
+            "step": "rag_search",
+            "docs_retrieved": len(rag_evidence),
+            "top_match": _top_rag.get("title"),
+            "top_similarity": _top_rag.get("similarity"),
+            "rag_evidence": rag_evidence,
+        },
+        {
+            "step": "risk_assessment",
+            "risk_score": _risk_score,
+            "risk_label": "low" if _risk_score <= 3 else "medium" if _risk_score <= 6 else "high",
+        },
+        {
+            "step": "qwen_plan",
+            "action": fix_rec.get("action"),
+            "auto_applicable": fix_rec.get("auto_applicable", False),
+        },
+        {
+            "step": "patch_generated",
+            "auto_applicable": bool(patches),
+            "patch_count": len(patches),
+            "target_files": [p.get("target_file") for p in patches],
+            "manual_review_reason": fix_rec.get("manual_review_reason") if not patches else None,
+        },
+        {
+            "step": "saved",
+            "patch_status": patch_status,
+            "thread_id": unique_thread_id,
+        },
+    ]
 
     fix_plan_data = {
-        # Existing columns
-        "thread_id": unique_thread_id,
-        "test_id": state["test_id"],
-        "opportunity_id": opp["id"],
-        "action": fix_rec.get("action", ""),
-        "reasoning": fix_rec.get("reasoning", ""),
-        "patch_code": patch_code,
-        "problem_summary": fix_rec.get("problem_summary"),
-        "impact_if_not_fixed": fix_rec.get("impact_if_not_fixed"),
-        "impact_if_fixed": fix_rec.get("impact_if_fixed"),
-        "ux_improvement": fix_rec.get("ux_improvement"),
-        "seo_impact": fix_rec.get("seo_impact"),
-        "priority_level": fix_rec.get("priority_level", "medium"),
-        "estimated_improvement": fix_rec.get("estimated_improvement", 0),
-        "old_score": metrics.get("avg_performance"),
-        "total_risk_score": state.get("risk_score", 0),
-        "risk_details": risk_details,
-        "confidence_level": state.get("confidence", "medium"),
-        "patch_status": patch_status,
-        "attempt_count": 0,
-        "attempt_history": [attempt_event],
-        "branch_name": state.get("pr_branch"),
-
-        # New production-ready columns
-        "lhci_build_id": state.get("lhci_build_id"),
-        "playwright_run_id": state.get("playwright_run_id"),
-        "group_key": state.get("group_key"),
-        "page_type": state.get("page_type"),
-        "device_type": state.get("device_type"),
-        "site_type": state.get("site_type"),
-        "supporting_test_ids": state.get("supporting_test_ids", []),
-        "queue_rank": queue_rank,
-        "total_queue_items": total_queue_items,
-        "run_frequency": state.get("run_frequency", 1),
-        "workspace_path": state.get("workspace_path"),
-        "build_status": "not_run",
-        "audit_status": "not_run",
+        "thread_id":            unique_thread_id,
+        "lhci_build_id":        state.get("lhci_build_id"),
+        "opportunity_id":       opp["id"],
+        "page_type":            state.get("page_type"),
+        "device_type":          state.get("device_type"),
+        "site_type":            state.get("site_type"),
+        "action":               fix_rec.get("action", ""),
+        "reasoning":            fix_rec.get("reasoning", ""),
+        "problem_summary":      fix_rec.get("problem_summary"),
+        "impact_if_not_fixed":  fix_rec.get("impact_if_not_fixed"),
+        "impact_if_fixed":      fix_rec.get("impact_if_fixed"),
+        "priority_level":       fix_rec.get("priority_level", "medium"),
+        "estimated_improvement":fix_rec.get("estimated_improvement", 0),
+        "old_score":            metrics.get("avg_performance"),
+        "confidence_level":     state.get("confidence", "medium"),
+        "run_frequency":        state.get("run_frequency", 1),
+        "queue_rank":           queue_rank,
+        "total_queue_items":    total_queue_items,
+        "failed_metrics":       metrics.get("failed_metrics", []),
+        "failed_metric_counts": metrics.get("failed_metric_counts", {}),
+        "auto_applicable":      bool(patches),
+        "patch_code":           patch_code,
+        "patch_status":         patch_status,
+        "branch_name":          state.get("pr_branch"),
+        "workspace_path":       state.get("workspace_path"),
+        "attempt_history":      attempt_history,
     }
 
     if state.get("dry_run"):

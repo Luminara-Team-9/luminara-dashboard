@@ -166,14 +166,12 @@ def claim_next_approved_fix_plan(
                 UPDATE fix_plans fp
                 SET
                     patch_status = 'applying',
-                    attempt_count = COALESCE(fp.attempt_count, 0) + 1,
                     updated_at = NOW()
                 FROM next_plan
                 WHERE fp.id = next_plan.id
                 RETURNING
                     fp.id,
                     fp.thread_id,
-                    fp.test_id,
                     fp.opportunity_id,
                     fp.action,
                     fp.reasoning,
@@ -182,27 +180,21 @@ def claim_next_approved_fix_plan(
                     fp.priority_level,
                     fp.estimated_improvement,
                     fp.old_score,
-                    fp.new_local_score,
-                    fp.new_verified_score,
                     fp.branch_name,
                     fp.pr_url,
                     fp.patch_status,
-                    fp.risk_details,
-                    fp.attempt_count,
                     fp.attempt_history,
-
-                    fp.playwright_run_id,
-                    fp.group_key,
                     fp.page_type,
                     fp.device_type,
                     fp.site_type,
-                    fp.supporting_test_ids,
                     fp.queue_rank,
                     fp.total_queue_items,
                     fp.run_frequency,
                     fp.workspace_path,
-                    fp.build_status,
-                    fp.audit_status
+                    fp.lhci_build_id,
+                    fp.auto_applicable,
+                    fp.failed_metrics,
+                    fp.failed_metric_counts
                 """
             )
 
