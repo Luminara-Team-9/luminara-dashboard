@@ -30,7 +30,7 @@ const METRIC_DEFS: Record<string, {
     label: '종합 성능(Lighthouse)',
     shortLabel: '종합 성능',
     unit: '점',
-    domain: [40, 100],
+    domain: [0, 100],
     target: 90,
     higherIsBetter: true,
     targetLabel: '90점 이상',
@@ -99,10 +99,11 @@ function fmtDate(iso: string) {
   return `${parseInt(month, 10)}/${parseInt(day, 10)}`;
 }
 
-function formatValue(value: number, metricKey: string): string {
+function formatValue(value: number | null | undefined, metricKey: string): string {
+  if (value == null) return '-';
   const config = METRIC_DEFS[metricKey];
   if (!config) return String(value);
-  return `${value}${config.unit}`;
+  return String(value) + config.unit;
 }
 
 function buildChartData(trends: Trends, metricKey: string) {
@@ -111,22 +112,23 @@ function buildChartData(trends: Trends, metricKey: string) {
   const cvrFn = CVR_CALC[metricKey];
 
   return trends.labels.map((label, index) => {
-    const point: Record<string, string | number> = { date: fmtDate(label) };
+    const point: Record<string, string | number | null> = { date: fmtDate(label) };
     datasets.forEach((dataset) => {
-      point[dataset.brand] = dataset.values[index];
+      point[dataset.brand] = dataset.values[index] ?? null;
     });
     if (cvrFn && decathlonDataset) {
-      point[CVR_LINE_KEY] = cvrFn(decathlonDataset.values[index]);
+      const decathlonValue = decathlonDataset.values[index];
+      point[CVR_LINE_KEY] = decathlonValue == null ? null : cvrFn(decathlonValue);
     }
     return point;
   });
 }
 
-function getDecathlonSnapshot(trends: Trends, date: string): Record<string, number> | null {
+function getDecathlonSnapshot(trends: Trends, date: string): Record<string, number | null> | null {
   const index = trends.labels.indexOf(date);
   if (index < 0) return null;
 
-  const result: Record<string, number> = {};
+  const result: Record<string, number | null> = {};
   trends.datasets
     .filter((dataset: TrendDataset) => dataset.brand === 'Decathlon')
     .forEach((dataset: TrendDataset) => {
@@ -319,7 +321,7 @@ export function PerformanceTrend() {
 
   const showCvr = activeMetric in CVR_CALC;
   const cvrMax = showCvr
-    ? Math.ceil(Math.max(...chartData.map((point) => (point[CVR_LINE_KEY] as number) ?? 0)) * 1.5 * 10) / 10
+    ? Math.ceil(Math.max(...chartData.map((point) => (point[CVR_LINE_KEY] as number | null) ?? 0)) * 1.5 * 10) / 10
     : 0;
 
   const selectedReleaseInfo = selectedDate

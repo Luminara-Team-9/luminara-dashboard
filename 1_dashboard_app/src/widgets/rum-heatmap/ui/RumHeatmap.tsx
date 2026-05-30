@@ -48,10 +48,40 @@ const TABLE_ORDER = [
   '제주',
 ];
 
-const ISPS = ['SK', 'KT', 'LG'] as const;
+const UNKNOWN_ISP = '통신사 미상';
+
+const REGION_ALIASES: Record<string, string> = {
+  Seoul: '서울',
+  Busan: '부산',
+  Daegu: '대구',
+  Incheon: '인천',
+  Gwangju: '광주',
+  Daejeon: '대전',
+  Ulsan: '울산',
+  'Gyeonggi-do': '경기',
+  'Gangwon-do': '강원',
+  'Chungcheongbuk-do': '충북',
+  'Chungcheongnam-do': '충남',
+  'Jeollabuk-do': '전북',
+  'Jeollanam-do': '전남',
+  'Gyeongsangbuk-do': '경북',
+  'Gyeongsangnam-do': '경남',
+  'Jeju-do': '제주',
+  Sejong: '세종',
+};
 
 function getSessions(item: RegionalData): number {
   return item.sessions ?? 0;
+}
+
+function normalizeRegionName(region: string): string {
+  const trimmed = region.trim();
+  return REGION_ALIASES[trimmed] ?? trimmed;
+}
+
+function isMeasuredIsp(isp: string | null | undefined): isp is string {
+  const value = String(isp ?? '').trim();
+  return value.length > 0 && value !== UNKNOWN_ISP && value !== '-' && value.toLowerCase() !== 'null';
 }
 
 function sumSessions(data: RegionalData[], region: string | null = null, isp: string | null = null): number {
@@ -88,23 +118,40 @@ function latencyStatus(ms: number | null): string {
   return '느림';
 }
 
+function getRegionNames(data: RegionalData[]): string[] {
+  return Array.from(new Set(data.map((item) => item.region).filter(Boolean))).sort((a, b) => {
+    const aIndex = TABLE_ORDER.indexOf(a);
+    const bIndex = TABLE_ORDER.indexOf(b);
+
+    if (aIndex >= 0 && bIndex >= 0) return aIndex - bIndex;
+    if (aIndex >= 0) return -1;
+    if (bIndex >= 0) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function getIspNames(data: RegionalData[]): string[] {
+  return Array.from(new Set(data.map((item) => item.isp).filter(isMeasuredIsp))).sort((a, b) => {
+    const sessionsA = sumSessions(data, null, a);
+    const sessionsB = sumSessions(data, null, b);
+    return sessionsB - sessionsA || a.localeCompare(b);
+  });
+}
+
 function getRegionRows(data: RegionalData[], selectedIsp: string | null) {
-  return TABLE_ORDER
-    .map((region) => {
-      const sessions = sumSessions(data, region, selectedIsp);
-      return {
-        region,
-        sessions,
-        avgLatency: avgLatency(data, region, selectedIsp),
-      };
-    })
+  return getRegionNames(data)
+    .map((region) => ({
+      region,
+      sessions: sumSessions(data, region, selectedIsp),
+      avgLatency: avgLatency(data, region, selectedIsp),
+    }))
     .filter((row) => row.sessions > 0)
     .sort((a, b) => b.sessions - a.sessions);
 }
 
 function getIspRows(data: RegionalData[], selectedRegion: string | null) {
   const baseTotal = sumSessions(data, selectedRegion, null);
-  return ISPS.map((isp) => {
+  return getIspNames(data).map((isp) => {
     const sessions = sumSessions(data, selectedRegion, isp);
     return {
       isp,
@@ -135,24 +182,32 @@ function DetailPanel({
   if (selectedRegion) {
     const rows = getIspRows(data, selectedRegion);
     const regionTotal = sumSessions(data, selectedRegion);
+    const hasIspRows = rows.length > 0;
 
     return (
       <div className={styles.side_panel}>
         <div className={styles.side_title}>{selectedRegion} 통신사 분포</div>
         <div className={styles.side_summary}>
           <strong>{formatCompactCount(regionTotal)} 세션</strong>
-          <span>전체의 {formatShare(regionTotal, totalSessions)}</span>
+          <span>전체의 {formatShare(regionTotal, totalSessions)} · IP 기반 추정 지역</span>
         </div>
         <div className={styles.rank_list}>
-          {rows.map((row) => (
-            <div key={row.isp} className={styles.rank_row}>
-              <div>
-                <strong>{row.isp}</strong>
-                <span>{formatCompactCount(row.sessions)} 세션 · {row.share.toFixed(1)}%</span>
+          {hasIspRows ? (
+            rows.map((row) => (
+              <div key={row.isp} className={styles.rank_row}>
+                <div>
+                  <strong>{row.isp}</strong>
+                  <span>{formatCompactCount(row.sessions)} 세션 · {row.share.toFixed(1)}%</span>
+                </div>
+                <em>{row.avgLatency}ms · {latencyStatus(row.avgLatency)}</em>
               </div>
-              <em>{row.avgLatency}ms · {latencyStatus(row.avgLatency)}</em>
+            ))
+          ) : (
+            <div className={styles.empty_state}>
+              <strong>통신사 정보 미수집</strong>
+              <span>현재 이벤트에는 지역은 저장되지만 ISP 값은 비어 있습니다.</span>
             </div>
-          ))}
+          )}
         </div>
       </div>
     );
@@ -186,6 +241,7 @@ function DetailPanel({
 
   const regionRows = getRegionRows(data, null).slice(0, 7);
   const ispRows = getIspRows(data, null);
+  const hasIspRows = ispRows.length > 0;
 
   return (
     <div className={styles.side_panel}>
@@ -203,15 +259,22 @@ function DetailPanel({
       </div>
 
       <div className={styles.side_title}>통신사 비중</div>
-      <div className={styles.isp_share_grid}>
-        {ispRows.map((row) => (
-          <div key={row.isp} className={styles.isp_share_card}>
-            <span>{row.isp}</span>
-            <strong>{row.share.toFixed(1)}%</strong>
-            <em>{formatCompactCount(row.sessions)} 세션</em>
-          </div>
-        ))}
-      </div>
+      {hasIspRows ? (
+        <div className={styles.isp_share_grid}>
+          {ispRows.map((row) => (
+            <div key={row.isp} className={styles.isp_share_card}>
+              <span>{row.isp}</span>
+              <strong>{row.share.toFixed(1)}%</strong>
+              <em>{formatCompactCount(row.sessions)} 세션</em>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className={styles.empty_state}>
+          <strong>ISP 수집 없음</strong>
+          <span>ClickHouse의 ISP 필드가 현재 모두 비어 있어 통신사 비중은 표시하지 않습니다.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,11 +318,18 @@ export function RumHeatmap() {
     setSelectedRegion((prev) => (prev === region ? null : region));
   };
 
-  const regionalData = data?.rum.regionalData ?? [];
+  const regionalData = useMemo(
+    () => (data?.rum.regionalData ?? []).map((item) => ({
+      ...item,
+      region: normalizeRegionName(item.region),
+    })),
+    [data?.rum.regionalData],
+  );
   const totalSessions = sumSessions(regionalData);
   const topRegion = getRegionRows(regionalData, null)[0];
   const topIsp = getIspRows(regionalData, null)[0];
   const highUsageLatency = getHighUsageLatencyCandidate(regionalData);
+  const ispNames = getIspNames(regionalData);
 
   const mapCSS = useMemo(() => {
     const selector = '#rum-map';
@@ -299,7 +369,7 @@ export function RumHeatmap() {
         <div>
           <h2 className={styles.title}>보조 분석: 지역·통신사 이용 분포</h2>
           <span className={styles.subtitle}>
-            세션 기준으로 어느 지역과 통신사 접속이 많은지 확인합니다.
+            세션 기준으로 IP 기반 추정 지역과 수집 가능한 접속망 정보를 확인합니다.
           </span>
         </div>
       </div>
@@ -316,9 +386,9 @@ export function RumHeatmap() {
           <em>{topRegion ? `${formatCompactCount(topRegion.sessions)} 세션` : '데이터 없음'}</em>
         </div>
         <div className={styles.summary_card}>
-          <span>최다 이용 통신사</span>
-          <strong>{topIsp?.isp ?? '-'}</strong>
-          <em>{topIsp ? `${topIsp.share.toFixed(1)}% · 제휴 참고` : '데이터 없음'}</em>
+          <span>접속망/ISP</span>
+          <strong>{topIsp?.isp ?? '수집 안 됨'}</strong>
+          <em>{topIsp ? `${topIsp.share.toFixed(1)}% · 접속망 추정` : '현재 이벤트의 ISP 필드가 비어 있음'}</em>
         </div>
         <div className={styles.summary_card}>
           <span>이용 많고 느린 지역</span>
@@ -337,7 +407,7 @@ export function RumHeatmap() {
               >
                 전체
               </button>
-              {ISPS.map((isp) => (
+              {ispNames.map((isp) => (
                 <button
                   key={isp}
                   className={`${styles.tab} ${selectedIsp === isp ? styles.tab_active : ''}`}
@@ -346,6 +416,7 @@ export function RumHeatmap() {
                   {isp}
                 </button>
               ))}
+              {ispNames.length === 0 && <span className={styles.disabled_tab}>ISP 미수집</span>}
             </div>
             {(selectedRegion || selectedIsp) && (
               <button
@@ -389,12 +460,12 @@ export function RumHeatmap() {
 
       <div className={styles.legend}>
         <span>지역 색상: 세션 수가 많을수록 진한 파란색</span>
-        <span>지연시간(ms)은 지역·통신사 세션 가중 평균 참고 수치</span>
+        <span>국내 지도에 없는 해외/미상 지역은 우측 순위에만 표시</span>
+        <span>지연시간(ms)은 지역 세션 가중 평균 참고 수치</span>
       </div>
 
       <p className={styles.notice}>
-        통신사는 접속 IP의 ASN 정보를 기준으로 추정합니다. 실제 이용자가 가입한 통신사와 항상 일치하지는 않지만,
-        표본이 충분하면 통신사 할인·제휴 이벤트 기획을 위한 참고 지표로 사용할 수 있습니다.
+        지역은 접속 IP 기반 추정값입니다. 현재 수집 이벤트에는 ISP 값이 비어 있어 통신사별 비중은 표시하지 않습니다.
       </p>
     </section>
   );

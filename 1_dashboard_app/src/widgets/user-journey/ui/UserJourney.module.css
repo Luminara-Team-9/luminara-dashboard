@@ -331,6 +331,10 @@
 }
 
 .hidden_notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   padding: 10px;
   border: 1px dashed #334155;
   border-radius: 8px;
@@ -338,6 +342,33 @@
   background: #f8fafc;
   font-size: 12px;
   text-align: center;
+}
+
+.hidden_notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hidden_notice button,
+.modal_header button {
+  flex-shrink: 0;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hidden_notice button {
+  padding: 8px 10px;
+}
+
+.hidden_notice button:hover,
+.modal_header button:hover {
+  background: #1d4ed8;
 }
 
 .empty_state {
@@ -448,6 +479,68 @@
   line-height: 1.45;
 }
 
+.modal_backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.modal_panel {
+  width: min(1120px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #fbfcfe;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.modal_header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #d7dee8;
+}
+
+.modal_header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.modal_header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.modal_header button {
+  padding: 9px 12px;
+}
+
+.modal_list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
 .error {
   text-align: center;
   color: #ef4444;
@@ -474,16 +567,24 @@
 @media (max-width: 560px) {
   .header,
   .path_card_header,
-  .dropout_rank_row {
+  .dropout_rank_row,
+  .hidden_notice,
+  .modal_header {
     align-items: stretch;
     flex-direction: column;
   }
 
   .header_badge,
   .outcome_badge,
-  .rank_rate {
+  .rank_rate,
+  .hidden_notice button,
+  .modal_header button {
     align-self: flex-start;
     text-align: left;
+  }
+
+  .modal_backdrop {
+    padding: 12px;
   }
 
   .summary_grid {
