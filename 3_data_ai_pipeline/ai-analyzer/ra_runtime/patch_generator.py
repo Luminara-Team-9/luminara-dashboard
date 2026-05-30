@@ -228,8 +228,15 @@ def format_metrics_section(fix_plan: Dict[str, Any]) -> str:
 
 def build_source_context_text(source_context: Dict[str, Any]) -> str:
     parts = []
+    candidate_files = source_context.get("candidate_files", [])[:3]
 
-    for i, item in enumerate(source_context.get("candidate_files", [])[:3], 1):
+    # With Phase 1 diagnosis we typically have 1-3 targeted files.
+    # Allocate the token budget evenly so each file gets more chars.
+    # 3 files → 5000 chars each; 2 files → 6000; 1 file → 8000.
+    n = max(len(candidate_files), 1)
+    per_file_limit = min(8000, max(5000, 16000 // n))
+
+    for i, item in enumerate(candidate_files, 1):
         parts.append(
             f"""
 [SOURCE_FILE_{i}]
@@ -238,7 +245,7 @@ score: {item["score"]}
 fix_type: {item.get("fix_type", source_context.get("fix_type", "unknown"))}
 
 ```tsx
-{compact_snippet(item["snippet"])}
+{compact_snippet(item["snippet"], limit=per_file_limit)}
 ```
 """
         )
@@ -872,6 +879,19 @@ NON_AUTO_PATCHABLE_OPPORTUNITIES: Dict[str, str] = {
 }
 
 
+def _classify_patch_failure(patches: List[Dict[str, Any]]) -> str:
+    """Determine why patches failed validation."""
+    for patch in patches:
+        orig = (patch.get("original_code") or "").strip()
+        sug = (patch.get("suggested_code") or "").strip()
+        if (
+            (orig.startswith("import '") or orig.startswith('import "'))
+            and sug.lstrip("/ \n").startswith("<")
+        ):
+            return "import_replaced_with_jsx"
+    return "original_code_not_found"
+
+
 def _retry_patch(
     failed_patches: List[Dict[str, Any]],
     full_source_context: Dict[str, Any],
@@ -880,23 +900,15 @@ def _retry_patch(
     source_context: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    One retry when original_code was not found in the file.
-    Shows Qwen exactly what it wrote vs what the file actually contains.
+    Targeted retry: tells Qwen exactly what constraint it violated,
+    shows the actual file, and lets it reason about a valid fix itself.
     """
     content_by_path = {
         item["path"]: item.get("snippet", "")
         for item in full_source_context.get("candidate_files", [])
     }
 
-    failure_lines = []
-    for patch in failed_patches:
-        target = patch.get("target_file", "")
-        original = (patch.get("original_code") or "")[:200]
-        failure_lines.append(
-            f'  File: {target}\n'
-            f'  original_code you wrote: "{original}..."\n'
-            f'  → This exact string was NOT found in the file.'
-        )
+    failure_type = _classify_patch_failure(failed_patches)
 
     file_sections = []
     seen_paths: set = set()
@@ -905,10 +917,11 @@ def _retry_patch(
         if target in seen_paths:
             continue
         seen_paths.add(target)
-        content = content_by_path.get(target) or _read_full_file(repo_path, target) or ""
+        # Use full file content so Qwen sees exactly what is there to change
+        content = _read_full_file(repo_path, target) or content_by_path.get(target) or ""
         if content:
             file_sections.append(
-                f"[ACTUAL CONTENT OF {target}]\n```tsx\n{compact_snippet(content, limit=4000)}\n```"
+                f"[ACTUAL CONTENT OF {target}]\n```tsx\n{compact_snippet(content, limit=6000)}\n```"
             )
 
     if not file_sections:
@@ -918,14 +931,37 @@ def _retry_patch(
             "manual_review_reason": "Retry skipped: file content unavailable.",
         }
 
+    if failure_type == "import_replaced_with_jsx":
+        constraint_explanation = (
+            "Your patch was rejected. You replaced a JavaScript module import statement "
+            "with JSX markup — these are syntactically incompatible constructs. "
+            "A module import must remain a module import; it cannot become an HTML/JSX element.\n\n"
+            "Rejected patches:\n" + "\n".join(
+                f'  original_code: {(p.get("original_code") or "")[:80]}\n'
+                f'  suggested_code: {(p.get("suggested_code") or "")[:80]}'
+                for p in failed_patches
+            ) + "\n\n"
+            "Study the actual file content below. Find a different piece of code that "
+            "can be validly changed to fix the performance issue."
+        )
+    else:
+        constraint_explanation = (
+            "Your patch was rejected because the `original_code` you wrote does not "
+            "exist verbatim in the file.\n\n"
+            "What you tried:\n" + "\n".join(
+                f'  File: {p.get("target_file", "")}\n'
+                f'  original_code: "{(p.get("original_code") or "")[:200]}"\n'
+                f'  → NOT found in the file — likely a whitespace or formatting mismatch.'
+                for p in failed_patches
+            ) + "\n\n"
+            "Look at the actual file content below and copy-paste the exact string "
+            "you want to change, character for character."
+        )
+
     retry_prompt = (
-        "Your previous patch was rejected because the `original_code` strings you "
-        "wrote were not found verbatim in the source files.\n\n"
-        "What you tried:\n" + "\n".join(failure_lines) + "\n\n"
+        constraint_explanation + "\n\n"
         "Actual file content(s):\n\n" + "\n\n".join(file_sections) + "\n\n"
-        "Fix your patch so that `original_code` is an EXACT verbatim copy from the "
-        "file content above. Do not paraphrase — copy-paste the exact characters.\n"
-        "Return the same JSON format. Return ONLY the JSON."
+        "Generate a corrected patch. Return ONLY the JSON."
     )
 
     try:
