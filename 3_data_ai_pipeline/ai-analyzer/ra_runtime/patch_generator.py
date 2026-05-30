@@ -148,10 +148,20 @@ Return ONLY this JSON (no markdown, no extra text):
       "suggested_code": "your improved replacement — must be valid TypeScript/JS",
       "change_type": "code_replace",
       "change_reason": "one sentence: what this changes and why it helps performance"
+    }},
+    {{
+      "target_file": "another file if the fix requires changes in multiple places",
+      "original_code": "exact verbatim snippet",
+      "suggested_code": "improved replacement",
+      "change_type": "code_replace",
+      "change_reason": "why this second change is needed"
     }}
   ],
   "manual_review_reason": null
 }}
+
+You may include multiple patches if the fix requires changes across multiple files.
+Only include a file if you have its exact source code above — do not invent file paths.
 
 If no code change in the provided source files can meaningfully fix this issue:
 
@@ -593,7 +603,7 @@ def validate_patch_against_context(
 
     return {
         "auto_applicable": True,
-        "patches": valid_patches[:1],
+        "patches": valid_patches,
         "manual_review_reason": None,
     }
 
@@ -667,7 +677,7 @@ def validate_patch_against_files(
 
     return {
         "auto_applicable": True,
-        "patches": valid_patches[:1],
+        "patches": valid_patches,
         "manual_review_reason": None,
     }
 
