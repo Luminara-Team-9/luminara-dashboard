@@ -77,7 +77,7 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         raise PatchGenerationError(f"Failed to parse JSON: {e}\n{text}") from e
 
 
-def compact_snippet(snippet: str, limit: int = 2000) -> str:
+def compact_snippet(snippet: str, limit: int = 3500) -> str:
     if len(snippet) <= limit:
         return snippet
     return snippet[:limit] + "\n\n/* ... file truncated ... */"
