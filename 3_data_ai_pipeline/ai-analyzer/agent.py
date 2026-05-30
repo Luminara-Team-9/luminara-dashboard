@@ -92,14 +92,12 @@ def get_lhci_runs_for_group(lhci_cursor, lhci_build_id: str, page_type: str, dev
         (lhci_build_id,),
     )
     rows = lhci_cursor.fetchall()
-    print(f"  [lhci_runs] build={lhci_build_id[:8]} total_rows={len(rows)} page={page_type} device={device_type}", flush=True)
 
     result = []
     for run_id, url, lhr_text in rows:
         pt = url_to_page_type(url)
         lhr = json.loads(lhr_text) if isinstance(lhr_text, str) else lhr_text
         dt = get_device_type_from_lhr(lhr)
-        print(f"  [lhci_row] url={url} pt={pt} dt={dt}", flush=True)
         if pt != page_type:
             continue
         if dt != device_type:
