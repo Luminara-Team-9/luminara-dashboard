@@ -18,9 +18,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 try:
-    from .source_context import collect_source_context
+    from .source_context import collect_source_context, collect_diagnosis_context
 except ImportError:
-    from source_context import collect_source_context
+    from source_context import collect_source_context, collect_diagnosis_context
 
 
 load_dotenv()
@@ -77,6 +77,68 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         raise PatchGenerationError(f"Failed to parse JSON: {e}\n{text}") from e
 
 
+def diagnose_with_qwen(
+    fix_plan: Dict[str, Any],
+    diagnosis_files: List[Dict[str, Any]],
+) -> List[str]:
+    """
+    Phase 1: Ask Qwen which files are causing the performance problem.
+    Returns 1-3 file paths. Falls back to [] on any failure.
+    """
+    if not diagnosis_files:
+        return []
+
+    files_text = "\n\n".join(
+        f"[{i + 1}] {f['path']}\n{f['signature']}"
+        for i, f in enumerate(diagnosis_files)
+    )
+
+    opportunity = fix_plan.get("opportunity") or {}
+
+    prompt = (
+        f"Lighthouse audit failed:\n"
+        f"Opportunity: {opportunity.get('title', '')} ({opportunity.get('opportunity_id', '')})\n"
+        f"Page: {fix_plan.get('page_type')} / {fix_plan.get('device_type')}\n"
+        f"Problem: {fix_plan.get('problem_summary', '')}\n\n"
+        f"Source files in this codebase:\n\n"
+        f"{files_text}\n\n"
+        f"Which 1-3 files need to be changed to fix this problem?\n"
+        f'Return ONLY a JSON array of paths. Example: ["path/a.tsx", "path/b.tsx"]'
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=QWEN_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Identify which source files cause a web performance issue. "
+                        "Return only a JSON array of file paths."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+            max_tokens=200,
+        )
+        raw = response.choices[0].message.content.strip()
+
+        if raw.startswith("```"):
+            raw = raw.strip("`").strip()
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+
+        paths = json.loads(raw)
+        if isinstance(paths, list):
+            return [str(p) for p in paths[:3] if isinstance(p, str)]
+
+    except Exception as e:
+        logger.warning("[diagnose] Phase 1 failed: %s", e)
+
+    return []
+
+
 def compact_snippet(snippet: str, limit: int = 3500) -> str:
     if len(snippet) <= limit:
         return snippet
@@ -88,6 +150,67 @@ def _read_full_file(repo_path: str, relative_path: str) -> Optional[str]:
         return (Path(repo_path) / relative_path).read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return None
+
+
+def format_metrics_section(fix_plan: Dict[str, Any]) -> str:
+    """
+    Build a concise, human-readable performance metrics block for the Qwen prompt.
+    Shows actual values vs thresholds so Qwen understands severity, not just symptom.
+    """
+    metrics = fix_plan.get("metrics") or {}
+    if not metrics:
+        return ""
+
+    THRESHOLDS = {
+        "performance_score": ("≥90",  lambda v: f"{v:.0f}",    lambda v: v < 90),
+        "lcp_ms":            ("<2500ms", lambda v: f"{v:,.0f}ms", lambda v: v > 2500),
+        "tbt_ms":            ("<200ms",  lambda v: f"{v:,.0f}ms", lambda v: v > 200),
+        "cls_score":         ("<0.1",    lambda v: f"{v:.3f}",   lambda v: v > 0.1),
+        "fcp_ms":            ("<1800ms", lambda v: f"{v:,.0f}ms", lambda v: v > 1800),
+        "ttfb_ms":           ("<800ms",  lambda v: f"{v:,.0f}ms", lambda v: v > 800),
+        "inp_ms":            ("<200ms",  lambda v: f"{v:,.0f}ms", lambda v: v > 200),
+    }
+
+    METRIC_KEYS = {
+        "performance_score": metrics.get("avg_performance"),
+        "lcp_ms":            metrics.get("avg_lcp_ms"),
+        "tbt_ms":            metrics.get("avg_tbt_ms"),
+        "cls_score":         metrics.get("avg_cls_score"),
+        "fcp_ms":            metrics.get("fcp_ms"),
+        "ttfb_ms":           metrics.get("ttfb_ms"),
+        "inp_ms":            metrics.get("inp_ms"),
+    }
+
+    lines = []
+    failed_metrics_lower = {m.lower() for m in (metrics.get("failed_metrics") or [])}
+
+    KEY_TO_METRIC_NAME = {
+        "performance_score": "performance_score",
+        "lcp_ms": "lcp",
+        "tbt_ms": "tbt",
+        "cls_score": "cls",
+        "fcp_ms": "fcp",
+        "ttfb_ms": "ttfb",
+        "inp_ms": "inp",
+    }
+
+    for key, value in METRIC_KEYS.items():
+        if value is None:
+            continue
+        threshold_label, fmt, is_failing = THRESHOLDS[key]
+        status = "FAIL" if is_failing(value) else "ok"
+        metric_name = KEY_TO_METRIC_NAME.get(key, key)
+        marker = "  <-- FAILING" if metric_name in failed_metrics_lower else ""
+        lines.append(f"  {key:<20} {fmt(value):<12} [threshold: {threshold_label}]  {status}{marker}")
+
+    if not lines:
+        return ""
+
+    page = fix_plan.get("page_type", "")
+    device = fix_plan.get("device_type", "")
+    run_count = metrics.get("run_count", "?")
+    header = f"Measured performance ({run_count} runs, {device}/{page}):"
+    return header + "\n" + "\n".join(lines)
 
 
 def build_source_context_text(source_context: Dict[str, Any]) -> str:
@@ -125,12 +248,15 @@ def build_patch_prompt(
 ---
 """
 
+    metrics_section = format_metrics_section(fix_plan)
+    metrics_block = f"\nCurrent metrics:\n{metrics_section}\n" if metrics_section else ""
+
     return f"""You are a web performance optimization expert for a Korean e-commerce platform.
 
 You are given a Lighthouse performance problem, relevant fix guides, and the actual
 source code from the repository. Study the fix guides and source code carefully,
 then generate the best possible code patch to fix this specific performance issue.
-{rag_section}
+{metrics_block}{rag_section}
 Fix Plan:
 {json.dumps(fix_plan, indent=2, ensure_ascii=False, default=str)}
 
@@ -722,6 +848,97 @@ NON_AUTO_PATCHABLE_OPPORTUNITIES: Dict[str, str] = {
 }
 
 
+def _retry_patch(
+    failed_patches: List[Dict[str, Any]],
+    full_source_context: Dict[str, Any],
+    fix_plan: Dict[str, Any],
+    repo_path: str,
+    source_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    One retry when original_code was not found in the file.
+    Shows Qwen exactly what it wrote vs what the file actually contains.
+    """
+    content_by_path = {
+        item["path"]: item.get("snippet", "")
+        for item in full_source_context.get("candidate_files", [])
+    }
+
+    failure_lines = []
+    for patch in failed_patches:
+        target = patch.get("target_file", "")
+        original = (patch.get("original_code") or "")[:200]
+        failure_lines.append(
+            f'  File: {target}\n'
+            f'  original_code you wrote: "{original}..."\n'
+            f'  → This exact string was NOT found in the file.'
+        )
+
+    file_sections = []
+    seen_paths: set = set()
+    for patch in failed_patches:
+        target = patch.get("target_file", "")
+        if target in seen_paths:
+            continue
+        seen_paths.add(target)
+        content = content_by_path.get(target) or _read_full_file(repo_path, target) or ""
+        if content:
+            file_sections.append(
+                f"[ACTUAL CONTENT OF {target}]\n```tsx\n{compact_snippet(content, limit=4000)}\n```"
+            )
+
+    if not file_sections:
+        return {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": "Retry skipped: file content unavailable.",
+        }
+
+    retry_prompt = (
+        "Your previous patch was rejected because the `original_code` strings you "
+        "wrote were not found verbatim in the source files.\n\n"
+        "What you tried:\n" + "\n".join(failure_lines) + "\n\n"
+        "Actual file content(s):\n\n" + "\n\n".join(file_sections) + "\n\n"
+        "Fix your patch so that `original_code` is an EXACT verbatim copy from the "
+        "file content above. Do not paraphrase — copy-paste the exact characters.\n"
+        "Return the same JSON format. Return ONLY the JSON."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=QWEN_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You generate safe code patches only from provided source snippets. "
+                        "Return one compact JSON object only. No markdown. "
+                        "Include at most 3 patches. Keep each change_reason under 15 words."
+                    ),
+                },
+                {"role": "user", "content": retry_prompt},
+            ],
+            temperature=0.0,
+            max_tokens=2500,
+        )
+        raw_retry = response.choices[0].message.content
+        retry_result = extract_json(raw_retry)
+        logger.info("[patch_generator] Retry Qwen output parsed, auto_applicable=%s", retry_result.get("auto_applicable"))
+        return validate_patch_against_files(
+            patch_result=retry_result,
+            repo_path=repo_path,
+            source_context=source_context,
+            fix_plan=fix_plan,
+        )
+    except Exception as e:
+        logger.warning("[patch_generator] Retry failed: %s", e)
+        return {
+            "auto_applicable": False,
+            "patches": [],
+            "manual_review_reason": f"Retry failed: {e}",
+        }
+
+
 def generate_patch_from_source(
     fix_plan: Dict[str, Any],
     source_context: Dict[str, Any],
@@ -777,16 +994,54 @@ def generate_patch_from_source(
             "manual_review_reason": "No source context candidates were found.",
         }
 
-    # Replace snippet excerpts with full file content so Qwen sees the
-    # complete file — imports, JSX usage, and everything in between.
-    full_candidates = []
-    for candidate in source_context.get("candidate_files", []):
-        full_content = _read_full_file(repo_path, candidate["path"])
-        full_candidates.append({
-            **candidate,
-            "snippet": full_content if full_content else candidate.get("snippet", ""),
-        })
-    full_source_context = {**source_context, "candidate_files": full_candidates}
+    # ── Phase 1: Diagnose which files are causing the problem ────────────────
+    # Qwen sees all related files (path + 8-line signature) and picks 1-3.
+    target_dir = source_context.get("target_dir", "")
+    diagnosis_files = collect_diagnosis_context(
+        repo_path=repo_path,
+        target_dir=target_dir,
+        fix_plan=fix_plan,
+    )
+    diagnosed_paths = diagnose_with_qwen(fix_plan, diagnosis_files)
+    logger.info("[patch_generator] Phase 1 diagnosed: %s", diagnosed_paths)
+
+    try:
+        _debug_path = Path("/tmp/qwen_patch_debug.log")
+        with open(_debug_path, "a", encoding="utf-8") as _f:
+            _f.write(f"PHASE1 diagnosed={diagnosed_paths}\n")
+    except Exception:
+        pass
+
+    # ── Phase 2: Load full content of diagnosed files ─────────────────────
+    # If Phase 1 succeeded, use those specific files. Otherwise fall back to
+    # the existing heuristic-scored candidates.
+    if diagnosed_paths:
+        phase2_candidates = []
+        for path in diagnosed_paths:
+            full_content = _read_full_file(repo_path, path)
+            if full_content:
+                phase2_candidates.append({
+                    "path": path,
+                    "score": 100,
+                    "fix_type": source_context.get("fix_type", "unknown"),
+                    "snippet": full_content,
+                })
+        if phase2_candidates:
+            full_source_context = {**source_context, "candidate_files": phase2_candidates}
+            logger.info("[patch_generator] Phase 2 using %d diagnosed files", len(phase2_candidates))
+        else:
+            # Diagnosis returned paths that don't exist in repo — fall back
+            logger.warning("[patch_generator] Diagnosed paths not found in repo, falling back")
+            full_source_context = {**source_context, "candidate_files": [
+                {**c, "snippet": _read_full_file(repo_path, c["path"]) or c.get("snippet", "")}
+                for c in source_context.get("candidate_files", [])
+            ]}
+    else:
+        # Phase 1 failed — fall back to heuristic candidates with full content
+        full_source_context = {**source_context, "candidate_files": [
+            {**c, "snippet": _read_full_file(repo_path, c["path"]) or c.get("snippet", "")}
+            for c in source_context.get("candidate_files", [])
+        ]}
 
     prompt = build_patch_prompt(
         fix_plan=fix_plan,
@@ -802,7 +1057,8 @@ def generate_patch_from_source(
                     "role": "system",
                     "content": (
                         "You generate safe code patches only from provided source snippets. "
-                        "Return one compact JSON object only. No markdown."
+                        "Return one compact JSON object only. No markdown. "
+                        "Include at most 3 patches. Keep each change_reason under 15 words."
                     ),
                 },
                 {
@@ -811,7 +1067,7 @@ def generate_patch_from_source(
                 },
             ],
             temperature=0.1,
-            max_tokens=1500,
+            max_tokens=2500,
         )
 
         raw = response.choices[0].message.content
@@ -829,7 +1085,23 @@ def generate_patch_from_source(
         except Exception:
             pass
 
-        patch_result = extract_json(raw)
+        raw_patch_result = extract_json(raw)
+
+        # Reject patches for files Qwen was not shown — it invented those paths.
+        if raw_patch_result.get("auto_applicable") and raw_patch_result.get("patches"):
+            shown_paths = {item["path"] for item in full_source_context.get("candidate_files", [])}
+            valid = [p for p in raw_patch_result["patches"] if p.get("target_file") in shown_paths]
+            rejected = [p.get("target_file") for p in raw_patch_result["patches"] if p.get("target_file") not in shown_paths]
+            if rejected:
+                logger.info("[patch_generator] Rejected %d unseen-file patches: %s", len(rejected), rejected)
+            if valid:
+                raw_patch_result = {**raw_patch_result, "patches": valid}
+            else:
+                raw_patch_result = {
+                    "auto_applicable": False,
+                    "patches": [],
+                    "manual_review_reason": "All patches targeted files not shown to Qwen — likely hallucinated paths.",
+                }
 
     except Exception as e:
         try:
@@ -847,11 +1119,32 @@ def generate_patch_from_source(
     # Skip rule-based context validation — let Qwen reason freely.
     # Only run the factual file check: does the file exist and is original_code in it?
     patch_result = validate_patch_against_files(
-        patch_result=patch_result,
+        patch_result=raw_patch_result,
         repo_path=repo_path,
         source_context=source_context,
         fix_plan=fix_plan,
     )
+
+    # Retry once if Qwen intended a patch but original_code wasn't found in the file.
+    # Send Qwen the actual file content so it can copy-paste the exact string.
+    if (
+        raw_patch_result.get("auto_applicable")
+        and raw_patch_result.get("patches")
+        and not patch_result.get("auto_applicable")
+    ):
+        logger.info("[patch_generator] Validation failed — retrying with actual file content")
+        retry_result = _retry_patch(
+            failed_patches=raw_patch_result["patches"],
+            full_source_context=full_source_context,
+            fix_plan=fix_plan,
+            repo_path=repo_path,
+            source_context=source_context,
+        )
+        if retry_result.get("auto_applicable"):
+            logger.info("[patch_generator] Retry succeeded")
+            patch_result = retry_result
+        else:
+            logger.info("[patch_generator] Retry also failed: %s", retry_result.get("manual_review_reason"))
 
     logger.info("[patch_generator] final result: auto_applicable=%s reason=%s",
                 patch_result.get("auto_applicable"), patch_result.get("manual_review_reason"))

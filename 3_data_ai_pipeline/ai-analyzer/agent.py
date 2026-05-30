@@ -1733,7 +1733,7 @@ def save_fix_plan(state: AgentState) -> AgentState:
     attempt_history = [
         {
             "step": "lhci_fetch",
-            "runs_found": len(state.get("lhci_runs_cache", [])),
+            "runs_found": state.get("run_frequency", 0),
             "page_type": state.get("page_type"),
             "device_type": state.get("device_type"),
             "lhci_build_id": lhci_build_id[:8] if lhci_build_id else None,

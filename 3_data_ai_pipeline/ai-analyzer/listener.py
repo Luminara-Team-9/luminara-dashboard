@@ -8,7 +8,7 @@ from fastapi import FastAPI, Header
 from pydantic import BaseModel, Field, model_validator
 
 from agent import build_agent
-from lhci_etl import run_etl, sync_etl
+from lhci_etl import run_etl, sync_etl, link_fix_plan_scores
 
 try:
     from ra_runtime.db_client import update_fix_plan_status, get_fix_plan_by_id, get_fix_plans_list, get_fix_plan_changes
@@ -755,6 +755,26 @@ def trigger_etl(
             "lhci_build_id": payload.lhci_build_id,
             "error": str(e),
         }
+
+
+@app.post("/api/etl/link-scores")
+def trigger_link_scores(
+    x_luminara_secret: Optional[str] = Header(default=None),
+):
+    """
+    Link LHCI scores from fix branches back to fix_plans.new_local_score.
+    Automatically called by sync_etl every 3h. Use this endpoint to trigger on demand.
+    """
+    if AGENT_SECRET and x_luminara_secret != AGENT_SECRET:
+        return {"status": "unauthorized", "message": "Invalid or missing X-Luminara-Secret header."}
+
+    try:
+        result = link_fix_plan_scores()
+        print(f"[etl/link-scores] linked={result['linked']}", flush=True)
+        return {"status": "success", **result}
+    except Exception as e:
+        print(f"[etl/link-scores] ❌ error={e}", flush=True)
+        return {"status": "error", "error": str(e)}
 
 
 @app.post("/api/etl/sync")

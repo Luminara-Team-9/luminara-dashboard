@@ -27,7 +27,9 @@ Usage:
 
 import argparse
 import os
+import shutil
 import signal
+import subprocess
 import time
 from pathlib import Path
 from typing import Optional
@@ -157,6 +159,40 @@ def process_fix_plan(fix_plan: dict, dry_run: bool = False) -> bool:
     if apply_result.get("git_diff"):
         print(f"\n  [3] Git diff (first 800 chars):")
         print(apply_result["git_diff"][:800])
+
+    # Step 2.5: TypeScript build check (only when patches applied and not dry-run)
+    if applied and not dry_run:
+        ts_root = Path(repo_path) / "2_digital_twins" / "active-staging"
+        tsc_bin = ts_root / "node_modules" / ".bin" / "tsc"
+        tsconfig = ts_root / "tsconfig.json"
+
+        if tsc_bin.exists() and tsconfig.exists():
+            print(f"\n  [2.5] Running TypeScript check...")
+            tsc_result = subprocess.run(
+                [str(tsc_bin), "--noEmit"],
+                cwd=str(ts_root),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if tsc_result.returncode != 0:
+                print(f"  ❌ TypeScript check failed — reverting patches")
+                print((tsc_result.stdout + tsc_result.stderr)[-800:])
+                for p in applied_patches:
+                    backup = p.get("backup_path")
+                    target = p.get("target_file")
+                    if backup and Path(backup).exists() and target:
+                        shutil.copy2(backup, Path(repo_path) / target)
+                        print(f"      reverted {target}")
+                update_fix_plan_status(
+                    fix_plan_id,
+                    "build_failed",
+                    error_message=f"tsc --noEmit failed:\n{(tsc_result.stdout + tsc_result.stderr)[-500:]}",
+                )
+                return False
+            print(f"  ✅ TypeScript check passed")
+        else:
+            print(f"  [2.5] TypeScript check skipped (node_modules not installed)")
 
     # Step 3: update DB status
     if not dry_run:
