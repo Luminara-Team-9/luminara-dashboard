@@ -62,8 +62,21 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         if text.lower().startswith("json"):
             text = text[4:].strip()
 
+    def _try_parse(s: str) -> Dict[str, Any]:
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass
+        # Qwen sometimes emits \' which is invalid JSON — replace with '
+        cleaned = s.replace("\\'", "'")
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+        raise json.JSONDecodeError("", s, 0)
+
     try:
-        return json.loads(text)
+        return _try_parse(text)
     except json.JSONDecodeError:
         pass
 
@@ -72,7 +85,7 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         raise PatchGenerationError(f"No JSON object found in response:\n{text}")
 
     try:
-        return json.loads(match.group(0))
+        return _try_parse(match.group(0))
     except json.JSONDecodeError as e:
         raise PatchGenerationError(f"Failed to parse JSON: {e}\n{text}") from e
 
