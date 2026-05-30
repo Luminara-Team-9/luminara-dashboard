@@ -77,10 +77,10 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
         raise PatchGenerationError(f"Failed to parse JSON: {e}\n{text}") from e
 
 
-def compact_snippet(snippet: str, limit: int = 8000) -> str:
+def compact_snippet(snippet: str, limit: int = 2000) -> str:
     if len(snippet) <= limit:
         return snippet
-    return snippet[:limit] + "\n\n/* ... file truncated at 8000 chars ... */"
+    return snippet[:limit] + "\n\n/* ... file truncated ... */"
 
 
 def _read_full_file(repo_path: str, relative_path: str) -> Optional[str]:
@@ -811,7 +811,7 @@ def generate_patch_from_source(
                 },
             ],
             temperature=0.1,
-            max_tokens=2048,
+            max_tokens=1500,
         )
 
         raw = response.choices[0].message.content
