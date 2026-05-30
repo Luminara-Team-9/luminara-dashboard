@@ -1612,18 +1612,22 @@ def generate_source_patch(state: AgentState) -> AgentState:
         )
 
         # Duplicate patch prevention inside the same ranked queue.
+        # Check ALL patches (multi-file), not just the first.
         generated_signatures = list(state.get("generated_patch_signatures", []) or [])
 
         if patch_result.get("auto_applicable") and patch_result.get("patches"):
-            patch = patch_result["patches"][0]
+            all_patches = patch_result["patches"]
 
-            signature = "::".join([
-                str(patch.get("target_file", "")),
-                str(patch.get("original_code", "")),
-                str(patch.get("suggested_code", "")),
-            ])
+            new_signatures = [
+                "::".join([
+                    str(p.get("target_file", "")),
+                    str(p.get("original_code", "")),
+                    str(p.get("suggested_code", "")),
+                ])
+                for p in all_patches
+            ]
 
-            if signature in generated_signatures:
+            if any(sig in generated_signatures for sig in new_signatures):
                 reason = (
                     "Duplicate patch already generated for another queued Fix Plan "
                     "in the same audit group."
@@ -1641,10 +1645,10 @@ def generate_source_patch(state: AgentState) -> AgentState:
                 fix_rec["manual_review_reason"] = reason
 
             else:
-                generated_signatures.append(signature)
+                generated_signatures.extend(new_signatures)
 
                 fix_rec["auto_applicable"] = True
-                fix_rec["patches"] = patch_result.get("patches", [])
+                fix_rec["patches"] = all_patches
                 fix_rec["manual_review_reason"] = None
 
         else:
