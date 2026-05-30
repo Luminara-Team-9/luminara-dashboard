@@ -776,6 +776,17 @@ def validate_patch_against_files(
         if not is_safe_repo_relative_path(target_file, source_context):
             continue
 
+        # Reject: replacing a module import statement with JSX — invalid syntax.
+        # e.g. import './globals.css' → <link rel='stylesheet' .../>
+        _orig_stripped = (original_code or "").strip()
+        _sug_stripped = (suggested_code or "").strip()
+        if (
+            (_orig_stripped.startswith("import '") or _orig_stripped.startswith('import "'))
+            and _sug_stripped.lstrip("/ \n").startswith("<")
+        ):
+            logger.info("[validate_files] REJECT target=%s: import statement replaced with JSX", target_file)
+            continue
+
         if not target_file or not original_code or not suggested_code:
             continue
 
