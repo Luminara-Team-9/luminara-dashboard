@@ -53,7 +53,7 @@ class SearchPayload(BaseModel):
 
 
 class UpdatePayload(BaseModel):
-    only: str = Field(default="all", pattern="^(all|guides|opportunities|benchmarks)$")
+    only: str = Field(default="all", pattern="^(all|guides|opportunities|benchmarks|proven)$")
     force: bool = False
 
 
