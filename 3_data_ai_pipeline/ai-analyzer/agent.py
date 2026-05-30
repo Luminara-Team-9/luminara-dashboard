@@ -1387,74 +1387,47 @@ def generate_fix(state: AgentState) -> AgentState:
     rag_context = state.get("rag_context", "")
 
     prompt = f"""
-You are a senior web performance optimization engineer for Korean e-commerce.
+You are a senior web performance optimization engineer for a Korean e-commerce site.
+Analyze the following Lighthouse audit opportunity and produce a detailed fix plan.
 
-Generate ONE staged self-healing Fix Plan.
-Important rule:
-- Do NOT suggest fixing every issue at once.
-- Only explain the selected highest-priority opportunity.
-- Do NOT generate code patches in this step.
-- A separate source-aware patch generator will inspect the actual repository source code later.
-- After a patch is approved/applied, the system will re-run Lighthouse and compare before/after scores.
+Page: {state.get("page_type")} | Device: {state.get("device_type")} | URL: {state.get("url")}
 
-Target audit:
-- test_id: {state.get("test_id")}
-- URL: {state.get("url")}
-- Page type: {state.get("page_type")}
-- Device: {state.get("device_type")}
-- playwright_run_id: {state.get("playwright_run_id")}
-- group_key: {state.get("group_key")}
-- supporting_test_ids: {state.get("supporting_test_ids")}
-
-Current failed metrics:
-{json.dumps(metrics.get("failed_metrics", []), indent=2)}
-
-Current median metrics from stable 3-run group:
+Performance metrics (stable 3-run average):
 - Performance score: {metrics.get("avg_performance")}
 - LCP: {metrics.get("avg_lcp_ms")}ms
 - TBT: {metrics.get("avg_tbt_ms")}ms
 - CLS: {metrics.get("avg_cls_score")}
 - INP: {metrics.get("inp_ms")}ms
 - TTFB: {metrics.get("ttfb_ms")}ms
+- Failed metrics: {metrics.get("failed_metrics", [])}
 
-Selected priority opportunity:
-- Lighthouse opportunity id: {opp.get("opportunity_id")}
+Opportunity to fix:
+- ID: {opp.get("opportunity_id")}
 - Title: {opp.get("title")}
 - Description: {opp.get("description")}
 - Estimated savings: {opp.get("avg_savings_ms")}ms
 - Severity: {opp.get("severity")}
-- Category: {opp.get("category")}
 - Affected metric: {opp.get("affected_metric")}
-- Priority: {opp.get("priority_level")}
-
-Risk:
 - Risk score: {state.get("risk_score")}/10
-- Risk details: {json.dumps(state.get("risk_details", {}), ensure_ascii=False)}
 
-RAG context:
+RAG context (proven fixes from similar sites):
 {rag_context}
+
+Think freely about the real impact of this issue and what the best fix is.
+A separate step will inspect the actual source code and generate the patch — focus on the diagnosis and strategy here.
 
 Return ONLY valid JSON:
 {{
-  "action": "specific one-sentence fix action",
-  "reasoning": "why this one fix should be handled first",
+  "action": "specific fix action",
+  "reasoning": "why this fix matters and what it addresses",
   "problem_summary": "short dashboard-friendly problem summary",
-  "impact_if_not_fixed": "impact if ignored",
-  "impact_if_fixed": "expected improvement after this staged fix",
-  "ux_improvement": "user experience benefit",
-  "seo_impact": "SEO/Core Web Vitals benefit",
-  "priority_level": "{opp.get("priority_level")}",
+  "impact_if_not_fixed": "real impact on users and business if ignored",
+  "impact_if_fixed": "expected improvement after the fix",
+  "priority_level": "urgent | high | medium | low",
   "estimated_improvement": {opp.get("avg_savings_ms")},
   "affected_metric": "{opp.get("affected_metric")}",
-  "manual_review_reason": null,
-  "next_step_after_patch": "generate source-aware patch from Agent_Workspace, wait for human approval, apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
+  "manual_review_reason": null
 }}
-
-Rules:
-- Do not output patches.
-- Do not invent file paths.
-- Do not exaggerate severity. If a metric is not over the project threshold, describe it as an optimization opportunity rather than a failure.
-- If this opportunity likely requires server/CDN/cache/infrastructure changes, say it should be manually reviewed unless source-aware patch generation finds a safe config file.
 """
 
     try:
@@ -1462,7 +1435,7 @@ Rules:
             model=QWEN_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=900,
-            temperature=0.1,
+            temperature=0.3,
         )
 
         raw = response.choices[0].message.content.strip()
@@ -1504,13 +1477,6 @@ Rules:
     fix_rec.setdefault("estimated_improvement", opp["avg_savings_ms"])
     fix_rec.setdefault("affected_metric", opp["affected_metric"])
     fix_rec.setdefault("manual_review_reason", None)
-    fix_rec.setdefault(
-        "next_step_after_patch",
-        (
-            "generate source-aware patch from Agent_Workspace, wait for human approval, "
-            "apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
-        ),
-    )
 
     # Source-aware patch generation happens in N5.5 only.
     # This step only creates the dashboard text-level Fix Plan.
