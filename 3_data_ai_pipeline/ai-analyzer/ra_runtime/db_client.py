@@ -259,7 +259,6 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                 SELECT
                     fp.id,
                     fp.thread_id,
-                    fp.test_id,
                     fp.opportunity_id,
                     fp.action,
                     fp.reasoning,
@@ -269,27 +268,26 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                     fp.estimated_improvement,
                     fp.old_score,
                     fp.new_local_score,
-                    fp.new_verified_score,
                     fp.branch_name,
                     fp.pr_url,
                     fp.patch_status,
-                    fp.risk_details,
-                    fp.attempt_count,
                     fp.attempt_history,
                     fp.approved_by,
-
-                    fp.playwright_run_id,
-                    fp.group_key,
                     fp.page_type,
                     fp.device_type,
                     fp.site_type,
-                    fp.supporting_test_ids,
                     fp.queue_rank,
                     fp.total_queue_items,
                     fp.run_frequency,
                     fp.workspace_path,
+                    fp.lhci_build_id,
+                    fp.auto_applicable,
+                    fp.failed_metrics,
+                    fp.failed_metric_counts,
                     fp.build_status,
-                    fp.audit_status
+                    fp.audit_status,
+                    fp.created_at,
+                    fp.updated_at
                 FROM fix_plans fp
                 WHERE fp.id = %s
                 """,
@@ -751,7 +749,7 @@ if __name__ == "__main__":
         print("Approved Fix Plan claimed:")
         print(f"  id: {fix_plan['id']}")
         print(f"  thread_id: {fix_plan['thread_id']}")
-        print(f"  test_id: {fix_plan['test_id']}")
+        print(f"  lhci_build_id: {fix_plan.get('lhci_build_id')}")
         print(f"  status: {fix_plan['patch_status']}")
         print(f"  page_type: {fix_plan['page_type']}")
         print(f"  device_type: {fix_plan['device_type']}")
