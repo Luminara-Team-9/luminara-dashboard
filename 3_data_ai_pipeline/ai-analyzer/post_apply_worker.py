@@ -464,6 +464,27 @@ def create_github_pr(
         import urllib.request, urllib.error
         import json as _json
 
+        headers = {
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept":        "application/vnd.github+json",
+            "Content-Type":  "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        # Check if an open PR already exists for this branch
+        owner = GITHUB_REPO.split("/")[0]
+        list_req = urllib.request.Request(
+            f"https://api.github.com/repos/{GITHUB_REPO}/pulls"
+            f"?head={owner}:{fix_branch}&state=open",
+            headers=headers,
+        )
+        with urllib.request.urlopen(list_req, timeout=30) as resp:
+            existing = _json.loads(resp.read())
+            if existing:
+                pr_url = existing[0].get("html_url", "")
+                print(f"  ✅ Open PR already exists: {pr_url}")
+                return pr_url
+
         payload = _json.dumps({
             "title": title,
             "body":  body,
@@ -474,12 +495,7 @@ def create_github_pr(
         req = urllib.request.Request(
             f"https://api.github.com/repos/{GITHUB_REPO}/pulls",
             data=payload,
-            headers={
-                "Authorization": f"Bearer {GITHUB_TOKEN}",
-                "Accept":        "application/vnd.github+json",
-                "Content-Type":  "application/json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
