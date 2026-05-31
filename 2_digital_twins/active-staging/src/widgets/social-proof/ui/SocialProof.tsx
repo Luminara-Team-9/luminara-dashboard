@@ -18,7 +18,7 @@ export function SocialProof() {
           {posts.map((post) => (
             <div key={post.user} style={{ position: "relative", aspectRatio: "1", overflow: "hidden", borderRadius: "4px" }}>
               <img
-                src={post.src}
+                src={post.src.replace('.jpg', '.webp')} loading='lazy' decoding='async' srcset={`${post.src.replace('.jpg', '.webp')} 1x, ${post.src.replace('.jpg', '.webp')} 2x`}
                 alt={post.user}
                 width={300}
                 height={300}
