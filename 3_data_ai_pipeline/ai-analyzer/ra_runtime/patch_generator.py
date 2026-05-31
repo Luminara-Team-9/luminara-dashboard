@@ -230,11 +230,11 @@ def build_source_context_text(source_context: Dict[str, Any]) -> str:
     parts = []
     candidate_files = source_context.get("candidate_files", [])[:3]
 
-    # With Phase 1 diagnosis we typically have 1-3 targeted files.
-    # Allocate the token budget evenly so each file gets more chars.
-    # 3 files → 5000 chars each; 2 files → 6000; 1 file → 8000.
+    # Keep total source context under ~7500 chars so the full prompt
+    # stays within Qwen's 8192 token limit (input + 1500 output).
+    # 3 files → 2500 chars each; 2 files → 3500; 1 file → 5000.
     n = max(len(candidate_files), 1)
-    per_file_limit = min(8000, max(5000, 16000 // n))
+    per_file_limit = min(5000, max(2500, 7500 // n))
 
     for i, item in enumerate(candidate_files, 1):
         parts.append(
@@ -812,15 +812,32 @@ def validate_patch_against_files(
 
         content = file_path.read_text(encoding="utf-8", errors="ignore")
 
-        if original_code not in content:
+        # Exact match first
+        if original_code in content:
+            valid_patches.append(patch)
+            continue
+
+        # Fuzzy match: strip trailing whitespace per line (Qwen often adds/removes trailing spaces)
+        norm_original_lines = [l.rstrip() for l in original_code.splitlines()]
+        content_lines = content.splitlines()
+        n_search = len(norm_original_lines)
+        actual_original = None
+        for i in range(len(content_lines) - n_search + 1):
+            window = content_lines[i:i + n_search]
+            if [l.rstrip() for l in window] == norm_original_lines:
+                actual_original = "\n".join(window)
+                break
+
+        if actual_original is None:
             logger.info(
-                "[validate_files] REJECT target=%s: original_code not found in file (first 200 chars of original_code: %r)",
+                "[validate_files] REJECT target=%s: original_code not found in file (first 200 chars: %r)",
                 target_file,
                 (original_code or "")[:200],
             )
             continue
 
-        valid_patches.append(patch)
+        # Use the exact text from the file so apply_patch can do a clean replace
+        valid_patches.append({**patch, "original_code": actual_original})
 
     if not valid_patches:
         return {
@@ -921,7 +938,7 @@ def _retry_patch(
         content = _read_full_file(repo_path, target) or content_by_path.get(target) or ""
         if content:
             file_sections.append(
-                f"[ACTUAL CONTENT OF {target}]\n```tsx\n{compact_snippet(content, limit=6000)}\n```"
+                f"[ACTUAL CONTENT OF {target}]\n```tsx\n{compact_snippet(content, limit=2500)}\n```"
             )
 
     if not file_sections:
