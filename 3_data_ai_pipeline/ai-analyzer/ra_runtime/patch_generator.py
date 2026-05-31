@@ -739,6 +739,31 @@ def validate_patch_against_context(
         for wrong, right in _REACT_ATTR_FIXES.items():
             suggested_code = suggested_code.replace(wrong, right)
 
+        # If suggested_code has multiple top-level JSX elements without a wrapper,
+        # wrap them in a React fragment so JSX is valid.
+        def _count_top_level_jsx(code: str) -> int:
+            stripped = code.strip()
+            count = 0
+            depth = 0
+            i = 0
+            while i < len(stripped):
+                if stripped[i] == '<' and i + 1 < len(stripped) and stripped[i+1] not in ('/', '!', ' '):
+                    if depth == 0:
+                        count += 1
+                    depth += 1
+                elif stripped[i:i+2] == '/>':
+                    depth = max(0, depth - 1)
+                    i += 1
+                elif stripped[i:i+2] == '</' :
+                    depth = max(0, depth - 1)
+                i += 1
+            return count
+
+        if _count_top_level_jsx(suggested_code) > 1:
+            indent = len(suggested_code) - len(suggested_code.lstrip())
+            pad = " " * indent
+            suggested_code = f"{pad}<>\n{suggested_code}\n{pad}</>"
+
         valid_patches.append(
             {
                 "target_file": target_file,
