@@ -536,10 +536,35 @@ def process_fix_plan(fix_plan: dict) -> bool:
         print(f"\n  [2] DB updated → patch_status=build_failed")
         return False
 
-    # ── Build passed — wait for human approval before pushing ──
-    update_fix_plan_status(fix_plan_id, "build_passed")
-    print(f"\n  [2] DB updated → patch_status=build_passed")
-    print(f"  ⏳ Waiting for developer approval in dashboard before push.")
+    # ── Step 2: Push to new fix branch ─────────────────────
+    fix_branch = f"fix/ai-patch-{fix_plan_id}"
+    print(f"\n  [2] Pushing to new branch: {fix_branch}")
+    if not branch_name:
+        msg = "No branch_name saved in fix_plans — cannot push"
+        print(f"  ❌ {msg}")
+        update_fix_plan_status(fix_plan_id, "build_failed", error_message=msg)
+        return False
+
+    push_ok, push_msg = push_branch(repo_path, branch_name, fix_plan_id)
+    print(f"  {'✅' if push_ok else '❌'} {push_msg}")
+
+    if not push_ok:
+        update_fix_plan_status(fix_plan_id, "push_failed", error_message=push_msg)
+        print(f"\n  [3] DB updated → patch_status=push_failed")
+        return False
+
+    # ── Step 3: Create GitHub PR ────────────────────────────
+    print(f"\n  [3] Creating GitHub PR: {fix_branch} → {branch_name}")
+    pr_url = create_github_pr(fix_plan_id, fix_branch, branch_name)
+
+    if pr_url:
+        _save_pr_url(fix_plan_id, pr_url)
+        update_fix_plan_status(fix_plan_id, "pushed")
+        print(f"\n  [4] DB updated → patch_status=pushed | pr_url={pr_url}")
+    else:
+        update_fix_plan_status(fix_plan_id, "pushed")
+        print(f"\n  [4] DB updated → patch_status=pushed (PR creation failed — create manually)")
+
     return True
 
 
@@ -620,30 +645,20 @@ def run_worker(
 
     while running:
         try:
-            did_work = False
-
-            # Phase 1: build patch_applied fix plans
             fix_plan = claim_next_patch_applied(
                 worker_id=WORKER_ID,
                 fix_plan_id=fix_plan_id,
             )
+
             if fix_plan:
                 fid = fix_plan["id"]
-                print(f"\n[post_apply_worker] Building fix_plan_id={fid}")
-                process_fix_plan(fix_plan)
-                did_work = True
-
-            # Phase 2: push approved_to_push fix plans
-            push_plan = claim_next_approved_to_push(fix_plan_id=fix_plan_id)
-            if push_plan:
-                fid = push_plan["id"]
-                print(f"\n[post_apply_worker] Pushing fix_plan_id={fid}")
-                process_push(push_plan)
-                did_work = True
-
-            if not did_work:
+                print(f"\n[post_apply_worker] Processing fix_plan_id={fid}")
+                success = process_fix_plan(fix_plan)
+                status_str = "✅ pushed" if success else "❌ failed"
+                print(f"\n[post_apply_worker] {status_str} — fix_plan_id={fid}")
+            else:
                 print(
-                    f"[post_apply_worker] No work found. "
+                    f"[post_apply_worker] No patch_applied fix plans. "
                     f"Sleeping {poll_interval}s..."
                 )
 
