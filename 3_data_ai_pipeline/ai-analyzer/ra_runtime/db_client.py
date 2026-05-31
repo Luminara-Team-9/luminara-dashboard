@@ -38,6 +38,7 @@ VALID_FIX_PLAN_STATUSES = {
     "apply_failed",
     "build_testing",
     "build_failed",
+    "build_passed",
     "pushed",
     "push_failed",
     "local_test_running",

@@ -6,9 +6,13 @@ Runs after apply_worker.py patches the workspace repo.
 Steps:
 1. Poll DB for fix_plan with patch_status = 'patch_applied'
 2. Run pnpm build in the workspace repo to verify the patch compiles
-3. If build passes  → git push patched branch to origin
-                    → update patch_status = 'pushed'
+3. If build passes  → update patch_status = 'build_passed'  (waits for human approval)
 4. If build fails   → update patch_status = 'build_failed'
+
+After the developer approves in the dashboard (POST /api/fix-plans/{id}/approve-push):
+5. Poll DB for patch_status = 'approved_to_push'
+6. git push patched branch to origin
+7. Create GitHub PR → update patch_status = 'pushed'
 
 No Lighthouse audit — that runs in GHA after the branch is pushed.
 We only verify the code compiles before sending it to GitHub.
@@ -104,6 +108,63 @@ def claim_next_patch_applied(worker_id: str, fix_plan_id: Optional[int] = None) 
             conn.commit()
             return fix_plan
 
+    finally:
+        if conn:
+            conn.close()
+
+
+# ─────────────────────────────────────────────
+# DB: claim next approved_to_push fix plan
+# ─────────────────────────────────────────────
+
+def claim_next_approved_to_push(fix_plan_id: Optional[int] = None) -> Optional[dict]:
+    """
+    Atomically claim one fix_plan with patch_status='approved_to_push'.
+    Sets status to 'build_testing' (reuses the in-progress sentinel) to prevent
+    double-processing. Returns the fix_plan row as a dict, or None.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            if fix_plan_id:
+                cur.execute(
+                    """
+                    UPDATE fix_plans
+                    SET patch_status = 'build_testing',
+                        updated_at   = NOW()
+                    WHERE id = %s
+                      AND patch_status = 'approved_to_push'
+                    RETURNING id, branch_name, page_type, device_type, workspace_path
+                    """,
+                    (fix_plan_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE fix_plans
+                    SET patch_status = 'build_testing',
+                        updated_at   = NOW()
+                    WHERE id = (
+                        SELECT id FROM fix_plans
+                        WHERE patch_status = 'approved_to_push'
+                        ORDER BY updated_at ASC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    RETURNING id, branch_name, page_type, device_type, workspace_path
+                    """
+                )
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return None
+            fix_plan = dict(zip(
+                ["id", "branch_name", "page_type", "device_type", "workspace_path"],
+                row,
+            ))
+            conn.commit()
+            return fix_plan
     finally:
         if conn:
             conn.close()
@@ -475,35 +536,60 @@ def process_fix_plan(fix_plan: dict) -> bool:
         print(f"\n  [2] DB updated → patch_status=build_failed")
         return False
 
-    # ── Step 2: Push to new fix branch ─────────────────────
-    fix_branch = f"fix/ai-patch-{fix_plan_id}"
-    print(f"\n  [2] Pushing to new branch: {fix_branch}")
+    # ── Build passed — wait for human approval before pushing ──
+    update_fix_plan_status(fix_plan_id, "build_passed")
+    print(f"\n  [2] DB updated → patch_status=build_passed")
+    print(f"  ⏳ Waiting for developer approval in dashboard before push.")
+    return True
+
+
+# ─────────────────────────────────────────────
+# Push + PR (runs after developer approves)
+# ─────────────────────────────────────────────
+
+def process_push(fix_plan: dict) -> bool:
+    """Push the patched branch and create a GitHub PR after developer approval."""
+    fix_plan_id = fix_plan["id"]
+    branch_name = fix_plan.get("branch_name")
+
+    print(f"\n{'='*60}")
+    print(f"  [push] fix_plan_id : {fix_plan_id}")
+    print(f"  [push] branch      : {branch_name}")
+    print(f"{'='*60}")
+
+    repo_path = resolve_repo_path(fix_plan)
+    if not repo_path:
+        msg = f"Workspace repo not found for fix_plan_id={fix_plan_id}"
+        print(f"  ❌ {msg}")
+        update_fix_plan_status(fix_plan_id, "push_failed", error_message=msg)
+        return False
+
     if not branch_name:
         msg = "No branch_name saved in fix_plans — cannot push"
         print(f"  ❌ {msg}")
-        update_fix_plan_status(fix_plan_id, "build_failed", error_message=msg)
+        update_fix_plan_status(fix_plan_id, "push_failed", error_message=msg)
         return False
 
+    fix_branch = f"fix/ai-patch-{fix_plan_id}"
+    print(f"\n  [1] Pushing to new branch: {fix_branch}")
     push_ok, push_msg = push_branch(repo_path, branch_name, fix_plan_id)
     print(f"  {'✅' if push_ok else '❌'} {push_msg}")
 
     if not push_ok:
         update_fix_plan_status(fix_plan_id, "push_failed", error_message=push_msg)
-        print(f"\n  [3] DB updated → patch_status=push_failed")
+        print(f"\n  [2] DB updated → patch_status=push_failed")
         return False
 
-    # ── Step 3: Create GitHub PR ────────────────────────────
-    print(f"\n  [3] Creating GitHub PR: {fix_branch} → {branch_name}")
+    print(f"\n  [2] Creating GitHub PR: {fix_branch} → {branch_name}")
     pr_url = create_github_pr(fix_plan_id, fix_branch, branch_name)
 
     if pr_url:
         _save_pr_url(fix_plan_id, pr_url)
         update_fix_plan_status(fix_plan_id, "pushed")
-        print(f"\n  [4] DB updated → patch_status=pushed | pr_url={pr_url}")
+        print(f"\n  [3] DB updated → patch_status=pushed | pr_url={pr_url}")
     else:
-        # Branch is pushed but PR creation failed — still mark as pushed
         update_fix_plan_status(fix_plan_id, "pushed")
-        print(f"\n  [4] DB updated → patch_status=pushed (PR creation failed — create manually)")
+        print(f"\n  [3] DB updated → patch_status=pushed (PR creation failed — create manually)")
 
     return True
 
@@ -534,20 +620,30 @@ def run_worker(
 
     while running:
         try:
+            did_work = False
+
+            # Phase 1: build patch_applied fix plans
             fix_plan = claim_next_patch_applied(
                 worker_id=WORKER_ID,
                 fix_plan_id=fix_plan_id,
             )
-
             if fix_plan:
                 fid = fix_plan["id"]
-                print(f"\n[post_apply_worker] Processing fix_plan_id={fid}")
-                success = process_fix_plan(fix_plan)
-                status_str = "✅ pushed" if success else "❌ failed"
-                print(f"\n[post_apply_worker] {status_str} — fix_plan_id={fid}")
-            else:
+                print(f"\n[post_apply_worker] Building fix_plan_id={fid}")
+                process_fix_plan(fix_plan)
+                did_work = True
+
+            # Phase 2: push approved_to_push fix plans
+            push_plan = claim_next_approved_to_push(fix_plan_id=fix_plan_id)
+            if push_plan:
+                fid = push_plan["id"]
+                print(f"\n[post_apply_worker] Pushing fix_plan_id={fid}")
+                process_push(push_plan)
+                did_work = True
+
+            if not did_work:
                 print(
-                    f"[post_apply_worker] No patch_applied fix plans. "
+                    f"[post_apply_worker] No work found. "
                     f"Sleeping {poll_interval}s..."
                 )
 

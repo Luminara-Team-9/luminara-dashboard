@@ -338,6 +338,58 @@ def ai_actions_apply(payload: ApplyRequest):
     }
 
 
+# ─────────────────────────────────────────────
+# Developer push approval endpoint
+# Called after build_passed — developer confirms ready to push to GitHub
+# ─────────────────────────────────────────────
+
+class ApprovePushRequest(BaseModel):
+    approved_by: Optional[str] = "dashboard"
+
+
+@app.post("/api/fix-plans/{fix_plan_id}/approve-push")
+def approve_push(fix_plan_id: int, payload: ApprovePushRequest = ApprovePushRequest()):
+    """
+    Approve a build-passed fix plan for push to GitHub.
+    Sets patch_status = 'approved_to_push'.
+    post_apply_worker polls for this and handles push + PR creation.
+    """
+    fix_plan = get_fix_plan_by_id(fix_plan_id)
+    if not fix_plan:
+        return {
+            "accepted": False,
+            "status": "failed",
+            "message": f"fix_plan_id={fix_plan_id} not found.",
+        }
+
+    current_status = fix_plan.get("patch_status")
+    if current_status != "build_passed":
+        return {
+            "accepted": False,
+            "status": "failed",
+            "message": (
+                f"fix_plan_id={fix_plan_id} cannot be approved for push "
+                f"(current status: {current_status}). Must be build_passed."
+            ),
+        }
+
+    approved_by = payload.approved_by or "dashboard"
+    update_fix_plan_status(fix_plan_id, "approved_to_push", approved_by=approved_by)
+
+    print(
+        f"[approve-push] fix_plan_id={fix_plan_id} approved for push by '{approved_by}' → "
+        f"patch_status=approved_to_push",
+        flush=True,
+    )
+
+    return {
+        "accepted": True,
+        "status": "approved_to_push",
+        "message": f"fix_plan_id={fix_plan_id} approved. post_apply_worker will push and create PR within 30s.",
+        "fix_plan_id": fix_plan_id,
+        "approvedAt": datetime.now().isoformat(),
+    }
+
 
 @app.post("/api/trigger-agent")
 def trigger_agent(
