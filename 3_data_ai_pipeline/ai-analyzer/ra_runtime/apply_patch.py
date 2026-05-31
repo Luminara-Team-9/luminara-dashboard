@@ -121,7 +121,6 @@ def load_patch_result_from_db(fix_plan_id: int) -> Dict[str, Any]:
                 thread_id,
                 patch_status,
                 approved_by,
-                test_id,
                 branch_name
             FROM fix_plans
             WHERE id = %s
@@ -139,7 +138,6 @@ def load_patch_result_from_db(fix_plan_id: int) -> Dict[str, Any]:
             thread_id,
             patch_status,
             approved_by,
-            test_id,
             branch_name,
         ) = row
 
@@ -204,7 +202,6 @@ def load_patch_result_from_db(fix_plan_id: int) -> Dict[str, Any]:
                 "thread_id": thread_id,
                 "patch_status": patch_status,
                 "approved_by": approved_by,
-                "test_id": test_id,
                 "branch_name": branch_name,
             },
         }
