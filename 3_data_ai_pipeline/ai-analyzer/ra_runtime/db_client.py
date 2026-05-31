@@ -284,8 +284,7 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                     fp.auto_applicable,
                     fp.failed_metrics,
                     fp.failed_metric_counts,
-                    fp.build_status,
-                    fp.audit_status,
+                    fp.after_score,
                     fp.created_at,
                     fp.updated_at
                 FROM fix_plans fp
@@ -596,22 +595,12 @@ def mark_all_changes_status(
 
 def save_local_test_result(
     fix_plan_id: int,
-    new_local_score: Optional[float],
+    after_score: Optional[float],
     passed: bool,
     branch_name: Optional[str] = None,
     error_message: Optional[str] = None,
-    build_status: Optional[str] = None,
-    audit_status: Optional[str] = None,
 ) -> None:
-    """
-    Save local verification result after applying patch.
-
-    Allows Dashboard to show:
-    - old score
-    - new local score
-    - improvement
-    - local test status
-    """
+    """Save LHCI score from fix branch back to fix_plans.after_score."""
     conn = None
     patch_status = "local_test_passed" if passed else "local_test_failed"
 
@@ -624,10 +613,8 @@ def save_local_test_result(
                 """
                 UPDATE fix_plans
                 SET
-                    new_local_score = COALESCE(%s, new_local_score),
+                    after_score = COALESCE(%s, after_score),
                     branch_name = COALESCE(%s, branch_name),
-                    build_status = COALESCE(%s, build_status),
-                    audit_status = COALESCE(%s, audit_status),
                     patch_status = %s,
                     rejection_reason = CASE
                         WHEN %s IS NOT NULL THEN %s
@@ -637,10 +624,8 @@ def save_local_test_result(
                 WHERE id = %s
                 """,
                 (
-                    new_local_score,
+                    after_score,
                     branch_name,
-                    build_status,
-                    audit_status,
                     patch_status,
                     error_message,
                     error_message,
@@ -655,10 +640,8 @@ def save_local_test_result(
                     "event": "local_test_result_saved",
                     "patch_status": patch_status,
                     "passed": passed,
-                    "new_local_score": new_local_score,
+                    "after_score": after_score,
                     "branch_name": branch_name,
-                    "build_status": build_status,
-                    "audit_status": audit_status,
                     "error_message": error_message,
                 },
             )
