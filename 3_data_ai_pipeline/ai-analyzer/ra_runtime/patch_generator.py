@@ -979,7 +979,7 @@ def _retry_patch(
                 {"role": "user", "content": retry_prompt},
             ],
             temperature=0.0,
-            max_tokens=2500,
+            max_tokens=1500,
         )
         raw_retry = response.choices[0].message.content
         retry_result = extract_json(raw_retry)
@@ -1127,7 +1127,7 @@ def generate_patch_from_source(
                 },
             ],
             temperature=0.1,
-            max_tokens=2500,
+            max_tokens=1500,
         )
 
         raw = response.choices[0].message.content

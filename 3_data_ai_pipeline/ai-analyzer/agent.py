@@ -1708,10 +1708,11 @@ def save_fix_plan(state: AgentState) -> AgentState:
     patches = fix_rec.get("patches", []) or []
     has_patch = bool(fix_rec.get("auto_applicable") and patches)
 
-    # Auto-applicable patches go straight to approved_to_apply.
-    # Non-patchable plans are saved as requires_human_review for developer visibility.
+    # Plans with patches wait for human review in dashboard (shows before/after diff).
+    # Developer approves → approved_to_apply → apply_worker picks up.
+    # Non-patchable plans go to requires_human_review for text-level review.
     if has_patch:
-        patch_status = "approved_to_apply"
+        patch_status = "pending_review" if queue_rank == 1 else "queued"
     else:
         patch_status = "requires_human_review"
 
