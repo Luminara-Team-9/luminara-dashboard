@@ -57,7 +57,7 @@ export function LateAnnouncementSaboteur() {
     if (!config || config.clsHeight === '0px') return;
 
     // Fires dynamically based on the matrix, guaranteeing Lighthouse catches it
-    const timer = setTimeout(() => setTriggerShift(true), config.clsDelay);
+    setTimeout(() => setTriggerShift(true), config.clsDelay);
     return () => clearTimeout(timer);
   }, [pathname, config]);
 
