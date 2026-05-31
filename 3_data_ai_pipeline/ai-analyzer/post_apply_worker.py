@@ -550,6 +550,17 @@ def process_fix_plan(fix_plan: dict) -> bool:
         error_msg = f"Build failed:\n{build_log[-500:]}"
         update_fix_plan_status(fix_plan_id, "build_failed", error_message=error_msg)
         print(f"\n  [2] DB updated → patch_status=build_failed")
+        # Reset workspace to clean state so subsequent fix plans aren't polluted
+        try:
+            branch = fix_plan.get("branch_name", "")
+            if branch:
+                subprocess.run(
+                    ["git", "reset", "--hard", f"origin/{branch}"],
+                    cwd=str(repo_path), capture_output=True, timeout=60,
+                )
+                print(f"  🧹 Workspace reset to origin/{branch} (prevent pollution)")
+        except Exception as reset_err:
+            print(f"  ⚠️  Workspace reset failed: {reset_err}")
         return False
 
     # ── Step 2: Push to new fix branch ─────────────────────
