@@ -1,17 +1,10 @@
 """
 audit_ingestion.py
 
-Parses raw Lighthouse CI (LHCI) JSON results and inserts them into the
-production DB tables so the agent can find them via playwright_run_id.
-
-Tables written:
-  playwright_runs         — one record per audit batch (3-run group)
-  lighthouse_runs         — one record per individual run
-  lighthouse_raw_reports  — full raw JSON per run
-  lighthouse_opportunities — parsed opportunities per run
+Parses raw Lighthouse CI (LHCI) JSON results (LHR dicts) into structured
+metrics and opportunities for the agent. No DB writes.
 """
 
-import json
 from typing import Any, Dict, List, Optional
 
 
@@ -131,118 +124,3 @@ def parse_opportunities(lhr: dict, test_id: int) -> List[dict]:
             "score_display_mode": audit.get("scoreDisplayMode"),
         })
     return result
-
-
-# ─────────────────────────────────────────────
-# DB insertion
-# ─────────────────────────────────────────────
-
-def store_audit_runs(
-    conn,
-    page_type: str,
-    device_type: str,
-    site_type: str,
-    url: str,
-    runs: List[dict],
-    lhci_run_id: Optional[str] = None,
-    pr_branch: Optional[str] = None,
-) -> dict:
-    """
-    Insert a batch of Lighthouse CI runs into the production DB tables.
-
-    Args:
-        conn:        open psycopg2 connection (caller commits/closes)
-        page_type:   e.g. 'home', 'product', 'category'
-        device_type: 'mobile' or 'desktop'
-        site_type:   e.g. 'decathlon'
-        url:         the page URL that was audited
-        runs:        list of raw Lighthouse result dicts (usually 3)
-        lhci_run_id: LHCI server build/run ID for traceability
-        pr_branch:   PR branch name that triggered the audit
-
-    Returns:
-        { "playwright_run_id": int, "test_ids": [int, ...] }
-    """
-    with conn.cursor() as cur:
-
-        # 1. playwright_runs — one row per audit batch
-        cur.execute(
-            """
-            INSERT INTO playwright_runs
-                (run_type, url, device_type, started_at, finished_at,
-                 total_tests, success_count, failed_count, status)
-            VALUES (%s, %s, %s, NOW(), NOW(), %s, %s, 0, 'completed')
-            RETURNING id
-            """,
-            ("lhci_production", url, device_type, len(runs), len(runs)),
-        )
-        playwright_run_id: int = cur.fetchone()[0]
-
-        test_ids: List[int] = []
-
-        for run_number, lhr in enumerate(runs, start=1):
-            m = parse_metrics(lhr)
-
-            # 2. lighthouse_runs — metrics per run
-            cur.execute(
-                """
-                INSERT INTO lighthouse_runs (
-                    playwright_run_id, url, site_type, page_type, device_type,
-                    run_number, timestamp,
-                    lcp_ms, tbt_ms, cls_score, fcp_ms, si_ms, tti_ms, ttfb_ms, inp_ms,
-                    performance_score, accessibility_score, best_practices_score, seo_score
-                )
-                VALUES (%s,%s,%s,%s,%s, %s,NOW(),
-                        %s,%s,%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s)
-                RETURNING test_id
-                """,
-                (
-                    playwright_run_id, url, site_type, page_type, device_type,
-                    run_number,
-                    m["lcp_ms"], m["tbt_ms"], m["cls_score"],
-                    m["fcp_ms"], m["si_ms"], m["tti_ms"], m["ttfb_ms"], m["inp_ms"],
-                    m["performance_score"], m["accessibility_score"],
-                    m["best_practices_score"], m["seo_score"],
-                ),
-            )
-            test_id: int = cur.fetchone()[0]
-            test_ids.append(test_id)
-
-            # 3. lighthouse_raw_reports — full JSON
-            cur.execute(
-                """
-                INSERT INTO lighthouse_raw_reports (test_id, raw_json, created_at)
-                VALUES (%s, %s, NOW())
-                """,
-                (test_id, json.dumps(lhr)),
-            )
-
-            # 4. lighthouse_opportunities — parsed opportunities
-            for opp in parse_opportunities(lhr, test_id):
-                cur.execute(
-                    """
-                    INSERT INTO lighthouse_opportunities (
-                        test_id, opportunity_id, title, description,
-                        savings_ms, savings_bytes, severity, category,
-                        details, affected_metric, savings_source, score_display_mode
-                    )
-                    VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s,%s)
-                    """,
-                    (
-                        opp["test_id"], opp["opportunity_id"],
-                        opp["title"], opp["description"],
-                        opp["savings_ms"], opp["savings_bytes"],
-                        opp["severity"], opp["category"],
-                        json.dumps(opp["details"]) if opp["details"] else None,
-                        opp["affected_metric"], opp["savings_source"],
-                        opp["score_display_mode"],
-                    ),
-                )
-
-        conn.commit()
-
-    return {
-        "playwright_run_id": playwright_run_id,
-        "test_ids": test_ids,
-    }
