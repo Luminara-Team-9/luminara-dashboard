@@ -722,6 +722,23 @@ def validate_patch_against_context(
             logger.info("[validate_context] REJECT target=%s: original_code == suggested_code (no change)", target_file)
             continue
 
+        # Fix common Qwen mistakes: HTML attribute names → React camelCase
+        _REACT_ATTR_FIXES = {
+            " srcset=": " srcSet=",
+            "\tsrcset=": "\tsrcSet=",
+            "\nsrcset=": "\nsrcSet=",
+            " crossorigin=": " crossOrigin=",
+            " tabindex=": " tabIndex=",
+            " readonly=": " readOnly=",
+            " classname=": " className=",
+            " nomodule=": " noModule=",
+            " autofocus=": " autoFocus=",
+            " autoplay=": " autoPlay=",
+            "fetchpriority=": "fetchPriority=",
+        }
+        for wrong, right in _REACT_ATTR_FIXES.items():
+            suggested_code = suggested_code.replace(wrong, right)
+
         valid_patches.append(
             {
                 "target_file": target_file,
