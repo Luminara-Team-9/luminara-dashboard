@@ -18,10 +18,12 @@ export function SocialProof() {
           {posts.map((post) => (
             <div key={post.user} style={{ position: "relative", aspectRatio: "1", overflow: "hidden", borderRadius: "4px" }}>
               <img
-                src={post.src}
+                src={post.src.replace(/format=auto/, 'format=webp')}
                 alt={post.user}
                 width={300}
                 height={300}
+                loading='lazy'
+                decoding='async'
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
               <div style={{
