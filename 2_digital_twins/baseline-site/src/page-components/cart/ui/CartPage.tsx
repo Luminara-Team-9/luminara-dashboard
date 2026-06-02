@@ -1,5 +1,5 @@
 'use client';
-
+//demo-test
 import { useState, useEffect } from 'react';
 import { track } from 'swetrix';
 
@@ -82,7 +82,6 @@ export function CartPage() {
     setTimeout(() => {
       setIsCheckoutLoading(false);
 
-      // --- NEW: Fire the Swetrix tracking event ---
       try {
         track({
           ev: 'purchase_complete',
