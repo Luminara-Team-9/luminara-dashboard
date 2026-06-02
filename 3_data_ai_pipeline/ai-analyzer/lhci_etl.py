@@ -368,7 +368,7 @@ def link_fix_plan_scores() -> dict:
                 SELECT id, page_type, device_type, site_type,
                        lhci_build_id, action, opportunity_id
                 FROM fix_plans
-                WHERE patch_status IN ('pushed', 'pr_merged')
+                WHERE patch_status IN ('pushed', 'pr_created', 'pr_merged')
                 AND after_score IS NULL
                 """
             )
