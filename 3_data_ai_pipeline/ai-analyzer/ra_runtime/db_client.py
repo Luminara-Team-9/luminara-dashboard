@@ -49,6 +49,9 @@ VALID_FIX_PLAN_STATUSES = {
     "failed",
     "rejected",
     "superseded",
+    "pr_merged",
+    "completed",
+    "regression",
 }
 
 
