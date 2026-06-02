@@ -65,4 +65,4 @@ module.exports = {
       ignoreDuplicateBuildFailure: true,
     },
   },
-}; // .lighthouseci/lighthouserc.js
+}; 
