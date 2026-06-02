@@ -1,0 +1,25 @@
+name: '[Scheduled] Daily Benchmark - Live & Competitor'
+
+on:
+  schedule:
+    - cron: '0 16 * * *'  # 1am KST = 4pm UTC
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Run Benchmark
+        env:
+          LHCI_USER: ${{ secrets.LHCI_USER }}
+          LHCI_PASS: ${{ secrets.LHCI_PASS }}
+          LHCI_BUILD_TOKEN: ${{ secrets.LHCI_BUILD_TOKEN }}
+        run: |
+          singularity exec \
+            --bind ${{ github.workspace }}/4_automation_tests:/workspace \
+            /abr/coss41/Luminara_App/images-prod/infrastructure_audit_ephemeral.sif \
+            npx lhci autorun \
+            --config=/workspace/lighthouse-runner/lighthouserc.benchmark.js
