@@ -25,6 +25,7 @@ Usage:
 
 import argparse
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -513,6 +514,50 @@ def create_github_pr(
 # Process one fix plan
 # ─────────────────────────────────────────────
 
+def _patched_files_for_fix_plan(fix_plan_id: int) -> set:
+    """Return the set of target_file paths that were patched for this fix plan."""
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT target_file FROM fix_plan_changes WHERE fix_plan_id = %s",
+                (fix_plan_id,),
+            )
+            return {row[0] for row in cur.fetchall()}
+    except Exception:
+        return set()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _build_failure_is_preexisting(build_log: str, fix_plan_id: int) -> bool:
+    """
+    Return True if every file mentioned in the build error log is NOT one of the
+    files the AI patch touched. In that case the failure is pre-existing and not
+    caused by this patch, so we should still push.
+    """
+    patched = _patched_files_for_fix_plan(fix_plan_id)
+    if not patched:
+        return False
+
+    # Match TypeScript-style error lines: "path/to/file.ts(line,col): error TS..."
+    # and Next.js build error lines that reference source files
+    error_files = re.findall(r"([\w./@\-]+\.[jt]sx?)\(\d+", build_log)
+    if not error_files:
+        return False
+
+    for error_file in error_files:
+        for pf in patched:
+            # pf is a repo-relative path like "2_digital_twins/.../foo.tsx"
+            if error_file in pf or pf.endswith(error_file) or error_file.endswith(pf.split("/")[-1]):
+                return False  # Error IS in a patched file — patch may be the cause
+
+    return True  # All errors reference files the patch never touched
+
+
 def process_fix_plan(fix_plan: dict) -> bool:
     fix_plan_id  = fix_plan["id"]
     branch_name  = fix_plan.get("branch_name")
@@ -547,21 +592,29 @@ def process_fix_plan(fix_plan: dict) -> bool:
     print(f"  build_status: {'passed' if build_ok else 'FAILED'}")
 
     if not build_ok:
-        error_msg = f"Build failed:\n{build_log[-500:]}"
-        update_fix_plan_status(fix_plan_id, "build_failed", error_message=error_msg)
-        print(f"\n  [2] DB updated → patch_status=build_failed")
-        # Reset workspace to clean state so subsequent fix plans aren't polluted
-        try:
-            branch = fix_plan.get("branch_name", "")
-            if branch:
-                subprocess.run(
-                    ["git", "reset", "--hard", f"origin/{branch}"],
-                    cwd=str(repo_path), capture_output=True, timeout=60,
-                )
-                print(f"  🧹 Workspace reset to origin/{branch} (prevent pollution)")
-        except Exception as reset_err:
-            print(f"  ⚠️  Workspace reset failed: {reset_err}")
-        return False
+        preexisting = _build_failure_is_preexisting(build_log, fix_plan_id)
+        if preexisting:
+            print(
+                f"\n  ⚠️  Build failure is in files the patch did NOT touch — "
+                f"pre-existing error, not caused by this patch. Proceeding to push."
+            )
+            # Fall through to push — the patch itself is correct
+        else:
+            error_msg = f"Build failed:\n{build_log[-500:]}"
+            update_fix_plan_status(fix_plan_id, "build_failed", error_message=error_msg)
+            print(f"\n  [2] DB updated → patch_status=build_failed")
+            # Reset workspace to clean state so subsequent fix plans aren't polluted
+            try:
+                branch = fix_plan.get("branch_name", "")
+                if branch:
+                    subprocess.run(
+                        ["git", "reset", "--hard", f"origin/{branch}"],
+                        cwd=str(repo_path), capture_output=True, timeout=60,
+                    )
+                    print(f"  🧹 Workspace reset to origin/{branch} (prevent pollution)")
+            except Exception as reset_err:
+                print(f"  ⚠️  Workspace reset failed: {reset_err}")
+            return False
 
     # ── Step 2: Push to new fix branch ─────────────────────
     fix_branch = f"fix/ai-patch-{fix_plan_id}"

@@ -796,6 +796,54 @@ def validate_patch_against_context(
     }
 
 
+def _import_removal_leaves_dangling_usages(patch: Dict[str, Any], full_content: str) -> bool:
+    """
+    Returns True if the patch removes/comments-out an import but the imported
+    names are still referenced elsewhere in the full file.
+    Only the patch snippet is checked by normalize_auto_patch_fix — that misses
+    usages outside the snippet. This check uses the real file content.
+    """
+    original = (patch.get("original_code") or "").strip()
+    suggested = (patch.get("suggested_code") or "").strip()
+
+    if "import " not in original:
+        return False
+
+    removed_names = []
+    for line in original.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("import "):
+            continue
+        if stripped in suggested:
+            continue
+        named_match = re.search(r"import\s+\{([^}]+)\}", stripped)
+        if named_match:
+            for part in named_match.group(1).split(","):
+                name = part.strip().split(" as ")[-1].strip()
+                if name:
+                    removed_names.append(name)
+        else:
+            default_match = re.match(r"import\s+(\w+)\s+from", stripped)
+            if default_match:
+                name = default_match.group(1)
+                if name and name not in suggested:
+                    removed_names.append(name)
+
+    if not removed_names:
+        return False
+
+    # Remove the original import lines from content so we don't count the import as a self-usage
+    content_without_original = full_content
+    for line in original.splitlines():
+        content_without_original = content_without_original.replace(line + "\n", "").replace(line, "")
+
+    for name in removed_names:
+        if f"<{name}" in content_without_original or f"{name}(" in content_without_original:
+            return True
+
+    return False
+
+
 def validate_patch_against_files(
     patch_result: Dict[str, Any],
     repo_path: str,
@@ -853,6 +901,13 @@ def validate_patch_against_files(
             continue
 
         content = file_path.read_text(encoding="utf-8", errors="ignore")
+
+        if _import_removal_leaves_dangling_usages(patch, content):
+            logger.info(
+                "[validate_files] REJECT target=%s: import removed but names still used in full file",
+                target_file,
+            )
+            continue
 
         # Exact match first
         if original_code in content:
@@ -1038,7 +1093,7 @@ def _retry_patch(
                 {"role": "user", "content": retry_prompt},
             ],
             temperature=0.0,
-            max_tokens=1500,
+            max_tokens=2000,
         )
         raw_retry = response.choices[0].message.content
         retry_result = extract_json(raw_retry)
@@ -1186,7 +1241,7 @@ def generate_patch_from_source(
                 },
             ],
             temperature=0.1,
-            max_tokens=1500,
+            max_tokens=2500,
         )
 
         raw = response.choices[0].message.content
