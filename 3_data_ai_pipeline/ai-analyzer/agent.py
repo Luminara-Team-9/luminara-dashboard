@@ -1695,6 +1695,42 @@ def generate_source_patch(state: AgentState) -> AgentState:
 # N6 — Save Fix Plan
 # ─────────────────────────────────────────────
 
+def _has_conflicting_patch(cursor, lhci_build_id: str, patches: list) -> bool:
+    """
+    Returns True if any patch in `patches` targets the same (target_file, original_code)
+    as an already-saved fix plan for this build. Prevents two fix plans from queuing
+    patches that replace the same code block — the second would always apply_failed.
+    """
+    if not patches or not lhci_build_id:
+        return False
+
+    for patch in patches:
+        original_code = patch.get("original_code")
+        target_file = patch.get("target_file")
+        if not original_code or not target_file:
+            continue
+
+        cursor.execute(
+            """
+            SELECT fpc.id
+            FROM fix_plan_changes fpc
+            JOIN fix_plans fp ON fpc.fix_plan_id = fp.id
+            WHERE fp.lhci_build_id = %s
+              AND fpc.target_file = %s
+              AND fpc.original_code = %s
+              AND fp.patch_status NOT IN (
+                  'superseded', 'rejected', 'apply_failed', 'requires_human_review'
+              )
+            LIMIT 1
+            """,
+            (lhci_build_id, target_file, original_code),
+        )
+        if cursor.fetchone():
+            return True
+
+    return False
+
+
 def save_fix_plan(state: AgentState) -> AgentState:
     print("\n[N6] Saving Fix Plan...")
 
@@ -1823,6 +1859,28 @@ def save_fix_plan(state: AgentState) -> AgentState:
     fix_plan_id = None
 
     try:
+        # Save-time dedup: if an earlier fix plan in this build already patches
+        # the same original_code in the same file, mark this one as superseded
+        # so it never reaches the dashboard or apply_worker.
+        lhci_build_id = state.get("lhci_build_id") or ""
+        if patches and _has_conflicting_patch(cursor, lhci_build_id, patches):
+            print(
+                f"  ⚠️  Conflicting patch already queued for this build "
+                f"(same target_file + original_code). Marking as superseded."
+            )
+            patches = []
+            patch_status = "superseded"
+            fix_plan_data["patch_status"] = "superseded"
+            fix_plan_data["auto_applicable"] = False
+            fix_plan_data["patch_code"] = {
+                "auto_applicable": False,
+                "patches": [],
+                "manual_review_reason": (
+                    "Superseded: an earlier fix plan in this build already "
+                    "patches the same code block in the same file."
+                ),
+            }
+
         fix_plan_id = safe_insert(
             cursor=cursor,
             table_name="fix_plans",
