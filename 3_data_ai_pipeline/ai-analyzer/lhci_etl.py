@@ -368,8 +368,8 @@ def link_fix_plan_scores() -> dict:
                 SELECT id, page_type, device_type, site_type,
                        lhci_build_id, action, opportunity_id
                 FROM fix_plans
-                WHERE patch_status = 'pushed'
-                AND new_local_score IS NULL
+                WHERE patch_status IN ('pushed', 'pr_created', 'pr_merged')
+                AND after_score IS NULL
                 """
             )
             pending = cur.fetchall()
@@ -420,10 +420,10 @@ def link_fix_plan_scores() -> dict:
                 cur.execute(
                     """
                     UPDATE fix_plans
-                    SET new_local_score = %s,
-                        patch_status    = %s,
-                        score_delta     = %s,
-                        updated_at      = NOW()
+                    SET after_score  = %s,
+                        patch_status = %s,
+                        score_delta  = %s,
+                        updated_at   = NOW()
                     WHERE id = %s
                     """,
                     (after_score, final_status, improvement, fix_plan_id),

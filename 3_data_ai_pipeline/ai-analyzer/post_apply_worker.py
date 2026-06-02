@@ -56,6 +56,34 @@ NODE_MODULES_SOURCE = os.getenv("NODE_MODULES_SOURCE", "")
 
 
 # ─────────────────────────────────────────────
+# DB: find pushed plans with no PR url (for retry)
+# ─────────────────────────────────────────────
+
+def get_pushed_without_pr() -> list:
+    """Return fix plans that are pushed but have no pr_url — PR creation failed."""
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, branch_name
+                FROM fix_plans
+                WHERE patch_status = 'pushed'
+                  AND (pr_url IS NULL OR pr_url = '')
+                ORDER BY updated_at ASC
+                LIMIT 5
+                """
+            )
+            rows = cur.fetchall()
+        conn.commit()
+        conn.close()
+        return [{"id": r[0], "branch_name": r[1]} for r in rows]
+    except Exception as e:
+        print(f"[post_apply_worker] get_pushed_without_pr error: {e}")
+        return []
+
+
+# ─────────────────────────────────────────────
 # DB: claim next patch_applied fix plan
 # ─────────────────────────────────────────────
 
@@ -635,11 +663,11 @@ def process_fix_plan(fix_plan: dict) -> bool:
 
     if pr_url:
         _save_pr_url(fix_plan_id, pr_url)
-        update_fix_plan_status(fix_plan_id, "pushed")
-        print(f"\n  [4] DB updated → patch_status=pushed | pr_url={pr_url}")
+        update_fix_plan_status(fix_plan_id, "pr_created")
+        print(f"\n  [4] DB updated → patch_status=pr_created | pr_url={pr_url}")
     else:
         update_fix_plan_status(fix_plan_id, "pushed")
-        print(f"\n  [4] DB updated → patch_status=pushed (PR creation failed — create manually)")
+        print(f"\n  [4] DB updated → patch_status=pushed (PR creation failed — will retry)")
 
     return True
 
@@ -737,6 +765,21 @@ def run_worker(
                     f"[post_apply_worker] No patch_applied fix plans. "
                     f"Sleeping {poll_interval}s..."
                 )
+
+            # Retry PR creation for any pushed plans that still have no pr_url
+            stuck = get_pushed_without_pr()
+            for item in stuck:
+                fid = item["id"]
+                branch = item["branch_name"]
+                fix_branch = f"fix/ai-patch-{fid}"
+                print(f"\n[post_apply_worker] Retrying PR for fix_plan_id={fid}...")
+                pr_url = create_github_pr(fid, fix_branch, branch)
+                if pr_url:
+                    _save_pr_url(fid, pr_url)
+                    update_fix_plan_status(fid, "pr_created")
+                    print(f"  ✅ PR created → pr_created | {pr_url}")
+                else:
+                    print(f"  ⚠️ PR retry failed for fix_plan_id={fid} — will try again next cycle")
 
         except Exception as e:
             print(f"[post_apply_worker] ❌ Worker error: {e}")
