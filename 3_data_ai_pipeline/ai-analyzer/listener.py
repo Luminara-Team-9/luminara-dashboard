@@ -1,10 +1,11 @@
 import asyncio
 import os
+import re
 from datetime import datetime
 from typing import Optional, Any, Dict, List
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Header, Request
 from pydantic import BaseModel, Field, model_validator
 
 from agent import build_agent
@@ -929,3 +930,45 @@ def get_fix_plan_detail(fix_plan_id: int):
             payload=payload,
             x_luminara_secret=x_luminara_secret,
         )
+
+
+@app.post("/webhook/github")
+async def github_webhook(
+    request: Request,
+    x_github_event: Optional[str] = Header(default=None),
+):
+    """
+    Receives GitHub webhook events.
+    When a fix/ai-patch-{id} PR is merged → update patch_status to pr_merged.
+    GitHub repo settings → Webhooks → add http://server:9010/webhook/github
+    Events: Pull requests only.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "ignored", "reason": "invalid JSON"}
+
+    if x_github_event != "pull_request":
+        return {"status": "ignored", "reason": f"event={x_github_event}"}
+
+    action = payload.get("action")
+    pr = payload.get("pull_request", {})
+    merged = pr.get("merged", False)
+    head_branch = pr.get("head", {}).get("ref", "")
+
+    if action != "closed" or not merged:
+        return {"status": "ignored", "reason": f"action={action} merged={merged}"}
+
+    match = re.match(r"fix/ai-patch-(\d+)$", head_branch)
+    if not match:
+        return {"status": "ignored", "reason": f"not a fix branch: {head_branch}"}
+
+    fix_plan_id = int(match.group(1))
+
+    try:
+        update_fix_plan_status(fix_plan_id, "pr_merged")
+        print(f"[webhook] fix_plan_id={fix_plan_id} merged → pr_merged", flush=True)
+        return {"status": "ok", "fix_plan_id": fix_plan_id, "patch_status": "pr_merged"}
+    except Exception as e:
+        print(f"[webhook] failed to update fix_plan_id={fix_plan_id}: {e}", flush=True)
+        return {"status": "error", "error": str(e)}

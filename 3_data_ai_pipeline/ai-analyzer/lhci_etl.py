@@ -59,6 +59,7 @@ _MIGRATE_SQL = """
 ALTER TABLE lhci_audit_runs ADD COLUMN IF NOT EXISTS site_type TEXT;
 ALTER TABLE lhci_audit_runs ADD COLUMN IF NOT EXISTS pr_branch TEXT;
 ALTER TABLE fix_plans ADD COLUMN IF NOT EXISTS lhci_build_id TEXT;
+ALTER TABLE fix_plans ADD COLUMN IF NOT EXISTS score_delta FLOAT;
 """
 
 _INSERT_SQL = """
@@ -404,15 +405,31 @@ def link_fix_plan_scores() -> dict:
 
             after_score = round(float(after_row[0]), 1)
             before_score = round(float(before_row[0]), 1) if before_row and before_row[0] else 0.0
-            improved = after_score > before_score
+            improvement = round(after_score - before_score, 1)
+            improved = improvement > 0
 
-            save_local_test_result(
-                fix_plan_id=fix_plan_id,
-                new_local_score=after_score,
-                passed=improved,
-                branch_name=fix_branch,
-                audit_status="lhci_completed",
+            # Update new_local_score and final status on fix_plan
+            final_status = "completed" if improved else "regression"
+            score_note = (
+                f"Score improved: {before_score:.0f} → {after_score:.0f} (+{improvement} points)"
+                if improved else
+                f"Score did not improve: {before_score:.0f} → {after_score:.0f} ({improvement:+.1f} points)"
             )
+
+            with core_conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE fix_plans
+                    SET new_local_score = %s,
+                        patch_status    = %s,
+                        score_delta     = %s,
+                        updated_at      = NOW()
+                    WHERE id = %s
+                    """,
+                    (after_score, final_status, improvement, fix_plan_id),
+                )
+
+            logger.info("[link_scores] fix_plan_id=%d %s", fix_plan_id, score_note)
 
             if improved:
                 _save_proven_fix_doc(
@@ -424,7 +441,8 @@ def link_fix_plan_scores() -> dict:
                 "fix_plan_id": fix_plan_id,
                 "before_score": before_score,
                 "after_score": after_score,
-                "improved": improved,
+                "improvement": improvement,
+                "status": final_status,
             })
 
         core_conn.commit()
