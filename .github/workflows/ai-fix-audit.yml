@@ -1,0 +1,103 @@
+name: "8. [AI-Fix] Audit Fix Branch & Track Results"
+
+# Triggered in two ways:
+# 1. push to fix/ai-patch-* → run LHCI audit to measure improvement
+# 2. pull_request closed    → if fix/ai-patch-* was merged, notify listener
+
+on:
+  push:
+    branches:
+      - 'fix/ai-patch-*'
+    paths:
+      - '2_digital_twins/active-staging/**'
+  pull_request:
+    types: [closed]
+
+jobs:
+
+  # ── Job 1: LHCI audit on the fix branch ──────────────────────────────────
+  # Runs when fix/ai-patch-* is pushed. Builds the patched app into a
+  # Singularity container and audits it with LHCI. The results are stored
+  # in the LHCI DB with pr_branch = fix/ai-patch-{id}. The ETL sync then
+  # compares before/after scores and marks the fix plan as completed or regression.
+  audit_fix_branch:
+    name: Audit Fix Branch
+    if: github.event_name == 'push'
+    runs-on: [self-hosted, Linux]
+
+    env:
+      TARGET_SITE: 2_digital_twins/active-staging
+      IMAGE_DIR: /abr/coss41/Luminara_App/images-prod
+      STAGING_PATH: /abr/coss41/Luminara_App/images-staging
+      ARTIFACT_NAME: clone_fix_${{ github.run_id }}.sif
+
+    permissions:
+      statuses: write
+      contents: read
+
+    steps:
+      - name: 📥 Checkout Fix Branch
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Build Immutable Web Clone
+        uses: ./.github/actions/build-sif-images
+        with:
+          def_file_path: "infrastructure/digital_opt_clone.def"
+          cache_key_suffix: "fix_branch_clone"
+          output_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
+
+      - name: 🧪 Run LHCI Audit
+        uses: ./.github/actions/clone-audit
+        with:
+          twin_image_path: "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}"
+          audit_image_dir: ${{ env.IMAGE_DIR }}
+          target_site: ${{ env.TARGET_SITE }}
+          lhci_token: ${{ secrets.LHCI_BUILD_TOKEN }}
+          lhci_user: ${{ secrets.LHCI_SERVER_USER }}
+          lhci_password: ${{ secrets.LHCI_SERVER_PASS }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📊 Trigger ETL sync to link before/after scores
+        if: always()
+        run: |
+          curl -s -X POST http://localhost:9010/api/etl/sync \
+            -H "Content-Type: application/json" \
+            -H "X-Luminara-Secret: ${{ secrets.LUMINARA_AGENT_SECRET }}" \
+            && echo "ETL sync triggered" \
+            || echo "ETL sync failed — will retry on next 3h scheduled sync"
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          rm -f "${{ env.STAGING_PATH }}/${{ env.ARTIFACT_NAME }}" || true
+          chmod -R u+rwX /dev/shm/sing_build_*_fix_branch_clone 2>/dev/null || true
+          rm -rf /dev/shm/sing_build_*_fix_branch_clone || true
+          find /abr/coss41/singularity_cache -maxdepth 1 -type d -name "cache_*" -mtime +1 -exec rm -rf {} + || true
+
+  # ── Job 2: Notify listener when fix PR is merged ─────────────────────────
+  # Runs when any PR is closed. The if condition filters to only fire when
+  # the merged head branch is fix/ai-patch-*. Calls the listener webhook
+  # which updates patch_status to pr_merged in the DB.
+  notify_merge:
+    name: Notify Listener of Fix PR Merge
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.head_ref, 'fix/ai-patch-')
+    runs-on: [self-hosted, Linux]
+
+    steps:
+      - name: 🔔 Notify listener — fix plan merged
+        run: |
+          curl -s -X POST http://localhost:9010/webhook/github \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: pull_request" \
+            -d "{
+              \"action\": \"closed\",
+              \"pull_request\": {
+                \"merged\": true,
+                \"head\": { \"ref\": \"${{ github.head_ref }}\" }
+              }
+            }" \
+            && echo "Listener notified — patch_status → pr_merged" \
+            || echo "Webhook call failed — fix plan status may need manual update"

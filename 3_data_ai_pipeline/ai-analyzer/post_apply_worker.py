@@ -456,14 +456,13 @@ def create_github_pr(
     except Exception as e:
         print(f"  ⚠️  gh CLI error: {e}")
 
-    # ── Fallback: GitHub REST API ───────────────────────────
+    # ── Fallback: GitHub REST API (via requests) ────────────
     if not GITHUB_TOKEN:
         print("  ❌ No GITHUB_TOKEN set — cannot create PR via REST API")
         return None
 
     try:
-        import urllib.request, urllib.error
-        import json as _json
+        import requests as _requests
 
         headers = {
             "Authorization": f"Bearer {GITHUB_TOKEN}",
@@ -471,39 +470,36 @@ def create_github_pr(
             "Content-Type":  "application/json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+        base_url = f"https://api.github.com/repos/{GITHUB_REPO}"
+        owner = GITHUB_REPO.split("/")[0]
 
         # Check if an open PR already exists for this branch
-        owner = GITHUB_REPO.split("/")[0]
-        list_req = urllib.request.Request(
-            f"https://api.github.com/repos/{GITHUB_REPO}/pulls"
-            f"?head={owner}:{fix_branch}&state=open",
+        list_resp = _requests.get(
+            f"{base_url}/pulls",
             headers=headers,
+            params={"head": f"{owner}:{fix_branch}", "state": "open"},
+            timeout=30,
         )
-        with urllib.request.urlopen(list_req, timeout=30) as resp:
-            existing = _json.loads(resp.read())
-            if existing:
-                pr_url = existing[0].get("html_url", "")
-                print(f"  ✅ Open PR already exists: {pr_url}")
-                return pr_url
+        print(f"  [PR list] status={list_resp.status_code}", flush=True)
+        if list_resp.ok and list_resp.json():
+            pr_url = list_resp.json()[0].get("html_url", "")
+            print(f"  ✅ Open PR already exists: {pr_url}")
+            return pr_url
 
-        payload = _json.dumps({
-            "title": title,
-            "body":  body,
-            "head":  fix_branch,
-            "base":  base_branch,
-        }).encode()
-
-        req = urllib.request.Request(
-            f"https://api.github.com/repos/{GITHUB_REPO}/pulls",
-            data=payload,
+        create_resp = _requests.post(
+            f"{base_url}/pulls",
             headers=headers,
-            method="POST",
+            json={"title": title, "body": body, "head": fix_branch, "base": base_branch},
+            timeout=30,
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = _json.loads(resp.read())
-            pr_url = data.get("html_url", "")
+        print(f"  [PR create] status={create_resp.status_code}", flush=True)
+        if create_resp.ok:
+            pr_url = create_resp.json().get("html_url", "")
             print(f"  ✅ PR created via REST API: {pr_url}")
             return pr_url
+
+        print(f"  ❌ REST API PR creation failed: {create_resp.status_code} {create_resp.text[:300]}")
+        return None
 
     except Exception as e:
         print(f"  ❌ REST API PR creation failed: {e}")
