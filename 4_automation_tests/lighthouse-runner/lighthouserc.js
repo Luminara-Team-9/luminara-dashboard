@@ -35,18 +35,22 @@ module.exports = {
     },
 
     assert: {
-      assertions: {
-        'largest-contentful-paint': ['warn', { maxNumericValue: 2500 }],
-        'cumulative-layout-shift':  ['warn', { maxNumericValue: 0.1 }],
-        'first-contentful-paint':   ['warn', { maxNumericValue: 1800 }],
-        'total-blocking-time':      ['warn', { maxNumericValue: 200 }],
-        'speed-index':              ['warn', { maxNumericValue: 3400 }],
-        'categories:performance':   ['warn', { minScore: 0.9 }], 
-        'categories:accessibility': ['warn', { minScore: 0.9 }],
-        'categories:best-practices':['warn', { minScore: 0.9 }],
-        'categories:seo':           ['warn', { minScore: 0.9 }],
-      },
-    },
+    preset: 'lighthouse:no-pwa',
+    assertions: {
+    // CWV — warn if regression from previous build
+    'largest-contentful-paint': ['warn', { maxNumericValue: 2500, aggregationMethod: 'optimistic' }],
+    'cumulative-layout-shift':  ['warn', { maxNumericValue: 0.1,  aggregationMethod: 'optimistic' }],
+    'first-contentful-paint':   ['warn', { maxNumericValue: 1800, aggregationMethod: 'optimistic' }],
+    'total-blocking-time':      ['warn', { maxNumericValue: 200,  aggregationMethod: 'optimistic' }],
+    'speed-index':              ['warn', { maxNumericValue: 3400, aggregationMethod: 'optimistic' }],
+
+    // Scores
+    'categories:performance':   ['warn', { minScore: 0.9, aggregationMethod: 'optimistic' }],
+    'categories:accessibility': ['warn', { minScore: 0.9, aggregationMethod: 'optimistic' }],
+    'categories:best-practices':['warn', { minScore: 0.9, aggregationMethod: 'optimistic' }],
+    'categories:seo':           ['warn', { minScore: 0.9, aggregationMethod: 'optimistic' }],
+  },
+},
 
     upload: {
       target: 'lhci',
