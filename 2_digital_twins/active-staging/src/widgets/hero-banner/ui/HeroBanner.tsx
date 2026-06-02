@@ -7,19 +7,19 @@ export function HeroBanner() {
 
   const slides = [
     {
-      src: 'https://contents.mediadecathlon.com/s1414033/k$de3973b0210cd72f5726758a129a021a/defaut.jpg?format=auto',
+      src: 'https://contents.mediadecathlon.com/s1414033/k$de3973b0210cd72f5726758a129a021a/defaut.webp',
       alt: '2026.05 리프레시 프로모션',
     },
     {
-      src: 'https://contents.mediadecathlon.com/s1408511/k$cc7d056986b685b3aec07c224beadb8b/defaut.jpg?format=auto',
+      src: 'https://contents.mediadecathlon.com/s1408511/k$cc7d056986b685b3aec07c224beadb8b/defaut.webp',
       alt: 'Real Recognizes Real',
     },
     {
-      src: 'https://contents.mediadecathlon.com/s1403907/k$c53c54d0a6e48c5b8074afbcd034bdc5/defaut.jpg?format=auto',
+      src: 'https://contents.mediadecathlon.com/s1403907/k$c53c54d0a6e48c5b8074afbcd034bdc5/defaut.webp',
       alt: 'Power in Every Pulse',
     },
     {
-      src: 'https://contents.mediadecathlon.com/s1413738/k$7831092b80905e8113e996e878d4e9b0/defaut.jpg?format=auto',
+      src: 'https://contents.mediadecathlon.com/s1413738/k$7831092b80905e8113e996e878d4e9b0/defaut.webp',
       alt: 'KIPSUMMIT MAX',
     },
   ];
@@ -43,6 +43,9 @@ export function HeroBanner() {
             key={index}
             src={slide.src}
             alt={slide.alt}
+            loading={index === 0 ? 'eager' : 'lazy'}
+            fetchPriority={index === 0 ? 'high' : 'auto'}
+            decoding='async'
             style={{
               position: 'absolute',
               inset: 0,
@@ -50,9 +53,9 @@ export function HeroBanner() {
               height: '100%',
               objectFit: 'cover',
               display: 'block',
-              opacity: index === currentSlide ? 1 : 0, // Shows 1 if active, 0 if not
-              transition: 'opacity 1s ease-in-out', // Smooth fade effect
-              zIndex: index === currentSlide ? 10 : 0, // Brings active image to the front
+              opacity: index === currentSlide ? 1 : 0,
+              transition: 'opacity 1s ease-in-out',
+              zIndex: index === currentSlide ? 10 : 0,
             }}
           />
         ))}
