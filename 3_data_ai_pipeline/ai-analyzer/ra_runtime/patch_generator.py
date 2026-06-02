@@ -909,9 +909,26 @@ def validate_patch_against_files(
             )
             continue
 
+        # Fix HTML attribute names → React camelCase before matching/storing
+        _REACT_ATTR_FIXES = {
+            " srcset=": " srcSet=",
+            "\tsrcset=": "\tsrcSet=",
+            "\nsrcset=": "\nsrcSet=",
+            " crossorigin=": " crossOrigin=",
+            " tabindex=": " tabIndex=",
+            " readonly=": " readOnly=",
+            " classname=": " className=",
+            " nomodule=": " noModule=",
+            " autofocus=": " autoFocus=",
+            " autoplay=": " autoPlay=",
+            "fetchpriority=": "fetchPriority=",
+        }
+        for _wrong, _right in _REACT_ATTR_FIXES.items():
+            suggested_code = suggested_code.replace(_wrong, _right)
+
         # Exact match first
         if original_code in content:
-            valid_patches.append(patch)
+            valid_patches.append({**patch, "suggested_code": suggested_code})
             continue
 
         # Fuzzy match: strip trailing whitespace per line (Qwen often adds/removes trailing spaces)
@@ -934,7 +951,7 @@ def validate_patch_against_files(
             continue
 
         # Use the exact text from the file so apply_patch can do a clean replace
-        valid_patches.append({**patch, "original_code": actual_original})
+        valid_patches.append({**patch, "original_code": actual_original, "suggested_code": suggested_code})
 
     if not valid_patches:
         return {
