@@ -489,13 +489,10 @@ def trigger_agent(
     if _lhci_build_id and _active_groups:
         group_results = []
 
-        # Map target_dir → correct base branch for fix PRs.
-        # Fixes must target the clone website branch (MAY1KNU reviews/merges),
-        # NOT the infrastructure branch that triggered the audit.
-        _TARGET_DIR_BASE_BRANCH = {
-            "2_digital_twins/active-staging": "feat/decathlon-clone",
-        }
-        _fix_base_branch = _TARGET_DIR_BASE_BRANCH.get(payload.target_dir, payload.pr_branch)
+        # Fix PRs always target the same branch that triggered the audit.
+        # This allows the developer to merge the fix back into their PR branch
+        # and re-run the audit to measure the before/after improvement.
+        _fix_base_branch = payload.pr_branch
 
         for group_index, group in enumerate(_active_groups, start=1):
             group_thread_id = build_group_thread_id(
