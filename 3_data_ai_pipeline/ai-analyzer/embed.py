@@ -19,9 +19,11 @@ Production behavior:
 
 import argparse
 import hashlib
+import json
 import os
 import re
 from typing import Any, Dict, Iterable, List, Sequence
+from urllib.parse import urlparse
 
 import psycopg2
 from dotenv import load_dotenv
@@ -59,6 +61,54 @@ def get_db_connection():
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
     )
+
+
+def get_lhci_connection():
+    return psycopg2.connect(
+        host=os.getenv("HOST_IP"),
+        port=os.getenv("PGPORT", "5432"),
+        dbname=os.getenv("LHCI_DB", "lhci"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+    )
+
+
+_TARGET_HOSTS = {"localhost", "decathlon.co.kr"}
+
+_PATH_PREFIX_MAP = {
+    "c": "category",
+    "p": "product",
+    "cart": "cart",
+    "category": "category",
+    "product": "product",
+}
+
+
+def _url_to_page_type(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    is_target = host == "localhost" or any(host.endswith(t) for t in _TARGET_HOSTS)
+    if not is_target:
+        return "main"
+    path = parsed.path.rstrip("/")
+    if not path:
+        return "main"
+    parts = [p for p in path.split("/") if p]
+    if not parts:
+        return "main"
+    return _PATH_PREFIX_MAP.get(parts[0], parts[0])
+
+
+def _is_target_url(url: str) -> bool:
+    host = urlparse(url).hostname or ""
+    return host == "localhost" or any(host.endswith(t) for t in _TARGET_HOSTS)
+
+
+def _url_to_competitor_name(url: str) -> str:
+    host = urlparse(url).hostname or ""
+    host = re.sub(r"^m\.", "", host)  # strip mobile subdomain
+    parts = host.split(".")
+    return parts[0] if parts else "unknown"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -353,99 +403,108 @@ def build_cwv_guide_docs() -> List[Dict[str, Any]]:
 # Source 2: Page/device-aware Lighthouse Opportunities
 # ─────────────────────────────────────────────────────────────
 
-def build_opportunity_docs(cursor) -> List[Dict[str, Any]]:
-    print("\n[Source 2] Collecting page/device-aware Lighthouse opportunities...")
+def build_opportunity_docs() -> List[Dict[str, Any]]:
+    print("\n[Source 2] Collecting page/device-aware Lighthouse opportunities from lhci DB...")
 
-    cursor.execute(
-        """
-        SELECT
-            COALESCE(lo.opportunity_id, lo.title) AS opportunity_key,
-            lo.opportunity_id,
-            lo.title,
-            lo.description,
-            AVG(COALESCE(lo.savings_ms, 0))::int AS avg_savings,
-            MAX(COALESCE(lo.severity, 'medium')) AS severity,
-            COALESCE(lo.category, 'performance') AS category,
-            COALESCE(lr.site_type, 'unknown') AS site_type,
-            COALESCE(lr.page_type, 'unknown') AS page_type,
-            COALESCE(lr.device_type, 'unknown') AS device_type,
-            COUNT(*) AS occurrence_count,
-            MIN(lo.test_id) AS sample_test_id
-        FROM lighthouse_opportunities lo
-        JOIN lighthouse_runs lr
-          ON lo.test_id = lr.test_id
-        WHERE COALESCE(lo.savings_ms, 0) > 0
-        GROUP BY
-            COALESCE(lo.opportunity_id, lo.title),
-            lo.opportunity_id,
-            lo.title,
-            lo.description,
-            COALESCE(lo.category, 'performance'),
-            COALESCE(lr.site_type, 'unknown'),
-            COALESCE(lr.page_type, 'unknown'),
-            COALESCE(lr.device_type, 'unknown')
-        ORDER BY avg_savings DESC
-        """
-    )
+    conn = get_lhci_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT url, lhr FROM runs
+                WHERE "createdAt" > NOW() - INTERVAL '30 days'
+                ORDER BY "createdAt" DESC LIMIT 100
+                """
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
 
-    rows = cursor.fetchall()
+    # Aggregate: (page_type, device_type, audit_id) -> metrics
+    aggregated: Dict[tuple, Dict] = {}
+
+    for url, lhr_raw in rows:
+        if not _is_target_url(url):
+            continue  # skip competitor runs — opportunities only from decathlon/target
+        lhr = json.loads(lhr_raw) if isinstance(lhr_raw, str) else lhr_raw
+        page_type = _url_to_page_type(url)
+        cfg = lhr.get("configSettings", {})
+        ff = cfg.get("formFactor") or cfg.get("emulatedFormFactor", "mobile")
+        device_type = "mobile" if str(ff).lower() == "mobile" else "desktop"
+
+        for audit_id, audit in lhr.get("audits", {}).items():
+            details = audit.get("details") or {}
+            if details.get("type") != "opportunity":
+                continue
+            savings = (
+                details.get("overallSavingsMs")
+                or audit.get("numericValue")
+                or 0
+            )
+            if float(savings) <= 0:
+                continue
+
+            key = (page_type, device_type, audit_id)
+            if key not in aggregated:
+                aggregated[key] = {
+                    "title": audit.get("title", audit_id),
+                    "description": audit.get("description", ""),
+                    "total_savings": 0.0,
+                    "count": 0,
+                    "score": audit.get("score"),
+                }
+            aggregated[key]["total_savings"] += float(savings)
+            aggregated[key]["count"] += 1
+
     docs = []
-
-    for row in rows:
-        (
-            opportunity_key,
-            opportunity_id,
-            title,
-            description,
-            avg_savings,
-            severity,
-            category,
-            site_type,
-            page_type,
-            device_type,
-            occurrence_count,
-            sample_test_id,
-        ) = row
+    for (page_type, device_type, audit_id), data in aggregated.items():
+        avg_savings = int(data["total_savings"] / data["count"])
+        score = data.get("score")
+        severity = (
+            "high" if score is not None and score < 0.5
+            else "low" if score is not None and score >= 0.9
+            else "medium"
+        )
 
         source = (
             "lighthouse_opportunity_"
-            f"{normalize_source_part(site_type)}_"
+            f"decathlon_"
             f"{normalize_source_part(page_type)}_"
             f"{normalize_source_part(device_type)}_"
-            f"{normalize_source_part(opportunity_key)}"
+            f"{normalize_source_part(audit_id)}"
         )
 
         content = (
-            f"Performance opportunity on {site_type} {page_type} page for {device_type}: {title}. "
-            f"{description or ''} "
-            f"Average estimated savings: {int(avg_savings or 0)}ms. "
-            f"Severity: {severity}. Category: {category}. "
-            f"Observed {int(occurrence_count or 0)} times in Lighthouse data. "
+            f"Performance opportunity on decathlon {page_type} page for {device_type}: {data['title']}. "
+            f"{data['description'] or ''} "
+            f"Average estimated savings: {avg_savings}ms. "
+            f"Severity: {severity}. Category: performance. "
+            f"Observed {data['count']} times in Lighthouse data. "
             f"This recommendation is page-aware and is most relevant to {page_type} pages on {device_type}. "
             f"Use it when the current audit group has page_type={page_type}, device_type={device_type}, "
-            f"and a related opportunity such as {opportunity_id or opportunity_key}."
+            f"and a related opportunity such as {audit_id}."
         )
 
         docs.append({
-            "title": f"Fix: {title} ({page_type}/{device_type})",
+            "title": f"Fix: {data['title']} ({page_type}/{device_type})",
             "content": content,
             "source": source,
             "doc_type": "lighthouse_opportunity",
             "metadata": {
                 "source_kind": "lighthouse_opportunity",
-                "opportunity_id": opportunity_id,
-                "opportunity_key": opportunity_key,
-                "site_type": site_type,
+                "opportunity_id": audit_id,
+                "opportunity_key": audit_id,
+                "site_type": "decathlon",
                 "page_type": page_type,
                 "device_type": device_type,
-                "avg_savings_ms": int(avg_savings or 0),
+                "avg_savings_ms": avg_savings,
                 "severity": severity,
-                "category": category,
-                "occurrence_count": int(occurrence_count or 0),
-                "sample_test_id": sample_test_id,
+                "category": "performance",
+                "occurrence_count": data["count"],
             },
         })
 
+    docs.sort(key=lambda d: d["metadata"]["avg_savings_ms"], reverse=True)
     print(f"  Found {len(docs)} page/device-aware opportunity docs")
     return docs
 
@@ -463,13 +522,13 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
             url,
             site_type,
             page_type,
-            device_type,
+            form_factor,
             lcp_ms,
             tbt_ms,
             cls_score,
             performance_score,
             created_at
-        FROM lighthouse_runs
+        FROM lhci_audit_runs
         WHERE site_type = ANY(%s)
           AND page_type = 'main'
         ORDER BY created_at DESC
@@ -484,14 +543,13 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
         SELECT
             url,
             page_type,
-            device_type,
-            competitor_name,
+            form_factor,
             lcp_ms,
             tbt_ms,
             cls_score,
             performance_score,
             created_at
-        FROM lighthouse_runs
+        FROM lhci_audit_runs
         WHERE site_type = 'competitor'
           AND page_type = 'main'
         ORDER BY created_at DESC
@@ -525,7 +583,6 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
                 comp_url,
                 comp_page,
                 comp_device,
-                comp_name,
                 comp_lcp,
                 comp_tbt,
                 comp_cls,
@@ -539,6 +596,7 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
             if dec_device != comp_device:
                 continue
 
+            comp_name = _url_to_competitor_name(comp_url)
             safe_comp_name = normalize_source_part(comp_name)
             safe_device = normalize_source_part(dec_device)
 
@@ -617,6 +675,32 @@ def build_competitor_benchmark_docs(cursor) -> List[Dict[str, Any]]:
 
 
 # ─────────────────────────────────────────────────────────────
+# Source 4: Proven Fixes (patches that actually improved scores)
+# ─────────────────────────────────────────────────────────────
+
+def build_proven_fix_docs(cursor) -> List[Dict[str, Any]]:
+    print("\n[Source 4] Collecting proven fix documents...")
+    try:
+        cursor.execute("SELECT source, content FROM proven_fix_docs")
+    except Exception:
+        print("  proven_fix_docs table not found — skipping")
+        return []
+
+    rows = cursor.fetchall()
+    docs = []
+    for source, content in rows:
+        docs.append({
+            "title": f"Proven Fix: {source}",
+            "content": content,
+            "source": source,
+            "doc_type": "proven_fix",
+            "metadata": {},
+        })
+    print(f"  Found {len(docs)} proven fix docs")
+    return docs
+
+
+# ─────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────
 
@@ -662,7 +746,7 @@ def run_embed_pipeline(
             print(f"  ✅ CWV guide docs updated: {changed}")
 
         if only in {"all", "opportunities"}:
-            docs = build_opportunity_docs(cursor)
+            docs = build_opportunity_docs()
             changed = embed_and_upsert_docs(
                 cursor=cursor,
                 model=model,
@@ -690,6 +774,21 @@ def run_embed_pipeline(
             total_changed += changed
             existing_hashes = get_existing_hashes(cursor)
             print(f"  ✅ Benchmark docs updated: {changed}")
+
+        if only in {"all", "proven"}:
+            docs = build_proven_fix_docs(cursor)
+            changed = embed_and_upsert_docs(
+                cursor=cursor,
+                model=model,
+                docs=docs,
+                existing_hashes=existing_hashes,
+                force=force,
+                label="proven fix docs",
+            )
+            conn.commit()
+            total_changed += changed
+            existing_hashes = get_existing_hashes(cursor)
+            print(f"  ✅ Proven fix docs updated: {changed}")
 
         cursor.execute("SELECT COUNT(*) FROM rag_documents")
         total_docs = cursor.fetchone()[0]
@@ -720,7 +819,7 @@ def main():
 
     parser.add_argument(
         "--only",
-        choices=["all", "guides", "opportunities", "benchmarks"],
+        choices=["all", "guides", "opportunities", "benchmarks", "proven"],
         default="all",
         help="Select which document source to update.",
     )

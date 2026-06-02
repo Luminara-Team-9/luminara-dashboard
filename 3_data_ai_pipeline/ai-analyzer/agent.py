@@ -63,6 +63,119 @@ def get_db_connection():
     )
 
 
+# ─────────────────────────────────────────────
+# LHCI helpers (read directly from lhci DB)
+# ─────────────────────────────────────────────
+
+def url_to_page_type(url: str) -> str:
+    from urllib.parse import urlparse
+    path = urlparse(url).path.rstrip("/")
+    if not path:
+        return "main"
+    parts = [p for p in path.split("/") if p]
+    return parts[0] if parts else "main"
+
+
+def get_device_type_from_lhr(lhr: dict) -> str:
+    config = lhr.get("configSettings", {})
+    form_factor = config.get("formFactor") or config.get("emulatedFormFactor", "mobile")
+    return "mobile" if str(form_factor).lower() == "mobile" else "desktop"
+
+
+def get_lhci_runs_for_group(lhci_cursor, lhci_build_id: str, page_type: str, device_type: str) -> list:
+    """
+    Fetch all LHCI runs for a build, filter by page_type (from URL) and device_type (from LHR).
+    Returns list of dicts with keys: run_id, url, lhr, page_type, device_type.
+    """
+    lhci_cursor.execute(
+        'SELECT id, url, lhr FROM runs WHERE "buildId" = %s::uuid ORDER BY "createdAt"',
+        (lhci_build_id,),
+    )
+    rows = lhci_cursor.fetchall()
+
+    result = []
+    for run_id, url, lhr_text in rows:
+        pt = url_to_page_type(url)
+        lhr = json.loads(lhr_text) if isinstance(lhr_text, str) else lhr_text
+        dt = get_device_type_from_lhr(lhr)
+        if pt != page_type:
+            continue
+        if dt != device_type:
+            continue
+        result.append({
+            "run_id": str(run_id),
+            "url": url,
+            "lhr": lhr,
+            "page_type": pt,
+            "device_type": dt,
+        })
+
+    return result
+
+
+def get_stable_opportunities_from_lhci(lhci_runs: list, max_opportunities: int) -> list:
+    """
+    Parse Lighthouse opportunities from in-memory LHR dicts (no DB needed).
+    Equivalent to get_stable_opportunities() but for LHCI data.
+    """
+    from ra_runtime.audit_ingestion import parse_opportunities
+
+    grouped: dict = {}
+
+    for run_index, run in enumerate(lhci_runs[:3]):
+        opps = parse_opportunities(run["lhr"], test_id=run_index + 1)
+        for opp in opps:
+            key = opp.get("opportunity_id") or opp.get("title")
+            if not key:
+                continue
+            if key not in grouped:
+                grouped[key] = {
+                    "ids": [],
+                    "test_ids": set(),
+                    "opportunity_id": opp.get("opportunity_id"),
+                    "title": opp.get("title", ""),
+                    "description": opp.get("description", ""),
+                    "savings_values": [],
+                    "severity_values": [],
+                    "category": opp.get("category", "performance"),
+                }
+            grouped[key]["ids"].append(opp.get("opportunity_id") or key)
+            grouped[key]["test_ids"].add(run_index + 1)
+            if opp.get("savings_ms"):
+                grouped[key]["savings_values"].append(int(opp["savings_ms"]))
+            grouped[key]["severity_values"].append(normalize_severity(opp.get("severity")))
+
+    opportunities = []
+    for item in grouped.values():
+        frequency = len(item["test_ids"])
+        if frequency < 2:
+            continue
+        avg_savings = int(sum(item["savings_values"]) / max(len(item["savings_values"]), 1)) if item["savings_values"] else 0
+        severity = sorted(item["severity_values"], key=severity_rank, reverse=True)[0]
+        affected_metric = infer_affected_metric(item["title"], item["category"])
+        priority_level = priority_from_savings(avg_savings, severity)
+
+        opportunities.append({
+            "id": item["ids"][0] if item["ids"] else item["opportunity_id"],
+            "opportunity_id": item["opportunity_id"],
+            "title": item["title"],
+            "description": item["description"],
+            "avg_savings_ms": avg_savings,
+            "severity": severity,
+            "category": item["category"],
+            "frequency": frequency,
+            "supporting_test_ids": sorted(list(item["test_ids"])),
+            "affected_metric": affected_metric,
+            "priority_level": priority_level,
+        })
+
+    opportunities.sort(
+        key=lambda opp: (opp["frequency"], opp["avg_savings_ms"], severity_rank(opp["severity"])),
+        reverse=True,
+    )
+    return opportunities
+
+
 class AgentState(TypedDict, total=False):
     test_id: int
 
@@ -73,6 +186,7 @@ class AgentState(TypedDict, total=False):
 
     # 3-run audit group identity.
     playwright_run_id: Optional[int]
+    lhci_build_id: Optional[str]
     site_type: Optional[str]
     network_profile: Optional[str]
 
@@ -551,23 +665,21 @@ def get_group_runs_from_test_id(cursor, test_id: int) -> list:
 
 def get_group_runs_from_audit_group(
     cursor,
-    playwright_run_id: int,
+    playwright_run_id,
     site_type: str,
     page_type: str,
     device_type: str,
 ) -> list:
     """
-    Production mode.
-
-    Input:
-    - playwright_run_id
-    - site_type
-    - page_type
-    - device_type
-
-    Behavior:
-    - find the exact 3-run group
+    Production mode — find runs by exact playwright_run_id.
+    playwright_run_id must be castable to int (DB column is INTEGER).
+    Returns [] immediately if the value is a non-numeric string like 'pw_12345'.
     """
+    try:
+        int(playwright_run_id)
+    except (TypeError, ValueError):
+        return []
+
     cursor.execute(
         """
         SELECT
@@ -599,6 +711,76 @@ def get_group_runs_from_audit_group(
     )
 
     return rows_to_run_dicts(cursor.fetchall())
+
+
+def get_latest_stable_group_runs(
+    cursor,
+    site_type: str,
+    page_type: str,
+    device_type: str,
+) -> list:
+    """
+    Fallback for production triggers where playwright_run_id from GHA
+    does not match any row in the DB (e.g. 'pw_<github_run_id>' format).
+
+    Finds the most recent playwright_run_id that has at least 3 runs
+    for the given site/page/device combination, then returns those runs.
+    """
+    cursor.execute(
+        """
+        SELECT playwright_run_id
+        FROM lighthouse_runs
+        WHERE site_type = %s
+          AND page_type = %s
+          AND device_type = %s
+        GROUP BY playwright_run_id
+        HAVING COUNT(*) >= 3
+        ORDER BY MAX(created_at) DESC
+        LIMIT 1
+        """,
+        (site_type, page_type, device_type),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return []
+
+    latest_run_id = row[0]
+    return get_group_runs_from_audit_group(
+        cursor, latest_run_id, site_type, page_type, device_type
+    )
+
+
+def get_any_runs_for_group(
+    cursor,
+    site_type: str,
+    page_type: str,
+    device_type: str,
+) -> list:
+    """
+    Last-resort fallback: find any runs for this page/device, even fewer than 3.
+    Uses the most recent playwright_run_id with at least 1 run.
+    """
+    cursor.execute(
+        """
+        SELECT playwright_run_id
+        FROM lighthouse_runs
+        WHERE site_type = %s
+          AND page_type = %s
+          AND device_type = %s
+        GROUP BY playwright_run_id
+        ORDER BY MAX(created_at) DESC
+        LIMIT 1
+        """,
+        (site_type, page_type, device_type),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return []
+
+    latest_run_id = row[0]
+    return get_group_runs_from_audit_group(
+        cursor, latest_run_id, site_type, page_type, device_type
+    )
 
 
 def choose_representative_test_id(group_runs: list) -> int:
@@ -672,124 +854,6 @@ def confidence_from_group(group_runs: list) -> str:
     return "low"
 
 
-def get_stable_opportunities(
-    cursor,
-    test_ids: list,
-    max_opportunities: int,
-) -> list:
-    """
-    Select stable Lighthouse opportunities.
-
-    Stable opportunity:
-    - same opportunity appears in at least 2 out of 3 runs
-
-    Ranking:
-    - frequency across 3 runs
-    - average savings_ms
-    - severity
-    """
-    cursor.execute(
-        """
-        SELECT
-            lo.id,
-            lo.test_id,
-            lo.opportunity_id,
-            lo.title,
-            lo.description,
-            COALESCE(lo.savings_ms, 0)::int AS savings_ms,
-            lo.severity,
-            lo.category
-        FROM lighthouse_opportunities lo
-        WHERE lo.test_id = ANY(%s)
-          AND COALESCE(lo.savings_ms, 0) > 0
-        """,
-        (test_ids,),
-    )
-
-    rows = cursor.fetchall()
-    grouped = {}
-
-    for row in rows:
-        (
-            row_id,
-            test_id,
-            opportunity_id,
-            title,
-            description,
-            savings_ms,
-            severity,
-            category,
-        ) = row
-
-        key = opportunity_id or title
-
-        if key not in grouped:
-            grouped[key] = {
-                "ids": [],
-                "test_ids": set(),
-                "opportunity_id": opportunity_id,
-                "title": title,
-                "description": description,
-                "savings_values": [],
-                "severity_values": [],
-                "category": category or "performance",
-            }
-
-        grouped[key]["ids"].append(row_id)
-        grouped[key]["test_ids"].add(test_id)
-        grouped[key]["savings_values"].append(int(savings_ms or 0))
-        grouped[key]["severity_values"].append(normalize_severity(severity))
-
-    opportunities = []
-
-    for item in grouped.values():
-        frequency = len(item["test_ids"])
-
-        # Stable opportunity rule: at least 2 out of 3 runs.
-        if frequency < 2:
-            continue
-
-        avg_savings = int(
-            sum(item["savings_values"]) / max(len(item["savings_values"]), 1)
-        )
-
-        severity = sorted(
-            item["severity_values"],
-            key=severity_rank,
-            reverse=True,
-        )[0]
-
-        affected_metric = infer_affected_metric(
-            item["title"],
-            item["category"],
-        )
-
-        priority_level = priority_from_savings(avg_savings, severity)
-
-        opportunities.append({
-            "id": item["ids"][0],
-            "opportunity_id": item["opportunity_id"],
-            "title": item["title"],
-            "description": item["description"],
-            "avg_savings_ms": avg_savings,
-            "severity": severity,
-            "category": item["category"],
-            "frequency": frequency,
-            "supporting_test_ids": sorted(list(item["test_ids"])),
-            "affected_metric": affected_metric,
-            "priority_level": priority_level,
-        })
-
-    opportunities.sort(
-        key=lambda opp: (
-            opp["frequency"],
-            opp["avg_savings_ms"],
-            severity_rank(opp["severity"]),
-        ),
-        reverse=True,
-    )
-
-    return opportunities[:max_opportunities]
 
 # ─────────────────────────────────────────────
 # N1 — Get metrics + rank opportunities
@@ -801,28 +865,103 @@ def get_metrics(state: AgentState) -> AgentState:
     mode = state.get("mode") or "test_id"
     test_id = state.get("test_id")
     max_opportunities = state.get("max_opportunities", MAX_OPPORTUNITIES)
+    lhci_build_id = state.get("lhci_build_id")
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    lhci_runs_cache = None  # used by LHCI path for opportunity parsing
+
     try:
         if mode == "audit_group":
-            playwright_run_id = state.get("playwright_run_id")
             site_type = state.get("site_type") or "decathlon"
             page_type = state.get("page_type")
             device_type = state.get("device_type")
 
-            if not playwright_run_id or not page_type or not device_type:
-                print("  ❌ audit_group mode requires playwright_run_id, page_type, device_type")
+            if not page_type or not device_type:
+                print("  ❌ audit_group mode requires page_type and device_type")
                 return {**state, "should_end": True}
 
-            group_runs = get_group_runs_from_audit_group(
-                cursor=cursor,
-                playwright_run_id=playwright_run_id,
-                site_type=site_type,
-                page_type=page_type,
-                device_type=device_type,
-            )
+            group_runs = []
+
+            if lhci_build_id:
+                # ── LHCI path: read directly from lhci DB ─────────────────
+                print(f"  → LHCI path: build_id={lhci_build_id[:8]}... page={page_type} device={device_type}")
+                from ra_runtime.db_client import get_lhci_connection
+                from ra_runtime.audit_ingestion import parse_metrics as parse_lhci_metrics
+
+                lhci_conn = get_lhci_connection()
+                lhci_cursor = lhci_conn.cursor()
+                try:
+                    lhci_runs_cache = get_lhci_runs_for_group(
+                        lhci_cursor, lhci_build_id, page_type, device_type
+                    )
+                finally:
+                    lhci_conn.close()
+
+                if not lhci_runs_cache:
+                    print(f"  ❌ No LHCI runs found for build={lhci_build_id} page={page_type} device={device_type}")
+                    return {**state, "should_end": True}
+
+                for i, run in enumerate(lhci_runs_cache[:3], start=1):
+                    m = parse_lhci_metrics(run["lhr"])
+                    group_runs.append({
+                        "test_id": i,
+                        "playwright_run_id": lhci_build_id,
+                        "url": run["url"],
+                        "site_type": site_type,
+                        "page_type": run["page_type"],
+                        "device_type": run["device_type"],
+                        "network_profile": None,
+                        "run_number": i,
+                        "lcp_ms": m.get("lcp_ms"),
+                        "tbt_ms": m.get("tbt_ms"),
+                        "cls_score": m.get("cls_score"),
+                        "performance_score": m.get("performance_score"),
+                        "fcp_ms": m.get("fcp_ms"),
+                        "si_ms": m.get("si_ms"),
+                        "tti_ms": m.get("tti_ms"),
+                        "ttfb_ms": m.get("ttfb_ms"),
+                        "inp_ms": m.get("inp_ms"),
+                    })
+
+            else:
+                # ── core_db path (legacy / test_id mode fallback) ──────────
+                playwright_run_id = state.get("playwright_run_id")
+
+                if playwright_run_id:
+                    group_runs = get_group_runs_from_audit_group(
+                        cursor=cursor,
+                        playwright_run_id=playwright_run_id,
+                        site_type=site_type,
+                        page_type=page_type,
+                        device_type=device_type,
+                    )
+
+                if not group_runs:
+                    print(
+                        f"  ⚠️  playwright_run_id={playwright_run_id!r} not found in DB. "
+                        f"Falling back to latest stable group for "
+                        f"{site_type}/{page_type}/{device_type}..."
+                    )
+                    group_runs = get_latest_stable_group_runs(
+                        cursor=cursor,
+                        site_type=site_type,
+                        page_type=page_type,
+                        device_type=device_type,
+                    )
+
+                if not group_runs:
+                    print(
+                        f"  ⚠️  No stable 3-run group found. "
+                        f"Using any available runs for {site_type}/{page_type}/{device_type}..."
+                    )
+                    group_runs = get_any_runs_for_group(
+                        cursor=cursor,
+                        site_type=site_type,
+                        page_type=page_type,
+                        device_type=device_type,
+                    )
 
         else:
             if not test_id:
@@ -834,15 +973,17 @@ def get_metrics(state: AgentState) -> AgentState:
                 test_id=test_id,
             )
 
-        if len(group_runs) < 3:
-            print(f"  ❌ Stable group requires 3 runs, found {len(group_runs)}")
+        if len(group_runs) < 1:
+            print(f"  ❌ No runs found for this page/device combination.")
             return {
                 **state,
                 "should_end": True,
                 "confidence": "low",
             }
 
-        # Keep exactly first 3 ordered runs for stable group.
+        if len(group_runs) < 3:
+            print(f"  ⚠️  Only {len(group_runs)} run(s) found — proceeding with reduced confidence.")
+
         group_runs = group_runs[:3]
 
         supporting_test_ids = [row["test_id"] for row in group_runs]
@@ -880,27 +1021,21 @@ def get_metrics(state: AgentState) -> AgentState:
             "test_ids": supporting_test_ids,
             "representative_test_id": representative_test_id,
             "run_count": len(group_runs),
-
-            # Median values are safer than single-run values.
             "avg_lcp_ms": median_or_none([r.get("lcp_ms") for r in group_runs]),
             "avg_tbt_ms": median_or_none([r.get("tbt_ms") for r in group_runs]),
             "avg_cls_score": median_cls_or_none([r.get("cls_score") for r in group_runs]),
             "avg_performance": median_or_none([r.get("performance_score") for r in group_runs]),
-
             "fcp_ms": median_or_none([r.get("fcp_ms") for r in group_runs]),
             "si_ms": median_or_none([r.get("si_ms") for r in group_runs]),
             "tti_ms": median_or_none([r.get("tti_ms") for r in group_runs]),
             "ttfb_ms": median_or_none([r.get("ttfb_ms") for r in group_runs]),
             "inp_ms": median_or_none([r.get("inp_ms") for r in group_runs]),
-
             "failed_metrics": failed_metrics,
             "failed_metric_counts": failed_metric_counts,
         }
 
-        opportunities = get_stable_opportunities(
-            cursor=cursor,
-            test_ids=supporting_test_ids,
-            max_opportunities=max_opportunities,
+        opportunities = get_stable_opportunities_from_lhci(
+            lhci_runs_cache[:3], max_opportunities
         )
 
         if not opportunities:
@@ -914,6 +1049,7 @@ def get_metrics(state: AgentState) -> AgentState:
         group_key = f"{playwright_run_id}_{site_type}_{page_type}_{device_type}"
 
         print(f"  ✅ mode: {mode}")
+        print(f"  ✅ lhci_build_id: {lhci_build_id or 'N/A'}")
         print(f"  ✅ playwright_run_id: {playwright_run_id}")
         print(f"  ✅ group_key: {group_key}")
         print(f"  ✅ supporting_test_ids: {supporting_test_ids}")
@@ -937,10 +1073,11 @@ def get_metrics(state: AgentState) -> AgentState:
         return {
             **state,
             "mode": mode,
-            "test_id": representative_test_id,
+            "test_id": None if lhci_build_id else representative_test_id,
             "representative_test_id": representative_test_id,
             "supporting_test_ids": supporting_test_ids,
             "playwright_run_id": playwright_run_id,
+            "lhci_build_id": lhci_build_id,
             "site_type": site_type,
             "page_type": page_type,
             "device_type": device_type,
@@ -958,6 +1095,104 @@ def get_metrics(state: AgentState) -> AgentState:
 
     finally:
         conn.close()
+# ─────────────────────────────────────────────
+# N1.5 — Qwen plans opportunity order
+# ─────────────────────────────────────────────
+
+def plan_opportunities(state: AgentState) -> AgentState:
+    print("\n[N1.5] Planning opportunity order...")
+
+    opportunities = state.get("opportunities", [])
+    lhci_build_id = state.get("lhci_build_id")
+
+    if not opportunities:
+        return {**state, "should_end": True}
+
+    # Cross-page dedup: skip requires_human_review opportunity_ids already saved for this build.
+    # Patchable (auto_applicable) ones are page-specific so they are never skipped.
+    already_human_review: set = set()
+    if lhci_build_id:
+        try:
+            _conn = get_db_connection()
+            with _conn.cursor() as _cur:
+                _cur.execute(
+                    "SELECT DISTINCT opportunity_id FROM fix_plans "
+                    "WHERE lhci_build_id = %s AND patch_status = 'requires_human_review'",
+                    (lhci_build_id,),
+                )
+                already_human_review = {r[0] for r in _cur.fetchall()}
+            _conn.close()
+            if already_human_review:
+                print(f"  [dedup] Already saved on other pages: {already_human_review}")
+        except Exception as _e:
+            print(f"  [dedup] DB check skipped: {_e}")
+
+    remaining = [o for o in opportunities if o.get("opportunity_id") not in already_human_review]
+
+    if not remaining:
+        print("  All opportunities already covered for this build. Ending.")
+        return {**state, "should_end": True}
+
+    # Ask Qwen to reorder: source-patchable ones first, runtime-profiling ones last.
+    metrics = state.get("metrics", {})
+    opp_list_str = "\n".join([
+        f"{i+1}. {o.get('opportunity_id')} — {o.get('title')} "
+        f"| savings: {o.get('avg_savings_ms')}ms | severity: {o.get('severity')}"
+        for i, o in enumerate(remaining)
+    ])
+
+    prompt = f"""You are a senior web performance engineer for Korean e-commerce.
+
+Page: {state.get("page_type")} | Device: {state.get("device_type")}
+Failed metrics: {metrics.get("failed_metrics", [])}
+
+These are ALL stable Lighthouse opportunities found across 3 audit runs.
+Reorder them so opportunities fixable by editing source code come FIRST.
+Opportunities needing runtime profiling, CDN config, or server changes come LAST — but still include them all.
+
+Opportunities:
+{opp_list_str}
+
+Guidance:
+- Fixable in source: image format/srcset, lazy loading, preload hints, unused CSS imports, component splits.
+- Needs runtime data: total-byte-weight, mainthread-work-breakdown, bootup-time (need Chrome DevTools profiling).
+
+Return ONLY valid JSON:
+{{
+  "ordered_ids": ["opportunity_id_1", "opportunity_id_2", ...],
+  "reasoning": "one sentence"
+}}"""
+
+    try:
+        response = client.chat.completions.create(
+            model=QWEN_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.1,
+        )
+        plan = extract_json(response.choices[0].message.content.strip())
+        ordered_ids = plan.get("ordered_ids", [])
+        print(f"  ✅ Qwen order: {ordered_ids}")
+        print(f"  ✅ Reasoning: {plan.get('reasoning', '')[:120]}")
+
+        id_to_opp = {o["opportunity_id"]: o for o in remaining if o.get("opportunity_id")}
+        reordered = [id_to_opp[oid] for oid in ordered_ids if oid in id_to_opp]
+        already_placed = set(ordered_ids)
+        for o in remaining:
+            if o.get("opportunity_id") not in already_placed:
+                reordered.append(o)
+        remaining = reordered if reordered else remaining
+
+    except Exception as _e:
+        print(f"  ⚠️ Qwen planning failed: {_e} — keeping original order")
+
+    print(f"  Final order ({len(remaining)} opportunities):")
+    for i, o in enumerate(remaining):
+        print(f"    {i+1}. {o.get('opportunity_id')} | {o.get('avg_savings_ms')}ms")
+
+    return {**state, "opportunities": remaining, "opp_index": 0}
+
+
 # ─────────────────────────────────────────────
 # N2 — Pick priority opportunity
 # ─────────────────────────────────────────────
@@ -1150,74 +1385,47 @@ def generate_fix(state: AgentState) -> AgentState:
     rag_context = state.get("rag_context", "")
 
     prompt = f"""
-You are a senior web performance optimization engineer for Korean e-commerce.
+You are a senior web performance optimization engineer for a Korean e-commerce site.
+Analyze the following Lighthouse audit opportunity and produce a detailed fix plan.
 
-Generate ONE staged self-healing Fix Plan.
-Important rule:
-- Do NOT suggest fixing every issue at once.
-- Only explain the selected highest-priority opportunity.
-- Do NOT generate code patches in this step.
-- A separate source-aware patch generator will inspect the actual repository source code later.
-- After a patch is approved/applied, the system will re-run Lighthouse and compare before/after scores.
+Page: {state.get("page_type")} | Device: {state.get("device_type")} | URL: {state.get("url")}
 
-Target audit:
-- test_id: {state.get("test_id")}
-- URL: {state.get("url")}
-- Page type: {state.get("page_type")}
-- Device: {state.get("device_type")}
-- playwright_run_id: {state.get("playwright_run_id")}
-- group_key: {state.get("group_key")}
-- supporting_test_ids: {state.get("supporting_test_ids")}
-
-Current failed metrics:
-{json.dumps(metrics.get("failed_metrics", []), indent=2)}
-
-Current median metrics from stable 3-run group:
+Performance metrics (stable 3-run average):
 - Performance score: {metrics.get("avg_performance")}
 - LCP: {metrics.get("avg_lcp_ms")}ms
 - TBT: {metrics.get("avg_tbt_ms")}ms
 - CLS: {metrics.get("avg_cls_score")}
 - INP: {metrics.get("inp_ms")}ms
 - TTFB: {metrics.get("ttfb_ms")}ms
+- Failed metrics: {metrics.get("failed_metrics", [])}
 
-Selected priority opportunity:
-- Lighthouse opportunity id: {opp.get("opportunity_id")}
+Opportunity to fix:
+- ID: {opp.get("opportunity_id")}
 - Title: {opp.get("title")}
 - Description: {opp.get("description")}
 - Estimated savings: {opp.get("avg_savings_ms")}ms
 - Severity: {opp.get("severity")}
-- Category: {opp.get("category")}
 - Affected metric: {opp.get("affected_metric")}
-- Priority: {opp.get("priority_level")}
-
-Risk:
 - Risk score: {state.get("risk_score")}/10
-- Risk details: {json.dumps(state.get("risk_details", {}), ensure_ascii=False)}
 
-RAG context:
+RAG context (proven fixes from similar sites):
 {rag_context}
+
+Think freely about the real impact of this issue and what the best fix is.
+A separate step will inspect the actual source code and generate the patch — focus on the diagnosis and strategy here.
 
 Return ONLY valid JSON:
 {{
-  "action": "specific one-sentence fix action",
-  "reasoning": "why this one fix should be handled first",
+  "action": "specific fix action",
+  "reasoning": "why this fix matters and what it addresses",
   "problem_summary": "short dashboard-friendly problem summary",
-  "impact_if_not_fixed": "impact if ignored",
-  "impact_if_fixed": "expected improvement after this staged fix",
-  "ux_improvement": "user experience benefit",
-  "seo_impact": "SEO/Core Web Vitals benefit",
-  "priority_level": "{opp.get("priority_level")}",
+  "impact_if_not_fixed": "real impact on users and business if ignored",
+  "impact_if_fixed": "expected improvement after the fix",
+  "priority_level": "urgent | high | medium | low",
   "estimated_improvement": {opp.get("avg_savings_ms")},
   "affected_metric": "{opp.get("affected_metric")}",
-  "manual_review_reason": null,
-  "next_step_after_patch": "generate source-aware patch from Agent_Workspace, wait for human approval, apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
+  "manual_review_reason": null
 }}
-
-Rules:
-- Do not output patches.
-- Do not invent file paths.
-- Do not exaggerate severity. If a metric is not over the project threshold, describe it as an optimization opportunity rather than a failure.
-- If this opportunity likely requires server/CDN/cache/infrastructure changes, say it should be manually reviewed unless source-aware patch generation finds a safe config file.
 """
 
     try:
@@ -1225,7 +1433,7 @@ Rules:
             model=QWEN_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=900,
-            temperature=0.1,
+            temperature=0.3,
         )
 
         raw = response.choices[0].message.content.strip()
@@ -1267,13 +1475,6 @@ Rules:
     fix_rec.setdefault("estimated_improvement", opp["avg_savings_ms"])
     fix_rec.setdefault("affected_metric", opp["affected_metric"])
     fix_rec.setdefault("manual_review_reason", None)
-    fix_rec.setdefault(
-        "next_step_after_patch",
-        (
-            "generate source-aware patch from Agent_Workspace, wait for human approval, "
-            "apply patch, run build test, then rerun Lighthouse and compare new score with old_score"
-        ),
-    )
 
     # Source-aware patch generation happens in N5.5 only.
     # This step only creates the dashboard text-level Fix Plan.
@@ -1399,6 +1600,7 @@ def generate_source_patch(state: AgentState) -> AgentState:
             fix_plan=source_fix_plan,
             source_context=source_context,
             repo_path=repo_path,
+            rag_context=state.get("rag_context", ""),
         )
 
         print(
@@ -1408,18 +1610,22 @@ def generate_source_patch(state: AgentState) -> AgentState:
         )
 
         # Duplicate patch prevention inside the same ranked queue.
+        # Check ALL patches (multi-file), not just the first.
         generated_signatures = list(state.get("generated_patch_signatures", []) or [])
 
         if patch_result.get("auto_applicable") and patch_result.get("patches"):
-            patch = patch_result["patches"][0]
+            all_patches = patch_result["patches"]
 
-            signature = "::".join([
-                str(patch.get("target_file", "")),
-                str(patch.get("original_code", "")),
-                str(patch.get("suggested_code", "")),
-            ])
+            new_signatures = [
+                "::".join([
+                    str(p.get("target_file", "")),
+                    str(p.get("original_code", "")),
+                    str(p.get("suggested_code", "")),
+                ])
+                for p in all_patches
+            ]
 
-            if signature in generated_signatures:
+            if any(sig in generated_signatures for sig in new_signatures):
                 reason = (
                     "Duplicate patch already generated for another queued Fix Plan "
                     "in the same audit group."
@@ -1437,10 +1643,10 @@ def generate_source_patch(state: AgentState) -> AgentState:
                 fix_rec["manual_review_reason"] = reason
 
             else:
-                generated_signatures.append(signature)
+                generated_signatures.extend(new_signatures)
 
                 fix_rec["auto_applicable"] = True
-                fix_rec["patches"] = patch_result.get("patches", [])
+                fix_rec["patches"] = all_patches
                 fix_rec["manual_review_reason"] = None
 
         else:
@@ -1489,6 +1695,42 @@ def generate_source_patch(state: AgentState) -> AgentState:
 # N6 — Save Fix Plan
 # ─────────────────────────────────────────────
 
+def _has_conflicting_patch(cursor, lhci_build_id: str, patches: list) -> bool:
+    """
+    Returns True if any patch in `patches` targets the same (target_file, original_code)
+    as an already-saved fix plan for this build. Prevents two fix plans from queuing
+    patches that replace the same code block — the second would always apply_failed.
+    """
+    if not patches or not lhci_build_id:
+        return False
+
+    for patch in patches:
+        original_code = patch.get("original_code")
+        target_file = patch.get("target_file")
+        if not original_code or not target_file:
+            continue
+
+        cursor.execute(
+            """
+            SELECT fpc.id
+            FROM fix_plan_changes fpc
+            JOIN fix_plans fp ON fpc.fix_plan_id = fp.id
+            WHERE fp.lhci_build_id = %s
+              AND fpc.target_file = %s
+              AND fpc.original_code = %s
+              AND fp.patch_status NOT IN (
+                  'superseded', 'rejected', 'apply_failed', 'requires_human_review'
+              )
+            LIMIT 1
+            """,
+            (lhci_build_id, target_file, original_code),
+        )
+        if cursor.fetchone():
+            return True
+
+    return False
+
+
 def save_fix_plan(state: AgentState) -> AgentState:
     print("\n[N6] Saving Fix Plan...")
 
@@ -1502,17 +1744,18 @@ def save_fix_plan(state: AgentState) -> AgentState:
     patches = fix_rec.get("patches", []) or []
     has_patch = bool(fix_rec.get("auto_applicable") and patches)
 
-    # Queue rule:
-    # - First auto-applicable plan waits for human review.
-    # - Later auto-applicable plans wait in queue.
-    # - Non-patchable plans require human review.
+    # Plans with patches wait for human review in dashboard (shows before/after diff).
+    # Developer approves → approved_to_apply → apply_worker picks up.
+    # Non-patchable plans go to requires_human_review for text-level review.
     if has_patch:
         patch_status = "pending_review" if queue_rank == 1 else "queued"
     else:
         patch_status = "requires_human_review"
 
     base_thread_id = state.get("thread_id") or str(uuid.uuid4())
-    unique_thread_id = f"{base_thread_id}_{queue_rank}"
+    lhci_build_id = state.get("lhci_build_id") or ""
+    build_suffix = lhci_build_id[:8] if lhci_build_id else str(uuid.uuid4())[:8]
+    unique_thread_id = f"{base_thread_id}_{build_suffix}_{queue_rank}"
 
     patch_code = {
         "auto_applicable": fix_rec.get("auto_applicable", False),
@@ -1520,79 +1763,85 @@ def save_fix_plan(state: AgentState) -> AgentState:
         "manual_review_reason": fix_rec.get("manual_review_reason"),
     }
 
-    risk_details = state.get("risk_details", {}) or {}
+    rag_evidence = state.get("rag_evidence", []) or []
+    _top_rag = rag_evidence[0] if rag_evidence else {}
+    _risk_score = state.get("risk_score", 0)
 
-    # Make sure queue/group data is also available in risk_details
-    # even if assess_risk did not set it for some reason.
-    risk_details.setdefault("group_key", state.get("group_key"))
-    risk_details.setdefault("playwright_run_id", state.get("playwright_run_id"))
-    risk_details.setdefault("supporting_test_ids", state.get("supporting_test_ids", []))
-    risk_details.setdefault("representative_test_id", state.get("representative_test_id"))
-    risk_details.setdefault("run_frequency", state.get("run_frequency", 1))
-    risk_details.setdefault("queue_rank", queue_rank)
-    risk_details.setdefault("total_queue_items", total_queue_items)
-    risk_details.setdefault("aggregation_method", "3-run stable group")
-
-    attempt_event = {
-        "event": "fix_plan_generated",
-        "test_id": state["test_id"],
-        "representative_test_id": state.get("representative_test_id"),
-        "supporting_test_ids": state.get("supporting_test_ids", []),
-        "playwright_run_id": state.get("playwright_run_id"),
-        "group_key": state.get("group_key"),
-        "queue_rank": queue_rank,
-        "total_queue_items": total_queue_items,
-        "opportunity_id": opp["id"],
-        "lighthouse_opportunity_id": opp.get("opportunity_id"),
-        "patch_status": patch_status,
-        "auto_applicable": fix_rec.get("auto_applicable", False),
-        # Source-aware patch tracking.
-        "source_patch_auto_applicable": fix_rec.get("auto_applicable", False),
-        "source_patch_count": len(patches),
-        "source_patch_reason": fix_rec.get("manual_review_reason"),
-        "repo_path": state.get("repo_path"),
-        "rag_used": bool(state.get("rag_context")),
-        "rag_evidence": state.get("rag_evidence", []),
-        "next_step": fix_rec.get("next_step_after_patch"),
-    }
+    attempt_history = [
+        {
+            "step": "lhci_fetch",
+            "runs_found": state.get("run_frequency", 0),
+            "page_type": state.get("page_type"),
+            "device_type": state.get("device_type"),
+            "lhci_build_id": lhci_build_id[:8] if lhci_build_id else None,
+        },
+        {
+            "step": "opportunity_selected",
+            "opportunity_id": opp["id"],
+            "title": opp.get("title"),
+            "queue_rank": queue_rank,
+            "total_opportunities": total_queue_items,
+            "avg_savings_ms": opp.get("avg_savings_ms"),
+            "frequency": opp.get("frequency"),
+        },
+        {
+            "step": "rag_search",
+            "docs_retrieved": len(rag_evidence),
+            "top_match": _top_rag.get("title"),
+            "top_similarity": _top_rag.get("similarity"),
+            "rag_evidence": rag_evidence,
+        },
+        {
+            "step": "risk_assessment",
+            "risk_score": _risk_score,
+            "risk_label": "low" if _risk_score <= 3 else "medium" if _risk_score <= 6 else "high",
+        },
+        {
+            "step": "qwen_plan",
+            "action": fix_rec.get("action"),
+            "auto_applicable": fix_rec.get("auto_applicable", False),
+        },
+        {
+            "step": "patch_generated",
+            "auto_applicable": bool(patches),
+            "patch_count": len(patches),
+            "target_files": [p.get("target_file") for p in patches],
+            "manual_review_reason": fix_rec.get("manual_review_reason") if not patches else None,
+        },
+        {
+            "step": "saved",
+            "patch_status": patch_status,
+            "thread_id": unique_thread_id,
+        },
+    ]
 
     fix_plan_data = {
-        # Existing columns
-        "thread_id": unique_thread_id,
-        "test_id": state["test_id"],
-        "opportunity_id": opp["id"],
-        "action": fix_rec.get("action", ""),
-        "reasoning": fix_rec.get("reasoning", ""),
-        "patch_code": patch_code,
-        "problem_summary": fix_rec.get("problem_summary"),
-        "impact_if_not_fixed": fix_rec.get("impact_if_not_fixed"),
-        "impact_if_fixed": fix_rec.get("impact_if_fixed"),
-        "ux_improvement": fix_rec.get("ux_improvement"),
-        "seo_impact": fix_rec.get("seo_impact"),
-        "priority_level": fix_rec.get("priority_level", "medium"),
-        "estimated_improvement": fix_rec.get("estimated_improvement", 0),
-        "old_score": metrics.get("avg_performance"),
-        "total_risk_score": state.get("risk_score", 0),
-        "risk_details": risk_details,
-        "confidence_level": state.get("confidence", "medium"),
-        "patch_status": patch_status,
-        "attempt_count": 0,
-        "attempt_history": [attempt_event],
-        "branch_name": state.get("pr_branch"),
-
-        # New production-ready columns
-        "playwright_run_id": state.get("playwright_run_id"),
-        "group_key": state.get("group_key"),
-        "page_type": state.get("page_type"),
-        "device_type": state.get("device_type"),
-        "site_type": state.get("site_type"),
-        "supporting_test_ids": state.get("supporting_test_ids", []),
-        "queue_rank": queue_rank,
-        "total_queue_items": total_queue_items,
-        "run_frequency": state.get("run_frequency", 1),
-        "workspace_path": state.get("workspace_path"),
-        "build_status": "not_run",
-        "audit_status": "not_run",
+        "thread_id":            unique_thread_id,
+        "lhci_build_id":        state.get("lhci_build_id"),
+        "opportunity_id":       opp["id"],
+        "page_type":            state.get("page_type"),
+        "device_type":          state.get("device_type"),
+        "site_type":            state.get("site_type"),
+        "action":               fix_rec.get("action", ""),
+        "reasoning":            fix_rec.get("reasoning", ""),
+        "problem_summary":      fix_rec.get("problem_summary"),
+        "impact_if_not_fixed":  fix_rec.get("impact_if_not_fixed"),
+        "impact_if_fixed":      fix_rec.get("impact_if_fixed"),
+        "priority_level":       fix_rec.get("priority_level", "medium"),
+        "estimated_improvement":fix_rec.get("estimated_improvement", 0),
+        "old_score":            metrics.get("avg_performance"),
+        "confidence_level":     state.get("confidence", "medium"),
+        "run_frequency":        state.get("run_frequency", 1),
+        "queue_rank":           queue_rank,
+        "total_queue_items":    total_queue_items,
+        "failed_metrics":       metrics.get("failed_metrics", []),
+        "failed_metric_counts": metrics.get("failed_metric_counts", {}),
+        "auto_applicable":      bool(patches),
+        "patch_code":           patch_code,
+        "patch_status":         patch_status,
+        "branch_name":          state.get("pr_branch"),
+        "workspace_path":       state.get("workspace_path"),
+        "attempt_history":      attempt_history,
     }
 
     if state.get("dry_run"):
@@ -1610,6 +1859,28 @@ def save_fix_plan(state: AgentState) -> AgentState:
     fix_plan_id = None
 
     try:
+        # Save-time dedup: if an earlier fix plan in this build already patches
+        # the same original_code in the same file, mark this one as superseded
+        # so it never reaches the dashboard or apply_worker.
+        lhci_build_id = state.get("lhci_build_id") or ""
+        if patches and _has_conflicting_patch(cursor, lhci_build_id, patches):
+            print(
+                f"  ⚠️  Conflicting patch already queued for this build "
+                f"(same target_file + original_code). Marking as superseded."
+            )
+            patches = []
+            patch_status = "superseded"
+            fix_plan_data["patch_status"] = "superseded"
+            fix_plan_data["auto_applicable"] = False
+            fix_plan_data["patch_code"] = {
+                "auto_applicable": False,
+                "patches": [],
+                "manual_review_reason": (
+                    "Superseded: an earlier fix plan in this build already "
+                    "patches the same code block in the same file."
+                ),
+            }
+
         fix_plan_id = safe_insert(
             cursor=cursor,
             table_name="fix_plans",
@@ -1695,6 +1966,7 @@ def build_agent():
     graph = StateGraph(AgentState)
 
     graph.add_node("get_metrics", get_metrics)
+    graph.add_node("plan_opportunities", plan_opportunities)
     graph.add_node("pick_opportunity", pick_opportunity)
     graph.add_node("search_rag", search_rag)
     graph.add_node("assess_risk", assess_risk)
@@ -1707,6 +1979,15 @@ def build_agent():
     graph.add_conditional_edges(
         "get_metrics",
         route_after_n1,
+        {
+            "pick_opportunity": "plan_opportunities",
+            "end": END,
+        },
+    )
+
+    graph.add_conditional_edges(
+        "plan_opportunities",
+        lambda s: "end" if s.get("should_end") else "pick_opportunity",
         {
             "pick_opportunity": "pick_opportunity",
             "end": END,

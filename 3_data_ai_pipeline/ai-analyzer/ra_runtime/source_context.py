@@ -40,6 +40,7 @@ MAX_FILE_CHARS = 20000
 MAX_SNIPPET_CHARS = 5000
 MAX_CANDIDATE_FILES = 5
 MAX_FILES_TO_SCORE = 160
+MAX_DIAGNOSIS_FILES = 15
 
 
 FIX_TYPE_KEYWORDS: Dict[str, List[str]] = {
@@ -142,6 +143,23 @@ FIX_TYPE_RULES = {
         "boost": [],
         "penalty": [],
     }
+}
+
+
+# Per opportunity-id: files matching these patterns get a large score boost
+# so they always appear in the top candidates regardless of fix_type scoring.
+OPPORTUNITY_FORCED_INCLUDES: Dict[str, Dict[str, List[str]]] = {
+    # Image opportunities — any file rendering <img> tags is relevant
+    "uses-responsive-images": {"content": ["<img"], "path": []},
+    "offscreen-images":        {"content": ["<img"], "path": []},
+    "prioritize-lcp-image":    {"content": ["<img"], "path": []},
+    # Render-blocking — layout and config files hold CSS imports / headers
+    "render-blocking-resources": {"content": [], "path": ["layout", "next.config", "globals"]},
+    "unminified-css":            {"content": [], "path": ["globals", "layout", "next.config"]},
+    "unused-css-rules":          {"content": [], "path": ["globals", "layout"]},
+    # JS opportunities — layout/providers are the right place for dynamic imports
+    "mainthread-work-breakdown": {"content": ["provider", "analytics", "swetrix"], "path": ["layout"]},
+    "unused-javascript":         {"content": ["provider", "analytics", "swetrix"], "path": ["layout"]},
 }
 
 
@@ -585,12 +603,25 @@ def score_by_rules(
     return score
 
 
+def score_opportunity_boost(path_text: str, content_text: str, opportunity_id: str) -> int:
+    rules = OPPORTUNITY_FORCED_INCLUDES.get(opportunity_id, {})
+    score = 0
+    for p in rules.get("path", []):
+        if p in path_text:
+            score += 50
+    for p in rules.get("content", []):
+        if p in content_text:
+            score += 40
+    return score
+
+
 def score_file(
     path: Path,
     content: str,
     keywords: List[str],
     page_type: str,
     fix_type: str,
+    opportunity_id: str = "",
 ) -> int:
     score = 0
 
@@ -600,6 +631,7 @@ def score_file(
     score += score_page_scope(path_text, page_type)
     score += score_fix_type_signals(path_text, content_text, fix_type)
     score += score_by_rules(path_text, content_text, fix_type)
+    score += score_opportunity_boost(path_text, content_text, opportunity_id)
 
     for keyword in keywords:
         keyword = keyword.lower()
@@ -725,6 +757,72 @@ def make_snippet(
 
     return content[start:end]
 
+def get_file_signature(content: str) -> str:
+    """First 8 non-empty lines — shows imports and component/function name."""
+    sig_lines = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped:
+            sig_lines.append(stripped)
+        if len(sig_lines) >= 8:
+            break
+    return "\n".join(sig_lines)
+
+
+def collect_diagnosis_context(
+    repo_path: str,
+    target_dir: str,
+    fix_plan: Dict[str, Any],
+    max_files: int = MAX_DIAGNOSIS_FILES,
+) -> List[Dict[str, Any]]:
+    """
+    Return lightweight signatures for all related files (up to max_files).
+    Used in Phase 1 so Qwen can identify which files cause the performance problem
+    before loading full file contents.
+    """
+    repo_root = Path(repo_path).resolve()
+    target_root = (repo_root / target_dir).resolve()
+
+    if not target_root.exists():
+        return []
+
+    page_type = normalize_text(fix_plan.get("page_type"))
+    fix_type = classify_fix_type(fix_plan)
+    keywords = build_search_keywords(fix_plan=fix_plan, page_type=page_type, fix_type=fix_type)
+    opportunity_id = str(
+        fix_plan.get("opportunity_id")
+        or (fix_plan.get("opportunity") or {}).get("opportunity_id")
+        or ""
+    )
+
+    source_files = list_source_files_fallback(target_root)
+
+    scored: List[Dict[str, Any]] = []
+    for file_path in source_files:
+        content = read_file_limited(file_path)
+        if not content:
+            continue
+        score = score_file(
+            path=file_path,
+            content=content,
+            keywords=keywords,
+            page_type=page_type,
+            fix_type=fix_type,
+            opportunity_id=opportunity_id,
+        )
+        if score <= 0:
+            continue
+        relative_path = file_path.relative_to(repo_root)
+        scored.append({
+            "path": str(relative_path),
+            "score": score,
+            "signature": get_file_signature(content),
+        })
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    return scored[:max_files]
+
+
 def collect_source_context(
     repo_path: str,
     target_dir: str,
@@ -743,6 +841,11 @@ def collect_source_context(
 
     page_type = normalize_text(fix_plan.get("page_type"))
     fix_type = classify_fix_type(fix_plan)
+    opportunity_id = str(
+        fix_plan.get("opportunity_id")
+        or (fix_plan.get("opportunity") or {}).get("opportunity_id")
+        or ""
+    )
 
     keywords = build_search_keywords(
         fix_plan=fix_plan,
@@ -773,6 +876,7 @@ def collect_source_context(
             keywords=keywords,
             page_type=page_type,
             fix_type=fix_type,
+            opportunity_id=opportunity_id,
         )
 
         if score <= 0:

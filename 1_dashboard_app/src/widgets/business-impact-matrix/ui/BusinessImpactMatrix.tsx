@@ -100,6 +100,21 @@ function getConfidenceLabel(confidence: string | undefined): string {
   return '미연동';
 }
 
+function formatAuditTime(value: string | undefined): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date);
+}
+
 function getTrendValue(
   data: NonNullable<ReturnType<typeof usePerformanceData>['data']>,
   metricKey: string,
@@ -122,6 +137,10 @@ type MetricValue = { value: number; target: number; available?: boolean };
 
 function isMetricAvailable(metric: MetricValue | undefined): metric is MetricValue {
   return Boolean(metric && metric.available !== false && Number.isFinite(metric.value));
+}
+
+function isMetricPresent(metric: MetricValue | undefined): metric is MetricValue {
+  return Boolean(metric && Number.isFinite(metric.value));
 }
 
 function getBenchmarkPosition(
@@ -185,39 +204,48 @@ export function BusinessImpactMatrix() {
 
   const firstSessions = data.rum.userJourney[0]?.sessions ?? 0;
   const sessions = data.businessMetrics?.trafficSessions?.sessions ?? firstSessions;
-  const sessionConfidence = data.businessMetrics?.trafficSessions?.confidence;
-  const sessionPeriod = data.businessMetrics?.trafficSessions?.period ?? (firstSessions > 0 ? 'RUM 여정 기준' : '세션 데이터 없음');
-  const sessionSource = data.businessMetrics?.trafficSessions?.source ?? (firstSessions > 0 ? '사용자 여정 단계 데이터' : '내부 세션 데이터 필요');
+  const auditInfo = data.businessMetrics?.performanceAudit;
+  const auditMeasuredAt = formatAuditTime(auditInfo?.latestMeasuredAt);
+  const auditPages = auditInfo?.pages?.length ? auditInfo.pages.length + '개 페이지 평균' : '측정 페이지 평균';
+  const auditSource = auditInfo?.source ?? 'lhci.runs';
   const targetBrand = decathlon.brand;
   const hasConversionBaseline = data.businessMetrics?.conversionRate?.value != null;
   const baselineConversionRate = data.businessMetrics?.conversionRate?.value ?? 0;
 
   const rows = METRICS.map((metric) => {
     const current = (decathlon.metrics as Record<string, MetricValue>)[metric.key];
-    if (!isMetricAvailable(current)) return null;
+    if (!isMetricPresent(current)) return null;
 
-    const score = getScore(current.value, current.target, metric.higherIsBetter);
-    const position = getBenchmarkPosition(data.benchmarks, metric.key, targetBrand, metric.higherIsBetter);
+    const hasMeasurement = isMetricAvailable(current);
+    const score = hasMeasurement ? getScore(current.value, current.target, metric.higherIsBetter) : 0;
+    const position = hasMeasurement
+      ? getBenchmarkPosition(data.benchmarks, metric.key, targetBrand, metric.higherIsBetter)
+      : '측정 데이터 없음';
     const affectedSessions = getStepSessions(data.rum.userJourney, metric.key);
-    const priorityScore = calcPriorityScore({
-      current: current.value,
-      target: current.target,
-      higherIsBetter: metric.higherIsBetter,
-      affectedSessions,
-      totalSessions: sessions,
-    });
-    const expectedEffect = hasConversionBaseline
-      ? estimateMetricBusinessEffect({
-          metricKey: metric.key,
+    const priorityScore = hasMeasurement
+      ? calcPriorityScore({
           current: current.value,
           target: current.target,
-          baselineConversionRate,
-        }).label
+          higherIsBetter: metric.higherIsBetter,
+          affectedSessions,
+          totalSessions: sessions,
+        })
+      : 0;
+    const expectedEffect = hasConversionBaseline
+      ? hasMeasurement
+        ? estimateMetricBusinessEffect({
+            metricKey: metric.key,
+            current: current.value,
+            target: current.target,
+            baselineConversionRate,
+          }).label
+        : '실측 연결 후 계산'
       : '전환율 데이터 연결 후 계산';
 
     return {
       ...metric,
       current: current.value,
+      hasMeasurement,
       score,
       priorityScore,
       position,
@@ -226,6 +254,7 @@ export function BusinessImpactMatrix() {
     };
   }).filter(Boolean) as (MetricDef & {
     current: number;
+    hasMeasurement: boolean;
     score: number;
     priorityScore: number;
     position: string;
@@ -235,16 +264,10 @@ export function BusinessImpactMatrix() {
 
   const lcp = decathlon.metrics.lcp;
   const inp = decathlon.metrics.inp;
-  const tbt = decathlon.metrics.tbt;
   const cls = decathlon.metrics.cls;
-  const responseMetric = isMetricAvailable(inp) ? inp : tbt;
-  const responseMetricKey = isMetricAvailable(inp) ? 'inp' : 'tbt';
-  const responseMetricLabel = isMetricAvailable(inp) ? `INP ${inp.value}ms` : `TBT ${tbt.value}ms`;
-  const responseArea = isMetricAvailable(inp)
-    ? '전환 여정 · 장바구니/결제 조작감'
-    : 'INP 미수집 · TBT로 스크립트 반응성 대리 진단';
   const speedScore = getScore(lcp.value, lcp.target, false);
-  const responseScore = getScore(responseMetric.value, responseMetric.target, false);
+  const hasInpMeasurement = isMetricAvailable(inp);
+  const responseScore = hasInpMeasurement ? getScore(inp.value, inp.target, false) : 0;
   const stabilityScore = getScore(cls.value, cls.target, false);
   const seoScore = decathlon.scores.seo;
   const failCount = rows.filter((row) => row.score < 90).length;
@@ -265,12 +288,13 @@ export function BusinessImpactMatrix() {
     {
       label: '반응성',
       value: responseScore,
-      metric: responseMetricLabel,
-      area: responseArea,
+      metric: `INP ${inp.value}ms`,
+      area: hasInpMeasurement ? '전환 여정 · 장바구니/결제 조작감' : 'INP 미수집 · 클론사이트 실측 연결 필요',
       change: (() => {
-        const trend = getTrendValue(data, responseMetricKey);
+        if (!hasInpMeasurement) return null;
+        const trend = getTrendValue(data, 'inp');
         if (!trend) return null;
-        return getScore(trend.current, responseMetric.target, false) - getScore(trend.previous, responseMetric.target, false);
+        return getScore(trend.current, inp.target, false) - getScore(trend.previous, inp.target, false);
       })(),
     },
     {
@@ -299,9 +323,9 @@ export function BusinessImpactMatrix() {
           </span>
         </div>
         <div className={styles.header_badge}>
-          <span>{getConfidenceLabel(sessionConfidence)} · {sessionPeriod}</span>
-          <strong>{formatCompactCount(sessions)}</strong>
-          <em>{sessionSource}</em>
+          <span>{getConfidenceLabel(auditInfo?.confidence)} · Lighthouse 갱신</span>
+          <strong>{auditMeasuredAt}</strong>
+          <em>{auditPages} · {auditSource}</em>
         </div>
       </div>
 
@@ -385,6 +409,7 @@ export function BusinessImpactMatrix() {
                 </td>
                 <td className={styles.td_cvr}>
                   <span className={`${styles.score_pill} ${styles[scoreTone(row.score)]}`}>{row.score}</span>
+                  {!row.hasMeasurement && <span className={styles.position_note}>측정 대기</span>}
                 </td>
                 <td className={styles.td}>
                   <span className={styles.business_use}>
@@ -394,7 +419,7 @@ export function BusinessImpactMatrix() {
                 </td>
                 <td className={styles.td_revenue}>
                   <span className={styles.coeff}>
-                    {row.score < 80 ? `개선 여지 ${100 - row.score}점` : '목표권'}
+                    {!row.hasMeasurement ? '실측 필요' : row.score < 80 ? `개선 여지 ${100 - row.score}점` : '목표권'}
                   </span>
                   <span className={styles.priority_note}>영향 범위 {formatCompactCount(row.affectedSessions)} 세션</span>
                   <span className={styles.effect_note}>{row.expectedEffect}</span>

@@ -253,6 +253,11 @@ def prepare_workspace(
     if not final_repo_url:
         raise GitWorkspaceError("repo_url is empty. Set GITHUB_REPO_URL or pass repo_url.")
 
+    # Inject GITHUB_TOKEN into HTTPS URL so git can clone private repos.
+    _token = os.getenv("GITHUB_TOKEN", "")
+    if _token and final_repo_url.startswith("https://github.com/"):
+        final_repo_url = final_repo_url.replace("https://", f"https://{_token}@")
+
     paths = get_workspace_paths(fix_plan_id, workspace_dir)
 
     workspace_root = paths["workspace_root"]

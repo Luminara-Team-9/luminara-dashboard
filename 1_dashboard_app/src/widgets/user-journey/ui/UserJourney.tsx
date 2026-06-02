@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
 import { calcConversionRatePercent, calcDropoff } from '@/shared/lib/estimationFormulas';
 import { formatCompactCount } from '@/shared/lib/format';
@@ -23,6 +24,7 @@ const MAX_VISIBLE_PATHS = 4;
 
 const PAGE_CONTEXT_LABEL: Record<PageType, string> = {
   main: '탐색 화면',
+  category: '카테고리 화면',
   product: '상품 화면',
   checkout: '결제 화면',
 };
@@ -43,11 +45,14 @@ const SUMMARY_STEP_LABEL: Record<string, string> = {
   검색: '상품 검색',
   '검색/목록': '상품 탐색',
   '사이트 진입': '사이트 진입',
+  '방문 시작': '방문 시작',
   '방문 세션': '방문 세션',
   '상품 탐색': '상품 탐색',
+  '카테고리 탐색': '카테고리 탐색',
   '상품 상세': '상품 상세',
   '상품 상세 조회': '상품 상세 조회',
   장바구니: '장바구니',
+  '장바구니 페이지': '장바구니 페이지',
   '장바구니 담기': '장바구니 담기',
   결제: '결제 진입',
   '결제 진입': '결제 진입',
@@ -79,9 +84,13 @@ function getPathLastMetrics(
 function getReadableEvent(event: string): string {
   if (event === 'pageview') return '페이지 조회';
   if (event === '/') return '메인 페이지';
-  if (event === '/cart') return '장바구니';
-  if (event === '/login') return '로그인';
+  if (event === '/cart') return '장바구니 페이지';
+  if (event === '/login') return '로그인 페이지';
   if (event === '/s/our-stores') return '매장 찾기';
+  if (event.startsWith('/category/')) {
+    const categoryId = event.split('/').filter(Boolean).at(-1);
+    return categoryId ? `카테고리 ${categoryId}` : '카테고리 탐색';
+  }
   if (event.startsWith('/product/')) {
     const productId = event.split('/').filter(Boolean).at(-1);
     return productId ? `상품 상세 ${productId}` : '상품 상세';
@@ -124,7 +133,7 @@ function getReadableResult(
   }
 
   return {
-    title: '상품 상세 진입 전 탐색 종료',
+    title: '메인/탐색 화면에서 종료',
     detail: metrics
       ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 버튼 반응 ${metrics.inp.value}ms`
       : `${pageLabel}에서 이탈`,
@@ -132,6 +141,7 @@ function getReadableResult(
 }
 
 export function UserJourney() {
+  const [allPathsOpen, setAllPathsOpen] = useState(false);
   const { data, loading, error } = usePerformanceData();
 
   if (error) return <p className={styles.error}>{error}</p>;
@@ -154,9 +164,8 @@ export function UserJourney() {
 
   const { userJourney } = data.rum;
   const allSessionPaths = data.rum.sessionPaths ?? [];
-  const sessionPaths = [...allSessionPaths]
-    .sort((a, b) => b.sessions - a.sessions)
-    .slice(0, MAX_VISIBLE_PATHS);
+  const sortedSessionPaths = [...allSessionPaths].sort((a, b) => b.sessions - a.sessions);
+  const sessionPaths = sortedSessionPaths.slice(0, MAX_VISIBLE_PATHS);
   const hiddenPathCount = Math.max(0, allSessionPaths.length - sessionPaths.length);
   const targetBrand = data.benchmarks.find((benchmark) => benchmark.isTarget)?.brand ?? '';
   const pageMetrics = data.pageMetrics as JourneyPageMetrics[];
@@ -183,6 +192,63 @@ export function UserJourney() {
       };
     })
     .sort((a, b) => b.dropped - a.dropped);
+  const renderSessionPath = (pattern: SessionPathPattern, pathIndex: number) => {
+    const metrics = getPathLastMetrics(pattern, pageMetrics, targetBrand);
+    const readableResult = getReadableResult(pattern, metrics);
+    const eventFlow = pattern.path.map((step) => getReadableEvent(step.event)).join(' -> ');
+
+    return (
+      <article key={pattern.id} className={styles.path_card}>
+        <div className={styles.path_card_header}>
+          <div className={styles.path_title_group}>
+            <strong>
+              {pathIndex + 1}. {pattern.name}
+            </strong>
+            <span>
+              {pattern.source} · {DEVICE_LABEL[pattern.device]} · {formatCompactCount(pattern.sessions)} 방문
+            </span>
+          </div>
+          <div
+            className={`${styles.outcome_badge} ${
+              pattern.outcome === 'purchase' ? styles.outcome_success : styles.outcome_dropoff
+            }`}
+          >
+            {OUTCOME_LABEL[pattern.outcome]}
+          </div>
+        </div>
+
+        <div className={styles.path_meta}>
+          <span>유입 {pattern.source}</span>
+          <span>{DEVICE_LABEL[pattern.device]}</span>
+          <span>전체의 {pattern.share.toFixed(1)}%</span>
+        </div>
+
+        <ol className={styles.route_flow} aria-label={`${pattern.name} 경로`}>
+          {pattern.path.map((step, index) => (
+            <li
+              key={`${pattern.id}-${step.event}-${index}`}
+              className={`${styles.route_step} ${
+                index === pattern.path.length - 1 ? styles.route_last : ''
+              } ${
+                index === pattern.path.length - 1 && pattern.outcome === 'purchase' ? styles.route_success : ''
+              }`}
+            >
+              <strong>{step.step}</strong>
+              {step.detail && <span>{step.detail}</span>}
+            </li>
+          ))}
+        </ol>
+
+        <div className={styles.path_footer}>
+          <p className={styles.event_trace}>수집 이벤트: {eventFlow}</p>
+          <div className={styles.path_result}>
+            <span>{readableResult.title}</span>
+            <em>{readableResult.detail}</em>
+          </div>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <section className={styles.wrapper}>
@@ -248,84 +314,59 @@ export function UserJourney() {
         <div className={styles.path_panel}>
           <div className={styles.panel_header}>
             <h3>대표 방문 경로</h3>
-            <span>세션 수 상위 {MAX_VISIBLE_PATHS}개</span>
+            <span>방문 수 상위 {MAX_VISIBLE_PATHS}개</span>
           </div>
 
           <div className={styles.path_list}>
             {sessionPaths.length > 0 ? (
-              sessionPaths.map((pattern, pathIndex) => {
-                const metrics = getPathLastMetrics(pattern, pageMetrics, targetBrand);
-                const readableResult = getReadableResult(pattern, metrics);
-                const eventFlow = pattern.path.map((step) => getReadableEvent(step.event)).join(' -> ');
-
-                return (
-                  <article key={pattern.id} className={styles.path_card}>
-                    <div className={styles.path_card_header}>
-                      <div className={styles.path_title_group}>
-                        <strong>
-                          {pathIndex + 1}. {pattern.name}
-                        </strong>
-                        <span>
-                          {pattern.source} · {DEVICE_LABEL[pattern.device]} · {formatCompactCount(pattern.sessions)} 세션
-                        </span>
-                      </div>
-                      <div
-                        className={`${styles.outcome_badge} ${
-                          pattern.outcome === 'purchase' ? styles.outcome_success : styles.outcome_dropoff
-                        }`}
-                      >
-                        {OUTCOME_LABEL[pattern.outcome]}
-                      </div>
-                    </div>
-
-                    <div className={styles.path_meta}>
-                      <span>유입 {pattern.source}</span>
-                      <span>{DEVICE_LABEL[pattern.device]}</span>
-                      <span>전체의 {pattern.share.toFixed(1)}%</span>
-                    </div>
-
-                    <ol className={styles.route_flow} aria-label={`${pattern.name} 경로`}>
-                      {pattern.path.map((step, index) => (
-                        <li
-                          key={`${pattern.id}-${step.event}-${index}`}
-                          className={`${styles.route_step} ${
-                            index === pattern.path.length - 1 ? styles.route_last : ''
-                          } ${
-                            index === pattern.path.length - 1 && pattern.outcome === 'purchase' ? styles.route_success : ''
-                          }`}
-                        >
-                          <strong>{step.step}</strong>
-                          {step.detail && <span>{step.detail}</span>}
-                        </li>
-                      ))}
-                    </ol>
-
-                    <div className={styles.path_footer}>
-                      <p className={styles.event_trace}>수집 이벤트: {eventFlow}</p>
-                      <div className={styles.path_result}>
-                        <span>{readableResult.title}</span>
-                        <em>{readableResult.detail}</em>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })
+              sessionPaths.map(renderSessionPath)
             ) : (
               <div className={styles.empty_state}>대표 방문 경로 데이터가 아직 연결되지 않았습니다.</div>
             )}
 
             {hiddenPathCount > 0 && (
               <div className={styles.hidden_notice}>
-                그 외 {hiddenPathCount}개 경로는 세션 수가 낮아 요약에서 제외
+                <span>그 외 {hiddenPathCount}개 경로는 방문 수가 낮아 요약에서 제외</span>
+                <button type="button" onClick={() => setAllPathsOpen(true)}>
+                  전체보기
+                </button>
               </div>
             )}
           </div>
         </div>
       </div>
 
+      {allPathsOpen && (
+        <div className={styles.modal_backdrop} role="presentation" onMouseDown={() => setAllPathsOpen(false)}>
+          <div
+            className={styles.modal_panel}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="all-session-paths-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className={styles.modal_header}>
+              <div>
+                <h3 id="all-session-paths-title">전체 방문 경로</h3>
+                <p>방문 수 기준으로 정렬된 모든 수집 경로</p>
+              </div>
+              <button type="button" onClick={() => setAllPathsOpen(false)}>
+                닫기
+              </button>
+            </div>
+            <div className={styles.modal_list}>
+              {sortedSessionPaths.length > 0 ? (
+                sortedSessionPaths.map(renderSessionPath)
+              ) : (
+                <div className={styles.empty_state}>전체 방문 경로 데이터가 아직 연결되지 않았습니다.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <p className={styles.footnote}>
-        실제 연동 시 모든 개별 여정을 그대로 나열하지 않고, session_start부터 purchase 또는 exit까지의 이벤트를
-        같은 패턴끼리 묶은 뒤 세션 수가 큰 경로만 표시합니다.
+        같은 브라우저 식별자가 길게 유지되는 경우를 보정하기 위해 30분 이상 공백 또는 구매 완료 이후의 탐색은 새 방문으로 나누어 묶습니다.
       </p>
     </section>
   );

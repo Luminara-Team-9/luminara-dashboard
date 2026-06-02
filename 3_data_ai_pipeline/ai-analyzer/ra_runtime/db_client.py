@@ -38,6 +38,7 @@ VALID_FIX_PLAN_STATUSES = {
     "apply_failed",
     "build_testing",
     "build_failed",
+    "build_passed",
     "pushed",
     "push_failed",
     "local_test_running",
@@ -47,6 +48,7 @@ VALID_FIX_PLAN_STATUSES = {
     "pr_created",
     "failed",
     "rejected",
+    "superseded",
 }
 
 
@@ -78,6 +80,20 @@ def get_db_connection():
         host=os.getenv("HOST_IP"),
         port=os.getenv("PGPORT", "5432"),
         dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+    )
+
+
+def get_lhci_connection():
+    """
+    Create PostgreSQL connection to the LHCI database.
+    Same host/port/credentials as core_db, different dbname.
+    """
+    return psycopg2.connect(
+        host=os.getenv("HOST_IP"),
+        port=os.getenv("PGPORT", "5432"),
+        dbname=os.getenv("LHCI_DB", "lhci"),
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
     )
@@ -152,14 +168,12 @@ def claim_next_approved_fix_plan(
                 UPDATE fix_plans fp
                 SET
                     patch_status = 'applying',
-                    attempt_count = COALESCE(fp.attempt_count, 0) + 1,
                     updated_at = NOW()
                 FROM next_plan
                 WHERE fp.id = next_plan.id
                 RETURNING
                     fp.id,
                     fp.thread_id,
-                    fp.test_id,
                     fp.opportunity_id,
                     fp.action,
                     fp.reasoning,
@@ -168,27 +182,21 @@ def claim_next_approved_fix_plan(
                     fp.priority_level,
                     fp.estimated_improvement,
                     fp.old_score,
-                    fp.new_local_score,
-                    fp.new_verified_score,
                     fp.branch_name,
                     fp.pr_url,
                     fp.patch_status,
-                    fp.risk_details,
-                    fp.attempt_count,
                     fp.attempt_history,
-
-                    fp.playwright_run_id,
-                    fp.group_key,
                     fp.page_type,
                     fp.device_type,
                     fp.site_type,
-                    fp.supporting_test_ids,
                     fp.queue_rank,
                     fp.total_queue_items,
                     fp.run_frequency,
                     fp.workspace_path,
-                    fp.build_status,
-                    fp.audit_status
+                    fp.lhci_build_id,
+                    fp.auto_applicable,
+                    fp.failed_metrics,
+                    fp.failed_metric_counts
                 """
             )
 
@@ -253,7 +261,6 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                 SELECT
                     fp.id,
                     fp.thread_id,
-                    fp.test_id,
                     fp.opportunity_id,
                     fp.action,
                     fp.reasoning,
@@ -262,36 +269,26 @@ def get_fix_plan_by_id(fix_plan_id: int) -> Optional[Dict[str, Any]]:
                     fp.priority_level,
                     fp.estimated_improvement,
                     fp.old_score,
-                    fp.new_local_score,
-                    fp.new_verified_score,
                     fp.branch_name,
                     fp.pr_url,
                     fp.patch_status,
-                    fp.risk_details,
-                    fp.attempt_count,
                     fp.attempt_history,
-
-                    fp.playwright_run_id,
-                    fp.group_key,
+                    fp.approved_by,
                     fp.page_type,
                     fp.device_type,
                     fp.site_type,
-                    fp.supporting_test_ids,
                     fp.queue_rank,
                     fp.total_queue_items,
                     fp.run_frequency,
                     fp.workspace_path,
-                    fp.build_status,
-                    fp.audit_status,
-
-                    lr.url,
-                    lr.performance_score,
-                    lr.lcp_ms,
-                    lr.tbt_ms,
-                    lr.cls_score
+                    fp.lhci_build_id,
+                    fp.auto_applicable,
+                    fp.failed_metrics,
+                    fp.failed_metric_counts,
+                    fp.after_score,
+                    fp.created_at,
+                    fp.updated_at
                 FROM fix_plans fp
-                LEFT JOIN lighthouse_runs lr
-                    ON fp.test_id = lr.test_id
                 WHERE fp.id = %s
                 """,
                 (fix_plan_id,),
@@ -389,6 +386,7 @@ def update_fix_plan_status(
     status: str,
     error_message: Optional[str] = None,
     extra_event: Optional[Dict[str, Any]] = None,
+    approved_by: Optional[str] = None,
 ) -> None:
     """
     Update patch_status of a Fix Plan.
@@ -403,6 +401,9 @@ def update_fix_plan_status(
     - approved_to_push
     - pr_created
     - failed
+
+    approved_by: who approved this fix plan (e.g. 'dashboard', 'cli').
+    Only written on the approved_to_apply transition; other callers leave it None.
     """
     if status not in VALID_FIX_PLAN_STATUSES:
         raise ValueError(f"Invalid fix_plan status: {status}")
@@ -421,10 +422,11 @@ def update_fix_plan_status(
                     SET
                         patch_status = %s,
                         rejection_reason = %s,
+                        approved_by = COALESCE(%s, approved_by),
                         updated_at = NOW()
                     WHERE id = %s
                     """,
-                    (status, error_message, fix_plan_id),
+                    (status, error_message, approved_by, fix_plan_id),
                 )
             else:
                 cur.execute(
@@ -432,16 +434,20 @@ def update_fix_plan_status(
                     UPDATE fix_plans
                     SET
                         patch_status = %s,
+                        approved_by = COALESCE(%s, approved_by),
                         updated_at = NOW()
                     WHERE id = %s
                     """,
-                    (status, fix_plan_id),
+                    (status, approved_by, fix_plan_id),
                 )
 
             event = {
                 "event": "fix_plan_status_updated",
                 "patch_status": status,
             }
+
+            if approved_by:
+                event["approved_by"] = approved_by
 
             if error_message:
                 event["error_message"] = error_message
@@ -590,22 +596,12 @@ def mark_all_changes_status(
 
 def save_local_test_result(
     fix_plan_id: int,
-    new_local_score: Optional[float],
+    after_score: Optional[float],
     passed: bool,
     branch_name: Optional[str] = None,
     error_message: Optional[str] = None,
-    build_status: Optional[str] = None,
-    audit_status: Optional[str] = None,
 ) -> None:
-    """
-    Save local verification result after applying patch.
-
-    Allows Dashboard to show:
-    - old score
-    - new local score
-    - improvement
-    - local test status
-    """
+    """Save LHCI score from fix branch back to fix_plans.after_score."""
     conn = None
     patch_status = "local_test_passed" if passed else "local_test_failed"
 
@@ -618,10 +614,8 @@ def save_local_test_result(
                 """
                 UPDATE fix_plans
                 SET
-                    new_local_score = COALESCE(%s, new_local_score),
+                    after_score = COALESCE(%s, after_score),
                     branch_name = COALESCE(%s, branch_name),
-                    build_status = COALESCE(%s, build_status),
-                    audit_status = COALESCE(%s, audit_status),
                     patch_status = %s,
                     rejection_reason = CASE
                         WHEN %s IS NOT NULL THEN %s
@@ -631,10 +625,8 @@ def save_local_test_result(
                 WHERE id = %s
                 """,
                 (
-                    new_local_score,
+                    after_score,
                     branch_name,
-                    build_status,
-                    audit_status,
                     patch_status,
                     error_message,
                     error_message,
@@ -649,10 +641,8 @@ def save_local_test_result(
                     "event": "local_test_result_saved",
                     "patch_status": patch_status,
                     "passed": passed,
-                    "new_local_score": new_local_score,
+                    "after_score": after_score,
                     "branch_name": branch_name,
-                    "build_status": build_status,
-                    "audit_status": audit_status,
                     "error_message": error_message,
                 },
             )
@@ -669,6 +659,70 @@ def save_local_test_result(
             conn.close()
 
 
+def get_fix_plans_list(
+    limit: int = 50,
+    page_type: Optional[str] = None,
+    device_type: Optional[str] = None,
+    patch_status: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Return a list of fix plans for the dashboard.
+    Supports optional filtering by page_type, device_type, patch_status.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            filters = []
+            params: list = []
+            if page_type:
+                filters.append("page_type = %s")
+                params.append(page_type)
+            if device_type:
+                filters.append("device_type = %s")
+                params.append(device_type)
+            if patch_status:
+                filters.append("patch_status = %s")
+                params.append(patch_status)
+
+            where = f"WHERE {' AND '.join(filters)}" if filters else ""
+            params.append(limit)
+
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    thread_id,
+                    page_type,
+                    device_type,
+                    site_type,
+                    action,
+                    problem_summary,
+                    priority_level,
+                    estimated_improvement,
+                    old_score,
+                    patch_status,
+                    approved_by,
+                    branch_name,
+                    queue_rank,
+                    total_queue_items,
+                    (patch_code::jsonb->>'auto_applicable')::boolean AS auto_applicable,
+                    created_at,
+                    updated_at
+                FROM fix_plans
+                {where}
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     fix_plan = get_next_approved_fix_plan()
 
@@ -678,7 +732,7 @@ if __name__ == "__main__":
         print("Approved Fix Plan claimed:")
         print(f"  id: {fix_plan['id']}")
         print(f"  thread_id: {fix_plan['thread_id']}")
-        print(f"  test_id: {fix_plan['test_id']}")
+        print(f"  lhci_build_id: {fix_plan.get('lhci_build_id')}")
         print(f"  status: {fix_plan['patch_status']}")
         print(f"  page_type: {fix_plan['page_type']}")
         print(f"  device_type: {fix_plan['device_type']}")

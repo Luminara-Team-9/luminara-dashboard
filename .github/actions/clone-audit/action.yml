@@ -1,6 +1,20 @@
 name: 'Ephemeral Clone Audit'
 description: 'Boots an immutable Next.js twin, runs LHCI against performance budgets, and gracefully tears down.'
 
+outputs:
+  lhci_run_id:
+    description: "The extracted unique Lighthouse CI run database ID"
+    value: ${{ steps.run_audit.outputs.LHCI_RUN_ID }}
+  page_type:
+    description: "The page archetype evaluated"
+    value: ${{ steps.audit_metadata.outputs.page_type }}
+  device_type:
+    description: "The emulation preset profile used"
+    value: ${{ steps.audit_metadata.outputs.device_type }}
+  playwright_run_id:
+    description: "Context tracking ID for emergency screenshots"
+    value: ${{ steps.audit_metadata.outputs.playwright_run_id }}
+
 inputs:
   twin_image_path:
     description: 'The absolute path to the baked .sif artifact (e.g., pr_123.sif)'
@@ -111,9 +125,22 @@ runs:
           --bind "$AUDIT_TMP":/tmp \
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           npx lhci autorun --config=/workspace/lighthouse-runner/lighthouserc.js \
-          --collect.url=$SINGULARITYENV_LHCI_COLLECT_URL \
-          --collect.settings.preset=desktop \
-          --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN
+          --upload.githubToken=$SINGULARITYENV_LHCI_GITHUB_TOKEN 2>&1 | tee lhci_output.log
+
+        # 🔍 EXTRACT THE RUN ID FROM LOGS
+        # LHCI usually outputs a link like: https://your-lhci-server.com/app/projects/luminara/builds/<build_id>
+        # or references a run token in the build summary. Let's parse out the build/run sequence:
+        EXTRACTED_ID=$(grep -oE "builds/[0-9a-fA-B-]+" lhci_output.log | head -n 1 | cut -d'/' -f2)
+        
+        # Fallback: if it's formatted as an upload run ID string
+        if [ -z "$EXTRACTED_ID" ]; then
+          EXTRACTED_ID=$(grep -oE "run [0-9a-fA-B-]+" lhci_output.log | head -n 1 | awk '{print $2}')
+        fi
+
+        echo "Parsed LHCI Run/Build ID: $EXTRACTED_ID"
+        
+        # Save to GitHub Actions step outputs for parent pipeline retrieval
+        echo "LHCI_RUN_ID=$EXTRACTED_ID" >> $GITHUB_OUTPUT
 
     - name: 📸 Emergency Screenshot (One-Liner)
       if: failure()
@@ -134,6 +161,22 @@ runs:
           ${{ inputs.audit_image_dir }}/infrastructure_audit_ephemeral.sif \
           python3 /workspace/clone_debug.py
         # playwright screenshot http://127.0.0.1:${{ env.TWIN_PORT }} debug_view.png
+
+    # CAPTURE THE METADATA EVEN IF STAGE 3 FAILS
+    - name: 📊 Stage 4 - Extract and Export Audit Metadata
+      id: audit_metadata
+      if: always() 
+      shell: bash
+      run: |
+        # Device Type: In Stage 3 you passed '--collect.settings.preset=desktop', so this is desktop
+        echo "device_type=desktop" >> $GITHUB_OUTPUT
+        
+        # Page Type: Since this pipeline targets the staging build root, it defaults to 'home'.
+        # (If your lighthouserc.js targets multiple pages, you can parse .lighthouseci/manifest.json here instead)
+        echo "page_type=home" >> $GITHUB_OUTPUT
+        
+        # Playwright Run ID: Tie the debug step to the specific GitHub run ID for end-to-end tracing
+        echo "playwright_run_id=pw_${{ github.run_id }}" >> $GITHUB_OUTPUT
 
     - name: 🛑 Stage 5 - Mandatory Teardown and Logs
       if: always()

@@ -28,6 +28,65 @@ const METRIC_LABEL: Record<string, string> = {
   assetSize: '리소스 크기(Asset Size)',
 };
 
+const PATCH_STATUS_LABEL: Record<string, string> = {
+  pending_review: '검토 대기',
+  requires_human_review: '검토 필요',
+  queued: '대기 중',
+  approved_to_apply: '승인됨',
+  applying: '적용 중',
+  patch_applied: '패치 적용됨',
+  build_testing: '빌드 검증 중',
+  pushed: '브랜치 push 완료',
+  completed: '완료',
+  rejected: '거절됨',
+  apply_failed: '적용 실패',
+  build_failed: '빌드 실패',
+  push_failed: 'push 실패',
+  failed: '실패',
+};
+
+const BUILD_STATUS_LABEL: Record<string, string> = {
+  not_run: '빌드 미실행',
+  passed: '빌드 통과',
+  failed: '빌드 실패',
+};
+
+const FAILED_PATCH_STATUSES = new Set(['apply_failed', 'build_failed', 'push_failed', 'failed', 'rejected']);
+
+function normalizeStatus(value?: string): string {
+  return String(value ?? '').toLowerCase();
+}
+
+function buildPatchDetail(plan: AiFixPlan): string | null {
+  const history = plan.lastHistoryEvent;
+  const reason = plan.rejectionReason || history?.error_message;
+  if (reason) return reason;
+  if (history?.worker_id) return 'worker: ' + history.worker_id;
+  if (plan.buildStatus) return BUILD_STATUS_LABEL[normalizeStatus(plan.buildStatus)] ?? plan.buildStatus;
+  return null;
+}
+
+function getPlainPatchStatusLabel(status: string): string {
+  if (!status || status === 'pending_review' || status === 'requires_human_review') return '검토 필요';
+  if (status === 'queued' || status === 'approved_to_apply') return '대기';
+  if (status === 'applying' || status === 'patch_applied' || status === 'local_test_running') return '적용중';
+  if (status === 'build_testing') return '빌드중';
+  if (status === 'pushed' || status === 'completed' || status === 'applied') return '적용됨';
+  if (status === 'rejected') return '거절됨';
+  if (FAILED_PATCH_STATUSES.has(status) || status === 'local_test_failed') return '실패';
+  return PATCH_STATUS_LABEL[status] ?? status;
+}
+
+function getLocalApplyStatusLabel(status: AiActionApplyStatus | null, applying: boolean): string | null {
+  if (applying) return "대기";
+  if (status === "approval-pending" || status === "queued") return "대기";
+  if (status === "running") return "적용중";
+  if (status === "completed") return "적용됨";
+  if (status === "failed") return "실패";
+  if (status === "rejected") return "거절됨";
+  return null;
+}
+
 function cleanActionTitle(value: string): string {
   return value
     .replace(/^\[(?:P\d\s*)?[^\]]+\]\s*/i, '')
@@ -63,9 +122,12 @@ function buildDecisionView(plan: AiFixPlan): DecisionView {
 
 function getButtonLabel(status: AiActionApplyStatus | null, applying: boolean): string {
   if (applying) return '요청 중';
+  if (status === 'approval-ready') return '승인 준비됨';
+  if (status === 'approval-pending') return '승인됨';
   if (status === 'queued') return '요청 전송됨';
   if (status === 'running') return '진행 중';
   if (status === 'completed') return '적용 완료';
+  if (status === 'rejected') return '거절됨';
   if (status === 'pending-connection') return '연결 대기';
   return '적용하기';
 }
@@ -83,7 +145,19 @@ export function AiFixCard({ plan }: Props) {
   const dots = EFFORT_DOTS[plan.effort];
   const decision = buildDecisionView(plan);
   const hasCodePatch = Boolean(decision.beforeCode || decision.afterCode);
-  const requestLocked = applyStatus === 'queued' || applyStatus === 'running' || applyStatus === 'completed';
+  const patchStatus = normalizeStatus(plan.patchStatus);
+  const patchStatusLabel = patchStatus ? getPlainPatchStatusLabel(patchStatus) : null;
+  const patchDetail = buildPatchDetail(plan);
+  const localStatusLabel = getLocalApplyStatusLabel(applyStatus, applying);
+  const isManualOnly = plan.autoApplicable === false;
+  const displayStatusLabel = isManualOnly ? '수동 검토' : localStatusLabel ?? patchStatusLabel;
+  const displayStatusFailed = FAILED_PATCH_STATUSES.has(patchStatus) || applyStatus === "failed" || applyStatus === "rejected";
+  const requestLocked =
+    isManualOnly ||
+    applyStatus === 'approval-pending' ||
+    applyStatus === 'queued' ||
+    applyStatus === 'running' ||
+    applyStatus === 'completed';
 
   useEffect(() => {
     if (plan.remediationStatus) {
@@ -116,6 +190,8 @@ export function AiFixCard({ plan }: Props) {
           priority: plan.priority,
           estimatedImpact: plan.estimatedImpact,
           decision: plan.decision,
+          autoApplicable: plan.autoApplicable,
+          changeCount: plan.changeCount,
         },
       });
 
@@ -151,6 +227,9 @@ export function AiFixCard({ plan }: Props) {
           <span className={styles.metric}>
             {METRIC_LABEL[plan.metricKey] ?? plan.metricKey}
           </span>
+          <span className={isManualOnly ? styles.manual_badge : styles.apply_badge}>
+            {isManualOnly ? '수동 검토' : '적용 가능'}
+          </span>
         </div>
 
         <h3 className={styles.title}>{decision.problem}</h3>
@@ -160,6 +239,12 @@ export function AiFixCard({ plan }: Props) {
           <strong>{decision.area}</strong>
           <p>{decision.conclusion}</p>
         </div>
+
+        {displayStatusLabel && (
+          <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : '')}>
+            상태 - {displayStatusLabel}
+          </p>
+        )}
 
         <div className={styles.bottom}>
           <span className={styles.impact}>자세히 보기</span>
@@ -205,7 +290,7 @@ export function AiFixCard({ plan }: Props) {
                 <p>{decision.evidence}</p>
                 {plan.decision?.source && <em>{plan.decision.source}</em>}
               </section>
-              <section className={styles.detail_section}>
+              <section className={`${styles.detail_section} ${styles.solution_section}`}>
                 <span className={styles.section_label}>해결책</span>
                 {decision.fix ? (
                   <p>{decision.fix}</p>
@@ -239,8 +324,22 @@ export function AiFixCard({ plan }: Props) {
               </section>
             </div>
 
+            {displayStatusLabel && (
+              <section className={styles.status_panel}>
+                <span className={styles.section_label}>적용 진행 상태</span>
+                <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : '')}>
+                  상태 - {displayStatusLabel}
+                </p>
+                {patchDetail && (
+                  <div className={styles.status_detail_box}>
+                    <pre>{patchDetail}</pre>
+                  </div>
+                )}
+              </section>
+            )}
+
             {applyMessage && (
-              <p className={`${styles.apply_notice} ${applyStatus === 'failed' ? styles.apply_notice_error : ''}`}>
+              <p className={`${styles.apply_notice} ${(applyStatus === 'failed' || applyStatus === 'rejected') ? styles.apply_notice_error : ''}`}>
                 {applyMessage}
               </p>
             )}
@@ -252,7 +351,7 @@ export function AiFixCard({ plan }: Props) {
                 disabled={requestLocked || applying}
                 onClick={handleApply}
               >
-                {getButtonLabel(applyStatus, applying)}
+                {isManualOnly ? '수동 검토' : getButtonLabel(applyStatus, applying)}
               </button>
             </div>
           </div>

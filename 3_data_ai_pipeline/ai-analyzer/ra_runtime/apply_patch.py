@@ -121,7 +121,6 @@ def load_patch_result_from_db(fix_plan_id: int) -> Dict[str, Any]:
                 thread_id,
                 patch_status,
                 approved_by,
-                test_id,
                 branch_name
             FROM fix_plans
             WHERE id = %s
@@ -139,7 +138,6 @@ def load_patch_result_from_db(fix_plan_id: int) -> Dict[str, Any]:
             thread_id,
             patch_status,
             approved_by,
-            test_id,
             branch_name,
         ) = row
 
@@ -204,7 +202,6 @@ def load_patch_result_from_db(fix_plan_id: int) -> Dict[str, Any]:
                 "thread_id": thread_id,
                 "patch_status": patch_status,
                 "approved_by": approved_by,
-                "test_id": test_id,
                 "branch_name": branch_name,
             },
         }
@@ -484,7 +481,17 @@ def update_fix_plan_after_apply(
     if apply_result.get("dry_run"):
         return
 
-    status = "patch_applied" if apply_result.get("applied") else "apply_failed"
+    applied_patches = apply_result.get("applied_patches", [])
+    all_already_applied = (
+        bool(applied_patches)
+        and all(p.get("status") == "already_applied" for p in applied_patches)
+    )
+    if all_already_applied:
+        status = "superseded"
+    elif apply_result.get("applied"):
+        status = "patch_applied"
+    else:
+        status = "apply_failed"
 
     history_event = {
         "event": status,
