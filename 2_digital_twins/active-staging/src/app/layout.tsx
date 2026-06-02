@@ -44,7 +44,7 @@ export default function RootLayout({
         <FontShiftSaboteur />
         <LateAnnouncementSaboteur />
 
-        <SwetrixTracker />
+        <SwetrixTracker async />
         <ChatWidget />
 
         {/* DELETED: The Legacy wrapper. Just rendering children directly now! */}
