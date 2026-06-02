@@ -481,7 +481,17 @@ def update_fix_plan_after_apply(
     if apply_result.get("dry_run"):
         return
 
-    status = "patch_applied" if apply_result.get("applied") else "apply_failed"
+    applied_patches = apply_result.get("applied_patches", [])
+    all_already_applied = (
+        bool(applied_patches)
+        and all(p.get("status") == "already_applied" for p in applied_patches)
+    )
+    if all_already_applied:
+        status = "superseded"
+    elif apply_result.get("applied"):
+        status = "patch_applied"
+    else:
+        status = "apply_failed"
 
     history_event = {
         "event": status,

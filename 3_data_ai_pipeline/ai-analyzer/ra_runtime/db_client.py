@@ -48,6 +48,7 @@ VALID_FIX_PLAN_STATUSES = {
     "pr_created",
     "failed",
     "rejected",
+    "superseded",
 }
 
 
