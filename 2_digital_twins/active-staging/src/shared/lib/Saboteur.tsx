@@ -18,7 +18,7 @@ const getSabotageConfig = (pathname: string) => {
     return { tbt: 1500, clsHeight: '20vh', clsDelay: 900, lcpBombs: 1 }; // Annoying
   }
   if (pathname.includes('/cart')) {
-    return { tbt: 500, clsHeight: '0px', clsDelay: 0, lcpBombs: 0 }; // Safe (Let them checkout!)
+    return { tbt: 0, clsHeight: '0px', clsDelay: 0, lcpBombs: 0 }; // Safe (Let them checkout!)
   }
 
   return null; // Fallback: Safe for unmapped routes
