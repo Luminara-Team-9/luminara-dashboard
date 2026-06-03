@@ -66,7 +66,8 @@ jobs:
       - name: 🤖 Awaken AI Remediation Agent
         # ONLY executes if the Composite Action throws an error!
         # if: failure()  # BUG: fires on any step failure (build too), sending empty audit outputs to agent
-        if: steps.gatekeeper_audit.outcome == 'failure'  # FIX: only trigger when audit step specifically failed
+        # FIX: failure() bypasses GitHub's implicit success() check; && scopes it to audit step only
+        if: failure() && steps.gatekeeper_audit.outcome == 'failure'
         run: |
           echo "❌ Audit Failed! Triggering Remediation Daemon..."
           curl -X POST http://localhost:9010/api/trigger-agent \
