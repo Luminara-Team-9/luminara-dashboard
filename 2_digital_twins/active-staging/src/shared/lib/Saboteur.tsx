@@ -27,22 +27,23 @@ const getSabotageConfig = (pathname: string) => {
 // ==========================================
 // 1. DYNAMIC TBT SPIKE (Main Thread Lock)
 // ==========================================
-export function CpuSpike() {
-  const pathname = usePathname();
-
-  useEffect(() => {
-    const config = getSabotageConfig(pathname);
-    if (!config || config.tbt === 0) return;
-
-    const start = performance.now();
-    // Locks the thread synchronously based on the route's severity
-    while (performance.now() - start < config.tbt) {
-      Math.random() * Math.random();
-    }
-  }, [pathname]);
-
-  return null;
-}
+// Removed CpuSpike function to reduce main-thread work
+// export function CpuSpike() {
+//   const pathname = usePathname();
+//
+//   useEffect(() => {
+//     const config = getSabotageConfig(pathname);
+//     if (!config || config.tbt === 0) return;
+//
+//     const start = performance.now();
+//     // Locks the thread synchronously based on the route's severity
+//     while (performance.now() - start < config.tbt) {
+//       Math.random() * Math.random();
+//     }
+//   }, [pathname]);
+//
+//   return null;
+// }
 
 // ==========================================
 // 2. DYNAMIC CLS SHIFT (Ad Injection)
