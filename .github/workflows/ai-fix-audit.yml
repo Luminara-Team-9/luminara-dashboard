@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: 📥 Checkout Fix Branch
         uses: actions/checkout@v4
+        with:
+          clean: true  # FIX: removes gitignored leftovers (node_modules) that persist across runs on self-hosted runners
 
       - name: 🏗️ Build Immutable Web Clone
         uses: ./.github/actions/build-sif-images

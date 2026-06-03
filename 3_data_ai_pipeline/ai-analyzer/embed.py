@@ -369,14 +369,82 @@ CWV_GUIDES = [
         "doc_type": "cwv_guide",
     },
     {
-        "title": "Korean E-commerce Performance Context",
+        "title": "Decathlon E-commerce Performance Context",
         "content": (
-            "Korean e-commerce users expect fast mobile page loads on LTE and 5G networks. "
-            "Product pages often have image galleries that affect LCP. Main pages often have "
-            "hero banners and promotional widgets. Third-party analytics, payment, or marketing "
-            "scripts may increase TBT. Fixes should be page-type aware."
+            "Decathlon is a French sporting goods e-commerce site with a global audience. "
+            "Product pages have image galleries and dynamic product variants that affect LCP. "
+            "Main pages have hero banners, promotional carousels, and category widgets. "
+            "The stack is Next.js with pnpm. Third-party scripts include Swetrix analytics. "
+            "Mobile performance is critical — most users browse on mid-range Android devices. "
+            "Fixes must be page-type aware: main, product, category, and cart pages have "
+            "different performance bottlenecks. Prefer Next.js built-in optimizations: "
+            "next/image for images, next/font for fonts, next/script for third-party scripts, "
+            "and dynamic() for heavy components."
         ),
         "doc_type": "context",
+    },
+    {
+        "title": "Next.js Image Optimization Guide",
+        "content": (
+            "Use the Next.js Image component (next/image) instead of raw <img> tags. "
+            "Add priority={true} to the first visible image (LCP image) on each page. "
+            "Set width and height props to prevent CLS. "
+            "Use loading='lazy' for below-the-fold images (default behavior). "
+            "Use sizes prop for responsive images: sizes='(max-width: 768px) 100vw, 50vw'. "
+            "Avoid fetchPriority='high' on multiple images — only the LCP image needs it. "
+            "Use placeholder='blur' with blurDataURL for smoother loading experience."
+        ),
+        "doc_type": "fix_guide",
+    },
+    {
+        "title": "Next.js Script Optimization — Swetrix and Analytics",
+        "content": (
+            "Use next/script instead of raw <script> tags for third-party scripts. "
+            "Set strategy='lazyOnload' for non-critical analytics like Swetrix: "
+            "<Script src='...' strategy='lazyOnload' />. "
+            "Set strategy='afterInteractive' for scripts needed after page load. "
+            "Set strategy='beforeInteractive' only for scripts that must run before hydration. "
+            "Moving Swetrix init from useEffect to next/script lazyOnload reduces TBT significantly. "
+            "Never load analytics scripts synchronously in the document head."
+        ),
+        "doc_type": "fix_guide",
+    },
+    {
+        "title": "Next.js Font Optimization",
+        "content": (
+            "Use next/font instead of Google Fonts <link> tags to eliminate render-blocking font requests. "
+            "Import fonts from 'next/font/google': import { Inter } from 'next/font/google'. "
+            "Add display: 'swap' option to prevent invisible text during font load. "
+            "Apply the font className to the root layout element. "
+            "Remove any <link rel='stylesheet' href='fonts.googleapis.com/...'> from layout.tsx or _document.tsx. "
+            "next/font automatically self-hosts fonts and inlines the font-display CSS."
+        ),
+        "doc_type": "fix_guide",
+    },
+    {
+        "title": "Next.js Dynamic Import for Heavy Components",
+        "content": (
+            "Use dynamic() from 'next/dynamic' to lazy-load heavy components that are not needed on initial render. "
+            "Example: const HeavyWidget = dynamic(() => import('./HeavyWidget'), { ssr: false }). "
+            "Add ssr: false for client-only components like carousels, modals, chat widgets. "
+            "Use loading prop to show a placeholder while loading: loading: () => <Skeleton />. "
+            "Good candidates: product carousels, recommendation widgets, promotional banners, "
+            "chat widgets, map embeds, and heavy analytics dashboards. "
+            "Do not use dynamic() for above-the-fold components — it delays their render."
+        ),
+        "doc_type": "fix_guide",
+    },
+    {
+        "title": "Next.js Render-Blocking CSS and Critical Path",
+        "content": (
+            "Avoid CSS @import inside stylesheet files — use direct imports in the component instead. "
+            "In Next.js, global CSS should only be imported in layout.tsx or _app.tsx. "
+            "Use CSS Modules for component-scoped styles to reduce unused CSS. "
+            "Inline critical above-the-fold CSS in the <head> if possible. "
+            "Use font-display: swap in @font-face declarations to prevent invisible text. "
+            "Remove unused Tailwind classes using the content config purge setting."
+        ),
+        "doc_type": "fix_guide",
     },
 ]
 

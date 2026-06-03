@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
+        with:
+          clean: true  # FIX: removes gitignored leftovers (node_modules) that persist across runs on self-hosted runners
 
       # ---------------------------------------------------------
       # PHASE 1: BAKE THE IMMUTABLE ARTIFACT
@@ -63,7 +65,8 @@ jobs:
       # ---------------------------------------------------------
       - name: 🤖 Awaken AI Remediation Agent
         # ONLY executes if the Composite Action throws an error!
-        if: failure()
+        # if: failure()  # BUG: fires on any step failure (build too), sending empty audit outputs to agent
+        if: steps.gatekeeper_audit.outcome == 'failure'  # FIX: only trigger when audit step specifically failed
         run: |
           echo "❌ Audit Failed! Triggering Remediation Daemon..."
           curl -X POST http://localhost:9010/api/trigger-agent \

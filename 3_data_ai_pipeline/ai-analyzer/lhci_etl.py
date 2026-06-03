@@ -200,7 +200,9 @@ def run_etl(lhci_build_id: str) -> int:
             for run_id, url, lhr_raw in runs:
                 lhr = json.loads(lhr_raw) if isinstance(lhr_raw, str) else lhr_raw
                 cfg = lhr.get("configSettings", {})
-                form_factor = cfg.get("formFactor") or cfg.get("emulatedFormFactor", "unknown")
+                # BUG FIX: "unknown" breaks RAG scoring and score linking — Lighthouse only has mobile/desktop
+                _ff_raw = cfg.get("formFactor") or cfg.get("emulatedFormFactor", "")
+                form_factor = "mobile" if str(_ff_raw).lower() == "mobile" else "desktop"
                 m = _extract_metrics(lhr)
 
                 cur.execute(

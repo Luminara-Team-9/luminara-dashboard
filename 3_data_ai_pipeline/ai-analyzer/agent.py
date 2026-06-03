@@ -1385,7 +1385,7 @@ def generate_fix(state: AgentState) -> AgentState:
     rag_context = state.get("rag_context", "")
 
     prompt = f"""
-You are a senior web performance optimization engineer for a Korean e-commerce site.
+You are a senior web performance optimization engineer for Decathlon, a French sporting goods e-commerce site.
 Analyze the following Lighthouse audit opportunity and produce a detailed fix plan.
 
 Page: {state.get("page_type")} | Device: {state.get("device_type")} | URL: {state.get("url")}
@@ -1432,7 +1432,7 @@ Return ONLY valid JSON:
         response = client.chat.completions.create(
             model=QWEN_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=900,
+            max_tokens=1500,  # increased from 900 — complex multi-metric reasoning needs more room
             temperature=0.3,
         )
 
