@@ -1258,7 +1258,7 @@ def generate_patch_from_source(
                 },
             ],
             temperature=0.1,
-            max_tokens=2500,
+            max_tokens=1800,  # reduced from 2500 — frees token budget for larger input context (12000 chars)
         )
 
         raw = response.choices[0].message.content
