@@ -44,7 +44,8 @@ From: node:22-slim
     # SRE FIX: The container installs and builds the code dynamically 
     # to ensure the Digital Twin is an exact representation of the mounted branch.
     echo "[..] Installing dependencies..."
-    pnpm install --frozen-lockfile
+    # pnpm install --frozen-lockfile  # BUG: aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when node_modules exists (no TTY in Singularity build)
+    CI=true pnpm install --frozen-lockfile  # FIX: CI=true suppresses interactive TTY confirmation for module purge
     
     echo "[..] Building the Digital Twin..."
     pnpm run build

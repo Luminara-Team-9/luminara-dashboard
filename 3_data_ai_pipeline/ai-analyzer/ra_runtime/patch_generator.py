@@ -230,11 +230,11 @@ def build_source_context_text(source_context: Dict[str, Any]) -> str:
     parts = []
     candidate_files = source_context.get("candidate_files", [])[:3]
 
-    # Keep total source context under ~7500 chars so the full prompt
-    # stays within Qwen's 8192 token limit (input + 1500 output).
-    # 3 files → 2500 chars each; 2 files → 3500; 1 file → 5000.
+    # Keep total source context under ~12000 chars — Qwen 32B handles 32k context comfortably.
+    # Previous limit was 7500 (2500/file) which cut off critical code in large components.
+    # 3 files → 4000 chars each; 2 files → 5500; 1 file → 8000.
     n = max(len(candidate_files), 1)
-    per_file_limit = min(5000, max(2500, 7500 // n))
+    per_file_limit = min(8000, max(4000, 12000 // n))
 
     for i, item in enumerate(candidate_files, 1):
         parts.append(
@@ -271,7 +271,7 @@ def build_patch_prompt(
     metrics_section = format_metrics_section(fix_plan)
     metrics_block = f"\nCurrent metrics:\n{metrics_section}\n" if metrics_section else ""
 
-    return f"""You are a web performance optimization expert for a Korean e-commerce platform.
+    return f"""You are a web performance optimization expert for Decathlon, a French sporting goods e-commerce platform.
 
 You are given a Lighthouse performance problem, relevant fix guides, and the actual
 source code from the repository. Study the fix guides and source code carefully,

@@ -920,16 +920,16 @@ def get_fix_plan_detail(fix_plan_id: int):
         return {"error": str(e)}
 
 
-    # Compatibility endpoint for older manual tests.
-    @app.post("/trigger")
-    def trigger(
-        payload: TriggerPayload,
-        x_luminara_secret: Optional[str] = Header(default=None),
-    ):
-        return trigger_agent(
-            payload=payload,
-            x_luminara_secret=x_luminara_secret,
-        )
+# Compatibility endpoint for older manual tests.
+@app.post("/trigger")
+def trigger(
+    payload: TriggerPayload,
+    x_luminara_secret: Optional[str] = Header(default=None),
+):
+    return trigger_agent(
+        payload=payload,
+        x_luminara_secret=x_luminara_secret,
+    )
 
 
 @app.post("/webhook/github")

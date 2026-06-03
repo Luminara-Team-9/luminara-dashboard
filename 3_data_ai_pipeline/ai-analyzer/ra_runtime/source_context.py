@@ -149,17 +149,45 @@ FIX_TYPE_RULES = {
 # Per opportunity-id: files matching these patterns get a large score boost
 # so they always appear in the top candidates regardless of fix_type scoring.
 OPPORTUNITY_FORCED_INCLUDES: Dict[str, Dict[str, List[str]]] = {
-    # Image opportunities — any file rendering <img> tags is relevant
-    "uses-responsive-images": {"content": ["<img"], "path": []},
-    "offscreen-images":        {"content": ["<img"], "path": []},
-    "prioritize-lcp-image":    {"content": ["<img"], "path": []},
-    # Render-blocking — layout and config files hold CSS imports / headers
-    "render-blocking-resources": {"content": [], "path": ["layout", "next.config", "globals"]},
-    "unminified-css":            {"content": [], "path": ["globals", "layout", "next.config"]},
-    "unused-css-rules":          {"content": [], "path": ["globals", "layout"]},
-    # JS opportunities — layout/providers are the right place for dynamic imports
-    "mainthread-work-breakdown": {"content": ["provider", "analytics", "swetrix"], "path": ["layout"]},
-    "unused-javascript":         {"content": ["provider", "analytics", "swetrix"], "path": ["layout"]},
+    # ── Image opportunities ──────────────────────────────────────────────────
+    # Any file rendering images is a candidate
+    "uses-responsive-images":        {"content": ["<img", "next/image", "Image"],     "path": []},
+    "offscreen-images":               {"content": ["<img", "next/image", "Image"],     "path": []},
+    "prioritize-lcp-image":           {"content": ["<img", "next/image", "priority"],  "path": []},
+    "uses-optimized-images":          {"content": ["<img", "next/image"],              "path": []},
+    "modern-image-formats":           {"content": ["<img", "next/image"],              "path": []},
+    "efficient-animated-content":     {"content": ["<img", ".gif", "autoPlay"],        "path": []},
+    "uses-rel-preload":               {"content": ["<img", "next/image", "fetchPriority", "priority"], "path": ["layout", "head"]},
+
+    # ── Layout shift (CLS) ───────────────────────────────────────────────────
+    # Files that render images, banners, or dynamic content that shifts layout
+    "layout-shift-elements":          {"content": ["<img", "banner", "carousel", "aspect-ratio"], "path": []},
+    "non-composited-animations":      {"content": ["transition", "animation", "transform"],        "path": []},
+    "unsized-images":                 {"content": ["<img", "next/image"],                          "path": []},
+
+    # ── Render-blocking CSS / fonts ──────────────────────────────────────────
+    "render-blocking-resources":      {"content": ["@import", "stylesheet", "font"],   "path": ["layout", "next.config", "globals"]},
+    "unminified-css":                 {"content": [],                                   "path": ["globals", "layout", "next.config"]},
+    "unused-css-rules":               {"content": [],                                   "path": ["globals", "layout"]},
+    "font-display":                   {"content": ["font-display", "next/font", "googleapis", "font"], "path": ["globals", "layout"]},
+    "uses-text-compression":          {"content": [],                                   "path": ["next.config", "middleware"]},
+
+    # ── JavaScript / TBT ────────────────────────────────────────────────────
+    "mainthread-work-breakdown":      {"content": ["provider", "analytics", "swetrix", "Script"],  "path": ["layout"]},
+    "unused-javascript":              {"content": ["provider", "analytics", "swetrix", "dynamic"], "path": ["layout"]},
+    "dom-size":                       {"content": ["map(", ".map(", "list", "grid", "repeat"],     "path": []},
+    "no-document-write":              {"content": ["document.write", "<script"],                   "path": ["layout", "head"]},
+    "uses-passive-event-listeners":   {"content": ["addEventListener", "onScroll", "onTouchStart"], "path": []},
+
+    # ── Server / caching / TTFB ──────────────────────────────────────────────
+    "server-response-time":           {"content": ["cache", "headers", "revalidate"],  "path": ["next.config", "middleware", "layout"]},
+    "uses-long-cache-ttl":            {"content": ["cache-control", "Cache-Control"],  "path": ["next.config", "middleware"]},
+    "redirects":                      {"content": ["redirect", "rewrite"],             "path": ["next.config", "middleware"]},
+
+    # ── Third-party scripts ──────────────────────────────────────────────────
+    "third-party-summary":            {"content": ["Script", "swetrix", "analytics", "gtag", "facebook"], "path": ["layout"]},
+    "third-party-facades":            {"content": ["Script", "iframe", "embed", "dynamic"],                "path": ["layout"]},
+    "uses-http2":                     {"content": [],                                   "path": ["next.config"]},
 }
 
 
