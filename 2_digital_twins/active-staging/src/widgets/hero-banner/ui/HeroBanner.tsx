@@ -43,6 +43,9 @@ export function HeroBanner() {
             key={index}
             src={slide.src}
             alt={slide.alt}
+            loading={index === currentSlide ? 'eager' : 'lazy'}
+            fetchPriority={index === currentSlide ? 'high' : 'auto'}
+            decoding='async'
             style={{
               position: 'absolute',
               inset: 0,
@@ -50,9 +53,9 @@ export function HeroBanner() {
               height: '100%',
               objectFit: 'cover',
               display: 'block',
-              opacity: index === currentSlide ? 1 : 0, // Shows 1 if active, 0 if not
-              transition: 'opacity 1s ease-in-out', // Smooth fade effect
-              zIndex: index === currentSlide ? 10 : 0, // Brings active image to the front
+              opacity: index === currentSlide ? 1 : 0,
+              transition: 'opacity 1s ease-in-out',
+              zIndex: index === currentSlide ? 10 : 0,
             }}
           />
         ))}
