@@ -12,6 +12,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /tmp/lighthouse.* || true
+          docker system prune -af || true
+          df -h
+
       - name: Run Benchmark
         env:
           LHCI_USER: ${{ secrets.LHCI_USER }}
