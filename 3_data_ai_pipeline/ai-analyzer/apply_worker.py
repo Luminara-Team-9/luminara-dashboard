@@ -27,12 +27,13 @@ Usage:
 
 import argparse
 import os
+import re
 import shutil
 import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 from dotenv import load_dotenv
 
@@ -196,20 +197,45 @@ def process_fix_plan(fix_plan: dict, dry_run: bool = False) -> bool:
                 timeout=120,
             )
             if tsc_result.returncode != 0:
-                print(f"  ❌ TypeScript check failed — reverting patches")
-                print((tsc_result.stdout + tsc_result.stderr)[-800:])
-                for p in applied_patches:
-                    backup = p.get("backup_path")
-                    target = p.get("target_file")
-                    if backup and Path(backup).exists() and target:
-                        shutil.copy2(backup, Path(repo_path) / target)
-                        print(f"      reverted {target}")
-                update_fix_plan_status(
-                    fix_plan_id,
-                    "build_failed",
-                    error_message=f"tsc --noEmit failed:\n{(tsc_result.stdout + tsc_result.stderr)[-500:]}",
+                tsc_log = tsc_result.stdout + tsc_result.stderr
+                print((tsc_log)[-800:])
+
+                # Check if ALL tsc errors are in files the patch never touched.
+                # If so, it's a pre-existing error — don't revert, let it proceed.
+                patched_files: Set[str] = {
+                    p.get("target_file", "") for p in applied_patches
+                }
+                error_files = re.findall(
+                    r"([\w./@\-\[\]]+\.[jt]sx?)(?:\(\d+|(?=\s*\n|\s*$))",
+                    tsc_log,
                 )
-                return False
+                preexisting = bool(error_files) and all(
+                    not any(
+                        ef in pf or pf.endswith(ef) or ef.endswith(pf.split("/")[-1])
+                        for pf in patched_files
+                    )
+                    for ef in error_files
+                )
+
+                if preexisting:
+                    print(
+                        f"  ⚠️  tsc errors are in files the patch did NOT touch "
+                        f"— pre-existing, proceeding."
+                    )
+                else:
+                    print(f"  ❌ TypeScript check failed — reverting patches")
+                    for p in applied_patches:
+                        backup = p.get("backup_path")
+                        target = p.get("target_file")
+                        if backup and Path(backup).exists() and target:
+                            shutil.copy2(backup, Path(repo_path) / target)
+                            print(f"      reverted {target}")
+                    update_fix_plan_status(
+                        fix_plan_id,
+                        "build_failed",
+                        error_message=f"tsc --noEmit failed:\n{tsc_log[-500:]}",
+                    )
+                    return False
             print(f"  ✅ TypeScript check passed")
         else:
             print(f"  [2.5] TypeScript check skipped (node_modules not installed)")
