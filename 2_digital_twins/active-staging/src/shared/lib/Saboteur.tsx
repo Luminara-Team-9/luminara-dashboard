@@ -57,7 +57,7 @@ export function LateAnnouncementSaboteur() {
     if (!config || config.clsHeight === '0px') return;
 
     // Fires dynamically based on the matrix, guaranteeing Lighthouse catches it
-    const timer = setTimeout(() => setTriggerShift(true), config.clsDelay);
+    const timer = setTimeout(() => setTriggerShift(true), config.clsDelay + 1000);
     return () => clearTimeout(timer);
   }, [pathname, config]);
 
@@ -95,7 +95,7 @@ export function FontShiftSaboteur() {
     if (!config || config.clsHeight === '0px') return;
 
     // Fires slightly after the ad block to create compounding layout shifts
-    const timer = setTimeout(() => setFontLoaded(true), config.clsDelay + 200);
+    const timer = setTimeout(() => setFontLoaded(true), config.clsDelay + 1500);
     return () => clearTimeout(timer);
   }, [pathname, config]);
 
