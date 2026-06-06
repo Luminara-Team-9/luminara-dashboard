@@ -20,7 +20,7 @@ const EFFORT_LABEL = { low: '낮음', medium: '중간', high: '높음' } as cons
 const METRIC_LABEL: Record<string, string> = {
   lcp: '첫 화면 표시(LCP)',
   cls: '화면 안정성(CLS)',
-  inp: '클릭 반응(INP)',
+  inp: '스크립트 부담(TBT)',
   tbt: '스크립트 부담(TBT)',
   fcp: '첫 콘텐츠 표시(FCP)',
   speedIndex: '화면 완성 속도(Speed Index)',

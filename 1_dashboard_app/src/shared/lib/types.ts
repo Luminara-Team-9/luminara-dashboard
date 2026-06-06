@@ -29,6 +29,18 @@ export interface AiFixPlan {
   impactScore: number;   // 0–10, ROI 매트릭스 y축용
   autoApplicable?: boolean;
   changeCount?: number;
+  audit?: {
+    score?: number;
+    afterScore?: number;
+    delta?: number;
+    measuredAt?: string;
+    url?: string;
+  };
+  applyTiming?: {
+    startedAt?: string;
+    completedAt?: string;
+    durationSeconds?: number;
+  };
   decision?: AiFixDecisionDetail;
   remediationStatus?: AiActionApplyStatus;
   remediationRunId?: string;
@@ -118,6 +130,7 @@ export interface BusinessMetrics {
     engagementRate?: number;
     bounceRate?: number;
     pagesPerSession?: number;
+    revenue?: number;
     averageOrderValue?: number;
     competitorTraffic?: {
       brand: string;
@@ -178,6 +191,8 @@ export interface BusinessMetrics {
       pageViews: number;
       events: number;
       purchaseSessions: number;
+      measuredRevenue?: number;
+      averageOrderValue?: number;
       baselineEngagementMinutes: number;
       measuredEngagementMinutes: number | null;
       eventSource: string;

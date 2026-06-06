@@ -54,13 +54,49 @@ const METRIC_DEFS: Record<string, {
     targetLabel: '200ms 이하',
   },
   inp: {
-    label: '클릭 반응(INP)',
-    shortLabel: '클릭 반응',
+    label: '실행 지연(TBT)',
+    shortLabel: '실행 지연',
     unit: 'ms',
-    domain: [0, 420],
+    domain: [0, 700],
     target: 200,
     higherIsBetter: false,
     targetLabel: '200ms 이하',
+  },
+  cls: {
+    label: '화면 안정성(CLS)',
+    shortLabel: '화면 안정성',
+    unit: '',
+    domain: [0, 1],
+    target: 0.1,
+    higherIsBetter: false,
+    targetLabel: '0.1 이하',
+  },
+  fcp: {
+    label: '첫 콘텐츠 표시(FCP)',
+    shortLabel: '첫 콘텐츠 표시',
+    unit: '초',
+    domain: [0, 6],
+    target: 1.8,
+    higherIsBetter: false,
+    targetLabel: '1.8초 이하',
+  },
+  speedIndex: {
+    label: '화면 완성 속도(Speed Index)',
+    shortLabel: '화면 완성 속도',
+    unit: '초',
+    domain: [0, 45],
+    target: 3.4,
+    higherIsBetter: false,
+    targetLabel: '3.4초 이하',
+  },
+  assetSize: {
+    label: '전송량(Asset Size)',
+    shortLabel: '전송량',
+    unit: 'KB',
+    domain: [0, 20000],
+    target: 450,
+    higherIsBetter: false,
+    targetLabel: '450KB 이하',
   },
 };
 
@@ -71,7 +107,7 @@ const BRAND_COLORS: Record<string, string> = {
 const CVR_LINE_KEY = '전환 영향 참고(%)';
 const CVR_CALC: Record<string, (value: number) => number> = {
   lcp: (value) => estimateCvrLiftForMetric('lcp', value, 2.5),
-  inp: (value) => estimateCvrLiftForMetric('inp', value, 200),
+  inp: (value) => estimateCvrLiftForMetric('tbt', value, 200),
 };
 
 const MIN_CHART_WIDTH = 320;
@@ -94,11 +130,62 @@ function getCompetitorAvg(benchmarks: BenchmarkEntry[], metricKey: string): numb
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
 }
 
-function fmtDate(iso: string) {
-  const [, month, day] = iso.split('-');
-  return `${parseInt(month, 10)}/${parseInt(day, 10)}`;
+function parseTrendLabel(label: string) {
+  const match = label.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?/);
+  if (!match) return null;
+
+  return {
+    year: match[1],
+    month: match[2],
+    day: match[3],
+    hour: match[4],
+    minute: match[5],
+    second: match[6],
+  };
 }
 
+function fmtDate(label: string) {
+  const parsed = parseTrendLabel(label);
+  if (!parsed) return label;
+
+  const date = parseInt(parsed.month, 10) + '/' + parseInt(parsed.day, 10);
+  if (!parsed.hour) return date;
+  return date + ' ' + parsed.hour + ':' + parsed.minute + ':' + parsed.second;
+}
+
+function fmtFullDate(label: string) {
+  const parsed = parseTrendLabel(label);
+  if (!parsed) return label;
+
+  const date = parsed.year + '-' + parsed.month + '-' + parsed.day;
+  if (!parsed.hour) return date;
+  return date + ' ' + parsed.hour + ':' + parsed.minute + ':' + parsed.second;
+}
+
+function trendDateKey(label: string) {
+  const parsed = parseTrendLabel(label);
+  if (!parsed) return label;
+  return parsed.year + '-' + parsed.month + '-' + parsed.day;
+}
+
+function getPointVersion(labels: string[], label: string) {
+  const dateKey = trendDateKey(label);
+  const dayLabels = labels.filter((item) => trendDateKey(item) === dateKey);
+  const index = dayLabels.indexOf(label);
+  return index < 0 ? '' : 'v' + (index + 1);
+}
+
+function formatAxisDate(label: string) {
+  const parsed = parseTrendLabel(label);
+  if (!parsed) return label;
+  return parseInt(parsed.month, 10) + '/' + parseInt(parsed.day, 10);
+}
+
+function formatAxisTick(label: string, labels: string[]) {
+  const dateKey = trendDateKey(label);
+  const firstOfDay = labels.find((item) => trendDateKey(item) === dateKey);
+  return firstOfDay === label ? formatAxisDate(label) : '';
+}
 function formatValue(value: number | null | undefined, metricKey: string): string {
   if (value == null) return '-';
   const config = METRIC_DEFS[metricKey];
@@ -112,7 +199,7 @@ function buildChartData(trends: Trends, metricKey: string) {
   const cvrFn = CVR_CALC[metricKey];
 
   return trends.labels.map((label, index) => {
-    const point: Record<string, string | number | null> = { date: fmtDate(label) };
+    const point: Record<string, string | number | null> = { date: label, displayDate: fmtDate(label), version: getPointVersion(trends.labels, label) };
     datasets.forEach((dataset) => {
       point[dataset.brand] = dataset.values[index] ?? null;
     });
@@ -165,6 +252,57 @@ function calcDeltas(trends: Trends, releaseDate: string) {
   return results;
 }
 
+function getTrendReason(deltas: ReturnType<typeof calcDeltas>, activeMetric: string) {
+  if (!deltas.length) return null;
+  const active = deltas.find((item) => item.metricKey === activeMetric) ?? deltas.find((item) => item.metricKey === 'lighthouse');
+  const lighthouse = deltas.find((item) => item.metricKey === 'lighthouse');
+  const basis = activeMetric === 'lighthouse' ? lighthouse : active;
+  if (!basis) return null;
+
+  const basisConfig = METRIC_DEFS[basis.metricKey];
+  const basisImproved = basisConfig.higherIsBetter ? basis.delta > 0 : basis.delta < 0;
+  const basisChanged = basis.delta !== 0;
+  const direction = !basisChanged ? '유지' : basisImproved ? '개선' : '악화';
+  const drivers = deltas
+    .filter((item) => item.metricKey !== 'lighthouse' && METRIC_DEFS[item.metricKey] && item.delta !== 0)
+    .map((item) => {
+      const config = METRIC_DEFS[item.metricKey];
+      const improved = config.higherIsBetter ? item.delta > 0 : item.delta < 0;
+      const weightBase = Math.max(Math.abs(item.before), config.target, 1);
+      return { ...item, config, improved, weight: Math.abs(item.delta) / weightBase };
+    })
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 3);
+
+  const driverText = drivers.length
+    ? drivers.map((item) => {
+        const sign = item.delta > 0 ? '+' : '';
+        return item.config.shortLabel + ' ' + sign + formatValue(item.delta, item.metricKey);
+      }).join(', ')
+    : '세부 지표 변화가 거의 없습니다';
+
+  const title = activeMetric === 'lighthouse'
+    ? '종합 점수 ' + direction
+    : basisConfig.shortLabel + ' ' + direction;
+  const desc = basisChanged
+    ? '직전 측정 대비 ' + driverText + ' 변화가 이번 측정값의 주요 원인으로 보입니다.'
+    : '직전 측정과 큰 차이가 없어 점수 변동 원인이 뚜렷하지 않습니다.';
+
+  return { title, desc, drivers };
+}
+
+function getMeasurementStatus(deltas: ReturnType<typeof calcDeltas>, activeMetric: string) {
+  if (!deltas.length) return { label: "첫 측정", tone: "neutral" as const };
+  const item = deltas.find((delta) => delta.metricKey === activeMetric) ?? deltas.find((delta) => delta.metricKey === "lighthouse");
+  if (!item || item.delta === 0) return { label: "측정됨 · 점수 유지", tone: "neutral" as const };
+  const config = METRIC_DEFS[item.metricKey];
+  const improved = config.higherIsBetter ? item.delta > 0 : item.delta < 0;
+  return {
+    label: improved ? "측정됨 · 점수 개선" : "측정됨 · 점수 하락",
+    tone: improved ? "good" as const : "bad" as const,
+  };
+}
+
 function useElementSize() {
   const ref = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -214,7 +352,7 @@ function CustomTooltip({ active, payload, label, metricKey }: TooltipProps) {
 
   return (
     <div className={styles.tooltip}>
-      <p className={styles.tooltip_date}>{label}</p>
+      <p className={styles.tooltip_date}>{label ? fmtFullDate(label) : ''}</p>
       {payload.map((entry) => (
         <p key={entry.name} className={styles.tooltip_row}>
           <span className={styles.tooltip_dot} style={{ backgroundColor: entry.color }} />
@@ -329,6 +467,8 @@ export function PerformanceTrend() {
     : null;
   const snapshot = selectedDate ? getDecathlonSnapshot(trends, selectedDate) : null;
   const pointDeltas = selectedDate ? calcDeltas(trends, selectedDate) : [];
+  const trendReason = getTrendReason(pointDeltas, activeMetric);
+  const measurementStatus = selectedDate ? getMeasurementStatus(pointDeltas, activeMetric) : null;
 
   return (
     <section className={styles.wrapper}>
@@ -363,8 +503,8 @@ export function PerformanceTrend() {
               style={{ cursor: 'pointer' }}
               onClick={(payload) => {
                 if (!payload?.activeLabel) return;
-                const originalDate = trends.labels.find((label) => fmtDate(label) === payload.activeLabel);
-                if (!originalDate) {
+                const originalDate = String(payload.activeLabel);
+                if (!trends.labels.includes(originalDate)) {
                   setSelectedDate(null);
                   return;
                 }
@@ -375,6 +515,9 @@ export function PerformanceTrend() {
               <XAxis
                 dataKey="date"
                 tick={{ fill: '#64748b', fontSize: 11 }}
+                tickFormatter={(value) => formatAxisTick(String(value), trends.labels)}
+                interval={0}
+                minTickGap={4}
                 axisLine={{ stroke: '#d7dee8' }}
                 tickLine={false}
               />
@@ -498,11 +641,16 @@ export function PerformanceTrend() {
           <div className={styles.overlay_panel}>
             <div className={styles.panel_header}>
               <div className={styles.panel_title_row}>
-                <span className={styles.panel_date}>{selectedDate}</span>
+                <span className={styles.panel_date}>{fmtFullDate(selectedDate)} · {getPointVersion(trends.labels, selectedDate)}</span>
                 {selectedReleaseInfo ? (
                   <span className={styles.panel_version}>{selectedReleaseInfo.version}</span>
                 ) : (
                   <span className={styles.panel_desc}>측정 지점</span>
+                )}
+                {measurementStatus && (
+                  <span className={styles[measurementStatus.tone === "good" ? "change_badge_good" : measurementStatus.tone === "bad" ? "change_badge_bad" : "change_badge_neutral"]}>
+                    {measurementStatus.label}
+                  </span>
                 )}
               </div>
               <button
@@ -538,6 +686,12 @@ export function PerformanceTrend() {
                   <p className={styles.section_label}>
                     {selectedReleaseInfo ? '변경 전후 성능 변화' : '직전 측정 대비 성능 변화'}
                   </p>
+                  {trendReason && (
+                    <div className={styles.reason_box}>
+                      <strong>{trendReason.title}</strong>
+                      <span>{trendReason.desc}</span>
+                    </div>
+                  )}
                   <div className={styles.delta_grid}>
                     {pointDeltas.map((delta) => (
                       <DeltaCard key={delta.metricKey} {...delta} />

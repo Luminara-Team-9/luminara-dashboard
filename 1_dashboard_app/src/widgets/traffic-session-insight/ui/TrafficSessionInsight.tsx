@@ -133,7 +133,7 @@ export function TrafficSessionInsight() {
   const devicePurchases = devices.reduce((sum, device) => sum + device.purchases, 0);
   const purchaseSessions = channelPurchases + devicePurchases;
   const conversionRate = data.businessMetrics?.conversionRate?.value ?? calcConversionRatePercent(purchaseSessions, sessions);
-  const revenue = sumRevenue(channels) || sumRevenue(devices) || calcRevenue(purchaseSessions, averageOrderValue);
+  const revenue = traffic?.revenue ?? (sumRevenue(channels) || sumRevenue(devices) || calcRevenue(purchaseSessions, averageOrderValue));
   const internalRevenueModel = data.businessMetrics?.internalRevenueModel;
   const pagePerformance = data.rum.pagePerformance ?? [];
   const ingestion = data.rum.ingestion;
@@ -181,10 +181,10 @@ export function TrafficSessionInsight() {
         </article>
 
         <article className={styles.kpi_card}>
-          <span className={styles.kpi_label}>월 매출 기준</span>
+          <span className={styles.kpi_label}>실측 매출</span>
           <strong className={styles.kpi_value}>{formatKrw(revenue)}</strong>
           <span className={styles.kpi_sub}>평균 주문 금액(AOV) {formatInteger(averageOrderValue)}원</span>
-          <span className={styles.kpi_note}>구매 완료 × 평균 주문 금액</span>
+          <span className={styles.kpi_note}>구매완료 이벤트의 revenue 합계</span>
         </article>
 
         <article className={styles.kpi_card}>
@@ -217,7 +217,7 @@ export function TrafficSessionInsight() {
             ))}
           </div>
 
-          <p className={styles.model_note}>실제 주문 데이터가 연결되기 전까지는 내부 기준으로 계산한 예상값입니다.</p>
+          <p className={styles.model_note}>실측 매출은 구매완료 이벤트 기준이며, 아래 값은 내부 기준으로 계산한 보조 예상값입니다.</p>
         </section>
       ) : null}
 

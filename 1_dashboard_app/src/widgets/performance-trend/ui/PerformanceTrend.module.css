@@ -172,6 +172,30 @@
   color: #64748b;
 }
 
+.change_badge_neutral,
+.change_badge_good,
+.change_badge_bad {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.change_badge_neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.change_badge_good {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.change_badge_bad {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .panel_close {
   background: none;
   border: none;
@@ -277,6 +301,29 @@
 }
 
 /* ── 델타 카드 그리드 ── */
+.reason_box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.07);
+}
+
+.reason_box strong {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.reason_box span {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .delta_grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

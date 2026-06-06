@@ -11,10 +11,15 @@ const RUM_LIVE_WINDOW_SECONDS = 90;
 const RUM_DELAYED_WINDOW_SECONDS = 15 * 60;
 const JOURNEY_SESSION_GAP_MS = 30 * 60 * 1000;
 
+let cachedFullDashboardData = null;
+let cachedFullDashboardDataAt = 0;
+let fullDashboardRefreshPromise = null;
+const FULL_DASHBOARD_CACHE_MS = Number(process.env.DASHBOARD_FULL_CACHE_MS ?? 60_000);
+
 const METRIC_TARGETS = {
   lcp: { target: 2.5, unit: 's', label: 'LCP' },
   cls: { target: 0.1, unit: 'score', label: 'CLS' },
-  inp: { target: 200, unit: 'ms', label: 'INP' },
+  inp: { target: 200, unit: 'ms', label: 'TBT' },
   tbt: { target: 200, unit: 'ms', label: 'TBT' },
   fcp: { target: 1.8, unit: 's', label: 'FCP' },
   speedIndex: { target: 3.4, unit: 's', label: 'Speed Index' },
@@ -50,6 +55,7 @@ const CUSTOM_EVENT_ALIASES = {
 
 const INTERNAL_REVENUE_MODEL_SOURCE = '내부 기준 데이터';
 const INTERNAL_REVENUE_MODEL_PERIOD = '2026-04-23 ~ 2026-05-20';
+const PURCHASE_REVENUE_SQL = "toFloat64OrZero(arrayElement(meta.value, indexOf(meta.key, 'revenue')))";
 const INTERNAL_REVENUE_MODEL_ROWS = [
   { channel: 'Paid Search', sessions: 194243, engagedSessions: 155242, firstVisits: 95942, avgEngagementTime: 169.9344584, eventCount: 6772093, keyEvents: 57360, sessionKeyEventRate: 0.083462467, revenue: 416342659.1 },
   { channel: 'Organic Search', sessions: 41095, engagedSessions: 28754, firstVisits: 21734, avgEngagementTime: 111.3419394, eventCount: 1036063, keyEvents: 8763, sessionKeyEventRate: 0.0569169, revenue: 56674993.01 },
@@ -73,6 +79,14 @@ function toNumber(value, fallback = 0) {
 function round(value, digits = 1) {
   const factor = 10 ** digits;
   return Math.round(toNumber(value) * factor) / factor;
+}
+
+function roundOptional(value, digits = 1) {
+  if (value === null || value === undefined || value === '') return undefined;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return undefined;
+  const factor = 10 ** digits;
+  return Math.round(numeric * factor) / factor;
 }
 
 function sumValues(rows, selector) {
@@ -112,6 +126,8 @@ function buildInternalRevenueModel(summary) {
   const pageViews = toNumber(summary.page_views);
   const events = toNumber(summary.total_events);
   const purchaseSessions = toNumber(summary.purchase_sessions);
+  const measuredRevenue = toNumber(summary.purchase_revenue);
+  const averageOrderValue = toNumber(summary.average_order_value);
   const baselineEngagementMinutes = (sessions * coefficients.avgEngagementSecondsPerSession) / 60;
 
   return {
@@ -123,6 +139,8 @@ function buildInternalRevenueModel(summary) {
       pageViews,
       events,
       purchaseSessions,
+      measuredRevenue,
+      averageOrderValue,
       baselineEngagementMinutes: round(baselineEngagementMinutes, 1),
       measuredEngagementMinutes: null,
       eventSource: 'Swetrix RUM event stream',
@@ -184,7 +202,7 @@ function buildInternalRevenueModel(summary) {
       },
       {
         label: '웹 성능 기준',
-        value: 'LCP 2.5s · INP 200ms · CLS 0.1',
+        value: 'LCP 2.5s · TBT 200ms · CLS 0.1',
         note: '사용자 경험 품질 판단 기준',
         source: 'Web Vitals',
       },
@@ -356,7 +374,7 @@ function metricKeyFromText(...values) {
   const text = values.filter(Boolean).join(' ').toLowerCase();
   if (text.includes('lcp')) return 'lcp';
   if (text.includes('cls')) return 'cls';
-  if (text.includes('inp')) return 'inp';
+  if (text.includes('inp') || text.includes('tbt')) return 'tbt';
   if (text.includes('fcp')) return 'fcp';
   if (text.includes('speed index') || text.includes('si')) return 'speedIndex';
   if (text.includes('asset') || text.includes('image') || text.includes('byte')) return 'assetSize';
@@ -376,7 +394,7 @@ function buildMetrics(row) {
   return {
     lcp: metricItem(row.lcp_ms, METRIC_TARGETS.lcp, msToSeconds),
     cls: metricItem(row.cls_score, METRIC_TARGETS.cls, (value) => round(value, 3)),
-    inp: metricItem(row.inp_ms, METRIC_TARGETS.inp),
+    inp: metricItem(row.tbt_ms, METRIC_TARGETS.inp),
     tbt: metricItem(row.tbt_ms, METRIC_TARGETS.tbt),
     fcp: metricItem(row.fcp_ms, METRIC_TARGETS.fcp, msToSeconds),
     speedIndex: metricItem(row.si_ms, METRIC_TARGETS.speedIndex, msToSeconds),
@@ -386,10 +404,10 @@ function buildMetrics(row) {
 
 function buildResource(row) {
   return {
-    totalWeightKb: round(row.page_size_kb),
-    jsKb: round(row.js_size_kb),
-    cssKb: round(row.css_size_kb),
-    imageKb: round(row.image_size_kb),
+    totalWeightKb: roundOptional(row.page_size_kb),
+    jsKb: roundOptional(row.js_size_kb),
+    cssKb: roundOptional(row.css_size_kb),
+    imageKb: roundOptional(row.image_size_kb),
     requestCount: row.total_requests ?? undefined,
   };
 }
@@ -861,21 +879,90 @@ function toBenchmark(row, isTarget) {
   };
 }
 
-function buildTrends(rows) {
-  const labels = [...new Set(rows.map((row) => row.label))].sort();
-  const brands = [...new Set(rows.map((row) => normalizeBrand(row)))];
+const TREND_BATCH_WINDOW_MS = 90 * 1000;
+const TREND_METRICS = [
+  { key: 'lighthouse', field: 'performance_score', digits: 0 },
+  { key: 'lcp', field: 'lcp_ms', transform: msToSeconds, digits: 2 },
+  { key: 'tbt', field: 'tbt_ms', digits: 0 },
+  { key: 'inp', field: 'tbt_ms', digits: 0 },
+  { key: 'cls', field: 'cls_score', digits: 3 },
+  { key: 'fcp', field: 'fcp_ms', transform: msToSeconds, digits: 2 },
+  { key: 'speedIndex', field: 'si_ms', transform: msToSeconds, digits: 2 },
+  { key: 'assetSize', field: 'page_size_kb', digits: 0 },
+];
+
+function getTrendTimestamp(row) {
+  const raw = row.timestamp ?? row.label;
+  const time = raw instanceof Date ? raw.getTime() : new Date(raw).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function shouldUseTrendRow(row, preferredTargetSiteType) {
+  if (row.site_type === 'competitor' && row.competitor_name === 'unknown') return false;
+  if (normalizeBrand(row) === 'Decathlon') return row.site_type === preferredTargetSiteType;
+  return true;
+}
+
+function buildTrends(rows, preferredTargetSiteType = 'target') {
+  const includedRows = rows
+    .filter((row) => shouldUseTrendRow(row, preferredTargetSiteType))
+    .sort((a, b) => getTrendTimestamp(a) - getTrendTimestamp(b));
+  const batchesByBrand = new Map();
+
+  includedRows.forEach((row) => {
+    const brand = normalizeBrand(row);
+    const timestamp = getTrendTimestamp(row);
+    if (!timestamp) return;
+
+    const brandBatches = batchesByBrand.get(brand) ?? [];
+    let current = brandBatches[brandBatches.length - 1];
+
+    if (!current || timestamp - current.lastTimestamp > TREND_BATCH_WINDOW_MS) {
+      current = {
+        brand,
+        label: row.label,
+        firstTimestamp: timestamp,
+        lastTimestamp: timestamp,
+        rows: [],
+      };
+      brandBatches.push(current);
+      batchesByBrand.set(brand, brandBatches);
+    }
+
+    current.rows.push(row);
+    current.lastTimestamp = Math.max(current.lastTimestamp, timestamp);
+  });
+
+  const batches = [...batchesByBrand.values()].flat();
+  const labels = [...new Set(batches.map((batch) => batch.label))]
+    .sort((a, b) => {
+      const aBatch = batches.find((batch) => batch.label === a);
+      const bBatch = batches.find((batch) => batch.label === b);
+      return (aBatch?.firstTimestamp ?? 0) - (bBatch?.firstTimestamp ?? 0);
+    });
+  const brands = [...batchesByBrand.keys()];
 
   return {
     labels,
-    datasets: brands.map((brand) => ({
-      brand,
-      metricKey: 'lighthouse',
-      values: labels.map((label) => {
-        const dayRows = rows.filter((candidate) => candidate.label === label && normalizeBrand(candidate) === brand);
-        if (!dayRows.length) return null;
-        return round(sumValues(dayRows, (row) => row.performance_score) / dayRows.length, 0);
-      }),
-    })),
+    datasets: brands.flatMap((brand) => (
+      TREND_METRICS.map((metric) => ({
+        brand,
+        metricKey: metric.key,
+        values: labels.map((label) => {
+          const batch = batchesByBrand.get(brand)?.find((candidate) => candidate.label === label);
+          if (!batch) return null;
+          const metricRows = batch.rows.some((row) => row.representative === true)
+            ? batch.rows.filter((row) => row.representative === true)
+            : batch.rows;
+          const values = metricRows
+            .map((row) => row[metric.field])
+            .filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)))
+            .map((value) => metric.transform ? metric.transform(value) : Number(value));
+          if (!values.length) return null;
+          return round(values.reduce((sum, value) => sum + value, 0) / values.length, metric.digits);
+        }),
+      }))
+    )),
     releases: [],
   };
 }
@@ -895,6 +982,76 @@ function summarizePatchReason(value) {
   const jsonStart = text.search(/\n\s*\{/);
   const firstPart = jsonStart >= 0 ? text.slice(0, jsonStart).trim() : text;
   return firstPart.length > 260 ? firstPart.slice(0, 257).trimEnd() + '...' : firstPart;
+}
+
+function mergeLiveDashboardData(baseData, rumData, aiPlanRows) {
+  return {
+    ...baseData,
+    timestamp: new Date().toISOString(),
+    businessMetrics: {
+      ...baseData.businessMetrics,
+      ...rumData?.businessMetrics,
+    },
+    rum: {
+      ...baseData.rum,
+      regionalData: rumData?.rum.regionalData ?? baseData.rum?.regionalData ?? [],
+      userJourney: rumData?.rum.userJourney ?? baseData.rum?.userJourney ?? [],
+      sessionPaths: rumData?.rum.sessionPaths ?? baseData.rum?.sessionPaths ?? [],
+      pagePerformance: rumData?.rum.pagePerformance ?? baseData.rum?.pagePerformance ?? [],
+      latestCollectedAt: rumData?.rum.latestCollectedAt ?? baseData.rum?.latestCollectedAt,
+      ingestion: rumData?.rum.ingestion ?? baseData.rum?.ingestion,
+    },
+    aiFixPlans: aiPlanRows.map(buildAiPlan),
+  };
+}
+
+
+function toIsoString(value) {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+
+function getHistoryTime(entry) {
+  return entry?.time || entry?.requested_at || entry?.created_at || entry?.updated_at || entry?.timestamp;
+}
+
+function getHistoryStatus(entry) {
+  return String(entry?.patch_status || entry?.status || entry?.event || "").toLowerCase();
+}
+
+function buildAuditReference(row) {
+  const score = hasMeasuredValue(row.old_score)
+    ? round(row.old_score, 0)
+    : hasMeasuredValue(row.audit_performance_score) ? round(row.audit_performance_score, 0) : undefined;
+  const afterScore = hasMeasuredValue(row.after_score) ? round(row.after_score, 0) : undefined;
+  const delta = hasMeasuredValue(row.score_delta)
+    ? round(row.score_delta, 0)
+    : score !== undefined && afterScore !== undefined ? round(afterScore - score, 0) : undefined;
+  const measuredAt = toIsoString(row.audit_created_at || row.created_at);
+  const url = row.audit_url || undefined;
+
+  if (score === undefined && afterScore === undefined && delta === undefined && !measuredAt && !url) return undefined;
+  return { score, afterScore, delta, measuredAt, url };
+}
+
+function buildApplyTiming(row, patchStatus, history) {
+  const completeStatuses = new Set(["pushed", "completed", "applied", "pr_merged", "merged"]);
+  const startEntry = history.find((entry) => {
+    const status = getHistoryStatus(entry);
+    return status === "approved_to_apply" || status === "dashboard_apply_approved" || entry?.event === "dashboard_apply_approved";
+  });
+  const completedEntry = [...history].reverse().find((entry) => completeStatuses.has(getHistoryStatus(entry)));
+  const startedAt = toIsoString(getHistoryTime(startEntry));
+  const completedAt = toIsoString(getHistoryTime(completedEntry)) || (completeStatuses.has(patchStatus) ? toIsoString(row.updated_at) : undefined);
+  const startedMs = startedAt ? new Date(startedAt).getTime() : NaN;
+  const completedMs = completedAt ? new Date(completedAt).getTime() : NaN;
+  const durationSeconds = Number.isFinite(startedMs) && Number.isFinite(completedMs) && completedMs >= startedMs
+    ? Math.round((completedMs - startedMs) / 1000)
+    : undefined;
+
+  if (!startedAt && !completedAt && durationSeconds === undefined) return undefined;
+  return { startedAt, completedAt, durationSeconds };
 }
 
 function buildAiPlan(row) {
@@ -933,9 +1090,13 @@ function buildAiPlan(row) {
   } else if (patchStatus === 'patch_applied') {
     remediationStatus = 'running';
     remediationMessage = 'AI 수정안이 워크스페이스에 적용되어 후속 검증을 기다립니다.';
-  } else if (patchStatus === 'pushed' || patchStatus === 'completed' || patchStatus === 'applied') {
+  } else if (patchStatus === 'pushed' || patchStatus === 'completed' || patchStatus === 'applied' || patchStatus === 'pr_merged' || patchStatus === 'merged') {
     remediationStatus = 'completed';
-    remediationMessage = patchStatus === 'pushed' ? 'AI 수정 브랜치가 push된 상태입니다.' : 'AI 개선안이 적용 완료된 상태입니다.';
+    remediationMessage = patchStatus === 'pushed'
+      ? 'AI 수정 브랜치가 push된 상태입니다.'
+      : patchStatus === 'pr_merged' || patchStatus === 'merged'
+        ? 'AI 수정 PR merge가 완료된 상태입니다.'
+        : 'AI 개선안이 적용 완료된 상태입니다.';
   } else if (patchStatus === 'rejected') {
     remediationStatus = 'rejected';
     remediationMessage = failureReason ? 'AI 개선안이 거절되었습니다: ' + failureReason : 'AI 개선안이 거절되었습니다.';
@@ -947,6 +1108,8 @@ function buildAiPlan(row) {
   }
 
   const changeCount = Number(row.change_count || changes.length || 0);
+  const auditReference = buildAuditReference(row);
+  const applyTiming = buildApplyTiming(row, patchStatus, history);
   const failedMetrics = Array.isArray(row.failed_metrics)
     ? row.failed_metrics.join(', ')
     : row.failed_metrics ? JSON.stringify(row.failed_metrics) : null;
@@ -963,6 +1126,8 @@ function buildAiPlan(row) {
     impactScore: Math.min(10, Math.max(1, round((estimatedMs || 100) / 80, 1))),
     autoApplicable: row.auto_applicable === true,
     changeCount,
+    audit: auditReference,
+    applyTiming,
     remediationStatus,
     remediationMessage,
     patchStatus: row.patch_status ?? undefined,
@@ -1101,13 +1266,21 @@ async function fetchLatestLighthouseRows(pool) {
 async function fetchTrendRows(pool) {
   const { rows } = await pool.query(`
     SELECT
-      TO_CHAR(r."createdAt"::date, 'YYYY-MM-DD') AS label,
+      r."createdAt" AS timestamp,
+      TO_CHAR(date_trunc('second', r."createdAt" AT TIME ZONE 'Asia/Seoul'), 'YYYY-MM-DD HH24:MI:SS') AS label,
       r.url,
-      AVG((r.lhr::jsonb #>> '{categories,performance,score}')::float * 100) AS performance_score
+      r.representative,
+      (r.lhr::jsonb #>> '{categories,performance,score}')::float * 100 AS performance_score,
+      r.lhr::jsonb #>> '{audits,largest-contentful-paint,numericValue}' AS lcp_ms,
+      r.lhr::jsonb #>> '{audits,total-blocking-time,numericValue}' AS tbt_ms,
+      r.lhr::jsonb #>> '{audits,cumulative-layout-shift,numericValue}' AS cls_score,
+      r.lhr::jsonb #>> '{audits,first-contentful-paint,numericValue}' AS fcp_ms,
+      r.lhr::jsonb #>> '{audits,speed-index,numericValue}' AS si_ms,
+      COALESCE(r.lhr::jsonb #>> '{audits,interaction-to-next-paint,numericValue}', r.lhr::jsonb #>> '{audits,experimental-interaction-to-next-paint,numericValue}') AS inp_ms,
+      (r.lhr::jsonb #>> '{audits,total-byte-weight,numericValue}')::float / 1024 AS page_size_kb
     FROM runs r
     WHERE r.lhr::jsonb #>> '{categories,performance,score}' IS NOT NULL
-    GROUP BY r."createdAt"::date, r.url
-    ORDER BY r."createdAt"::date ASC
+    ORDER BY r."createdAt" ASC, r.url ASC
   `);
 
   return rows.map((row) => ({ ...row, ...classifyUrl(row.url) }));
@@ -1190,6 +1363,8 @@ async function fetchRumData(options = {}) {
           uniqExactIf(psid, type = 'pageview' AND psid IS NOT NULL AND ifNull(pg, '') = '/cart') AS cart_sessions,
           uniqExactIf(psid, event_name IN (${purchaseEventList}) AND psid IS NOT NULL) AS purchase_sessions,
           countIf(event_name IN (${purchaseEventList})) AS purchase_events,
+          sumIf(${PURCHASE_REVENUE_SQL}, event_name IN (${purchaseEventList})) AS purchase_revenue,
+          avgIf(${PURCHASE_REVENUE_SQL}, event_name IN (${purchaseEventList}) AND indexOf(meta.key, 'revenue') > 0) AS average_order_value,
           countIf(type = 'performance') AS performance_events,
           avgIf(pageLoad, type = 'performance' AND pageLoad > 0) AS avg_page_load,
           max(created) AS latest_event
@@ -1203,6 +1378,8 @@ async function fetchRumData(options = {}) {
           uniqExactIf(psid, type = 'pageview' AND psid IS NOT NULL) AS sessions,
           countIf(type = 'pageview') AS page_views,
           uniqExactIf(psid, event_name IN (${purchaseEventList}) AND psid IS NOT NULL) AS purchase_sessions,
+          sumIf(${PURCHASE_REVENUE_SQL}, event_name IN (${purchaseEventList})) AS purchase_revenue,
+          avgIf(${PURCHASE_REVENUE_SQL}, event_name IN (${purchaseEventList}) AND indexOf(meta.key, 'revenue') > 0) AS average_order_value,
           avgIf(pageLoad, type = 'performance' AND pageLoad > 0) AS avg_page_load
         FROM ${CLICKHOUSE_EVENTS_TABLE}
         WHERE pid IN (${projectList})
@@ -1304,15 +1481,17 @@ async function fetchRumData(options = {}) {
           source: `Swetrix RUM (${projectIds.length} projects)`,
           period: latestEventLabel ? `${periodLabel} · 최근 접속 기록 ${latestEventLabel}` : periodLabel,
           confidence: 'measured',
+          revenue: round(summary.purchase_revenue, 0),
+          averageOrderValue: round(summary.average_order_value, 0),
         },
         deviceSegments: deviceRows.map((row) => ({
           device: normalizeDevice(row.device),
           sessions: toNumber(row.sessions),
           purchases: toNumber(row.purchase_sessions),
-          revenue: 0,
+          revenue: round(row.purchase_revenue, 0),
           conversionRate: toNumber(row.sessions) > 0 ? round((toNumber(row.purchase_sessions) / toNumber(row.sessions)) * 100, 1) : 0,
           bounceRate: 0,
-          averageOrderValue: 0,
+          averageOrderValue: round(row.average_order_value, 0),
         })),
         conversionRate: {
           value: sessions > 0 ? round((purchaseSessions / sessions) * 100, 1) : 0,
@@ -1353,7 +1532,7 @@ async function fetchRumData(options = {}) {
   }
 }
 
-export async function getDashboardPerformanceData(pool, options = {}) {
+async function buildFullDashboardPerformanceData(pool, options = {}) {
   const [latestRows, trendRows, aiPlanRows] = await Promise.all([
     fetchLatestLighthouseRows(pool.lhci),
     fetchTrendRows(pool.lhci),
@@ -1397,7 +1576,7 @@ export async function getDashboardPerformanceData(pool, options = {}) {
   const summaryTarget = targetAggregate ?? targetMain;
   const globalScore = round(summaryTarget?.performance_score ?? 0, 0);
   const seoScore = round(summaryTarget?.seo_score ?? 0, 0);
-  return {
+  const payload = {
     timestamp: new Date().toISOString(),
     executiveSummary: {
       globalScore,
@@ -1436,7 +1615,7 @@ export async function getDashboardPerformanceData(pool, options = {}) {
     },
     benchmarks,
     pageMetrics,
-    trends: buildTrends(trendRows),
+    trends: buildTrends(trendRows, preferredTargetSiteType),
     rum: {
       regionalData: rumData?.rum.regionalData ?? [],
       userJourney: rumData?.rum.userJourney ?? [],
@@ -1447,4 +1626,51 @@ export async function getDashboardPerformanceData(pool, options = {}) {
     },
     aiFixPlans: aiPlanRows.map(buildAiPlan),
   };
+
+  cachedFullDashboardData = payload;
+  cachedFullDashboardDataAt = Date.now();
+  return payload;
 }
+
+export async function getDashboardPerformanceData(pool, options = {}) {
+  if (options.mode === "live" && cachedFullDashboardData) {
+    const [aiPlanRows, rumData] = await Promise.all([
+      fetchAiPlans(pool.core),
+      fetchRumData(options),
+    ]);
+    const payload = mergeLiveDashboardData(cachedFullDashboardData, rumData, aiPlanRows);
+    cachedFullDashboardData = payload;
+    return payload;
+  }
+
+  const cacheAge = Date.now() - cachedFullDashboardDataAt;
+  const hasFreshFullCache = Boolean(
+    cachedFullDashboardData &&
+    (FULL_DASHBOARD_CACHE_MS <= 0 || cacheAge < FULL_DASHBOARD_CACHE_MS)
+  );
+
+  if (cachedFullDashboardData && (hasFreshFullCache || fullDashboardRefreshPromise)) {
+    return cachedFullDashboardData;
+  }
+
+  const refreshPromise = buildFullDashboardPerformanceData(pool, options)
+    .then((payload) => {
+      cachedFullDashboardData = payload;
+      cachedFullDashboardDataAt = Date.now();
+      return payload;
+    })
+    .catch((error) => {
+      if (cachedFullDashboardData) {
+        console.warn(error instanceof Error ? error.message : error);
+        return cachedFullDashboardData;
+      }
+      throw error;
+    })
+    .finally(() => {
+      fullDashboardRefreshPromise = null;
+    });
+
+  fullDashboardRefreshPromise = refreshPromise;
+  return cachedFullDashboardData ?? refreshPromise;
+}
+

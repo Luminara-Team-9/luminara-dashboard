@@ -21,7 +21,7 @@ const EFFORT_DOTS: Record<FixEffort, number> = {
 const METRIC_LABEL: Record<string, string> = {
   lcp: '첫 화면 표시(LCP)',
   cls: '화면 안정성(CLS)',
-  inp: '클릭 반응(INP)',
+  inp: '스크립트 부담(TBT)',
   tbt: '스크립트 부담(TBT)',
   fcp: '첫 콘텐츠 표시(FCP)',
   speedIndex: '화면 완성 속도(Speed Index)',
@@ -37,6 +37,8 @@ const PATCH_STATUS_LABEL: Record<string, string> = {
   patch_applied: '패치 적용됨',
   build_testing: '빌드 검증 중',
   pushed: '브랜치 push 완료',
+  pr_merged: 'PR merge 완료',
+  merged: 'merge 완료',
   completed: '완료',
   rejected: '거절됨',
   apply_failed: '적용 실패',
@@ -52,6 +54,7 @@ const BUILD_STATUS_LABEL: Record<string, string> = {
 };
 
 const FAILED_PATCH_STATUSES = new Set(['apply_failed', 'build_failed', 'push_failed', 'failed', 'rejected']);
+const COMPLETED_PATCH_STATUSES = new Set(['pushed', 'completed', 'applied', 'pr_merged', 'merged']);
 
 function normalizeStatus(value?: string): string {
   return String(value ?? '').toLowerCase();
@@ -71,7 +74,8 @@ function getPlainPatchStatusLabel(status: string): string {
   if (status === 'queued' || status === 'approved_to_apply') return '대기';
   if (status === 'applying' || status === 'patch_applied' || status === 'local_test_running') return '적용중';
   if (status === 'build_testing') return '빌드중';
-  if (status === 'pushed' || status === 'completed' || status === 'applied') return '적용됨';
+  if (status === 'pr_merged' || status === 'merged') return 'merge 완료';
+  if (COMPLETED_PATCH_STATUSES.has(status)) return '적용됨';
   if (status === 'rejected') return '거절됨';
   if (FAILED_PATCH_STATUSES.has(status) || status === 'local_test_failed') return '실패';
   return PATCH_STATUS_LABEL[status] ?? status;
@@ -85,6 +89,29 @@ function getLocalApplyStatusLabel(status: AiActionApplyStatus | null, applying: 
   if (status === "failed") return "실패";
   if (status === "rejected") return "거절됨";
   return null;
+}
+
+function formatDateTime(value?: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toLocaleString("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDuration(seconds?: number): string | null {
+  if (seconds === undefined || !Number.isFinite(seconds)) return null;
+  if (seconds < 60) return seconds + "초";
+  const minutes = Math.floor(seconds / 60);
+  const restSeconds = seconds % 60;
+  if (minutes < 60) return restSeconds ? minutes + "분 " + restSeconds + "초" : minutes + "분";
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? hours + "시간 " + restMinutes + "분" : hours + "시간";
 }
 
 function cleanActionTitle(value: string): string {
@@ -148,16 +175,23 @@ export function AiFixCard({ plan }: Props) {
   const patchStatus = normalizeStatus(plan.patchStatus);
   const patchStatusLabel = patchStatus ? getPlainPatchStatusLabel(patchStatus) : null;
   const patchDetail = buildPatchDetail(plan);
+  const auditMeasuredAt = formatDateTime(plan.audit?.measuredAt);
+  const applyStartedAt = formatDateTime(plan.applyTiming?.startedAt);
+  const applyCompletedAt = formatDateTime(plan.applyTiming?.completedAt);
+  const applyDuration = formatDuration(plan.applyTiming?.durationSeconds);
   const localStatusLabel = getLocalApplyStatusLabel(applyStatus, applying);
   const isManualOnly = plan.autoApplicable === false;
-  const displayStatusLabel = isManualOnly ? '수동 검토' : localStatusLabel ?? patchStatusLabel;
+  const patchCompleted = COMPLETED_PATCH_STATUSES.has(patchStatus);
+  const displayStatusLabel = isManualOnly ? '수동 검토' : patchCompleted ? patchStatusLabel : localStatusLabel ?? patchStatusLabel;
   const displayStatusFailed = FAILED_PATCH_STATUSES.has(patchStatus) || applyStatus === "failed" || applyStatus === "rejected";
+  const displayStatusCompleted = patchCompleted || applyStatus === "completed";
   const requestLocked =
     isManualOnly ||
     applyStatus === 'approval-pending' ||
     applyStatus === 'queued' ||
     applyStatus === 'running' ||
-    applyStatus === 'completed';
+    applyStatus === 'completed' ||
+    COMPLETED_PATCH_STATUSES.has(patchStatus);
 
   useEffect(() => {
     if (plan.remediationStatus) {
@@ -241,7 +275,7 @@ export function AiFixCard({ plan }: Props) {
         </div>
 
         {displayStatusLabel && (
-          <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : '')}>
+          <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : displayStatusCompleted ? ' ' + styles.status_line_success : '')}>
             상태 - {displayStatusLabel}
           </p>
         )}
@@ -289,6 +323,16 @@ export function AiFixCard({ plan }: Props) {
                 <span className={styles.section_label}>근거</span>
                 <p>{decision.evidence}</p>
                 {plan.decision?.source && <em>{plan.decision.source}</em>}
+                {(plan.audit?.score !== undefined || plan.audit?.afterScore !== undefined || auditMeasuredAt || plan.audit?.url) && (
+                  <div className={styles.audit_summary}>
+                    <strong>LHCI 점수 기준</strong>
+                    {plan.audit?.score !== undefined && <span>생성 당시 {plan.audit.score}점</span>}
+                    {plan.audit?.afterScore !== undefined && <span>적용 후 {plan.audit.afterScore}점</span>}
+                    {plan.audit?.delta !== undefined && <span className={plan.audit.delta >= 0 ? styles.score_delta_good : styles.score_delta_bad}>점수 변동 {plan.audit.delta >= 0 ? "+" : ""}{plan.audit.delta}점</span>}
+                    {auditMeasuredAt && <span>측정 시각 {auditMeasuredAt}</span>}
+                    {plan.audit?.url && <em>{plan.audit.url}</em>}
+                  </div>
+                )}
               </section>
               <section className={`${styles.detail_section} ${styles.solution_section}`}>
                 <span className={styles.section_label}>해결책</span>
@@ -327,9 +371,16 @@ export function AiFixCard({ plan }: Props) {
             {displayStatusLabel && (
               <section className={styles.status_panel}>
                 <span className={styles.section_label}>적용 진행 상태</span>
-                <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : '')}>
+                <p className={styles.status_line + (displayStatusFailed ? ' ' + styles.status_line_error : displayStatusCompleted ? ' ' + styles.status_line_success : '')}>
                   상태 - {displayStatusLabel}
                 </p>
+                {(applyStartedAt || applyCompletedAt || applyDuration) && (
+                  <div className={styles.timing_summary}>
+                    {applyDuration && <strong>승인부터 완료까지 {applyDuration}</strong>}
+                    {applyStartedAt && <span>승인 {applyStartedAt}</span>}
+                    {applyCompletedAt && <span>완료 {applyCompletedAt}</span>}
+                  </div>
+                )}
                 {patchDetail && (
                   <div className={styles.status_detail_box}>
                     <pre>{patchDetail}</pre>

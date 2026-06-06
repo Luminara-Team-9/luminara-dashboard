@@ -63,7 +63,7 @@ export const AUDIT_TARGETS: AuditTarget[] = [
 export const METRIC_TARGETS: Record<MetricKey, { label: string; target: number; unit: string }> = {
   lcp: { label: 'LCP', target: 2.5, unit: 's' },
   cls: { label: 'CLS', target: 0.1, unit: 'score' },
-  inp: { label: 'INP', target: 200, unit: 'ms' },
+  inp: { label: 'TBT', target: 200, unit: 'ms' },
   tbt: { label: 'TBT', target: 200, unit: 'ms' },
   fcp: { label: 'FCP', target: 1.8, unit: 's' },
   speedIndex: { label: 'Speed Index', target: 3.4, unit: 's' },
