@@ -10,6 +10,7 @@ const PAGES = [
   { pageName: 'nike',        url: 'https://www.nike.com/kr' },
   { pageName: 'underarmour', url: 'https://www.underarmour.co.kr/ko-kr/' },
   { pageName: 'fila',        url: 'https://www.fila.co.kr/' },
+  { pageName: 'ssg',         url: 'https://www.ssg.com/' },
 ];
 
 async function fetchPSI(pageName, url) {
