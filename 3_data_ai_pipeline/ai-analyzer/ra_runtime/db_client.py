@@ -469,7 +469,6 @@ def update_fix_plan_status(
 def update_fix_plan_change_status(
     change_id: int,
     apply_status: str,
-    backup_path: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> None:
     """
@@ -495,11 +494,10 @@ def update_fix_plan_change_status(
                 """
                 UPDATE fix_plan_changes
                 SET
-                    apply_status = %s,
-                    backup_path = COALESCE(%s, backup_path)
+                    apply_status = %s
                 WHERE id = %s
                 """,
-                (apply_status, backup_path, change_id),
+                (apply_status, change_id),
             )
 
             if error_message:
