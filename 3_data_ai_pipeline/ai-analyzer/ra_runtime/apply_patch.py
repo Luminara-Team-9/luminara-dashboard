@@ -313,6 +313,8 @@ def apply_single_patch(
 
     occurrence_count = content.count(original_code)
 
+    # FIX: if exact match fails, try whitespace-normalized fuzzy match.
+    # Qwen sometimes changes indentation or quote style slightly vs the real file.
     if occurrence_count == 0:
         if suggested_code in content:
             return {
@@ -322,6 +324,53 @@ def apply_single_patch(
                 "occurrence_count": 0,
                 "change_reason": patch.get("change_reason"),
             }
+
+        # Normalize whitespace and try again
+        def _norm(s: str) -> str:
+            import re
+            return re.sub(r'\s+', ' ', s).strip()
+
+        norm_original = _norm(original_code)
+        norm_content = _norm(content)
+
+        if norm_original and norm_original in norm_content:
+            # Find the actual span in original content using line-by-line search
+            orig_lines = original_code.splitlines()
+            if orig_lines:
+                # Find first line of original_code in content
+                first_line = orig_lines[0].strip()
+                for i, line in enumerate(content.splitlines()):
+                    if line.strip() == first_line:
+                        # Try to match the full block from this position
+                        start_pos = content.find(content.splitlines()[i])
+                        candidate = content[start_pos:]
+                        # Count how many lines match approximately
+                        match_lines = 0
+                        for ol, cl in zip(orig_lines, candidate.splitlines()):
+                            if _norm(ol) == _norm(cl):
+                                match_lines += 1
+                        if match_lines >= max(1, len(orig_lines) * 0.7):
+                            # Reconstruct the actual matched text
+                            content_lines = content.splitlines(keepends=True)
+                            actual_block = "".join(content_lines[i:i + len(orig_lines)])
+                            if content.count(actual_block) == 1:
+                                content = content.replace(actual_block, suggested_code)
+                                if not dry_run:
+                                    backup = file_path.with_suffix(
+                                        file_path.suffix + f".bak_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                                    )
+                                    import shutil
+                                    shutil.copy2(file_path, backup)
+                                    file_path.write_text(content, encoding="utf-8")
+                                return {
+                                    "target_file": target_file,
+                                    "status": "applied",
+                                    "backup_path": str(backup) if not dry_run else None,
+                                    "occurrence_count": 1,
+                                    "change_reason": patch.get("change_reason"),
+                                    "fuzzy_matched": True,
+                                }
+                            break
 
         raise PatchApplyError(
             "original_code was not found in target file. "

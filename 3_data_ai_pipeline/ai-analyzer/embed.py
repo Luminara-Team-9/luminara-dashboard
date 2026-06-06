@@ -410,6 +410,20 @@ CWV_GUIDES = [
         "doc_type": "fix_guide",
     },
     {
+        "title": "TBT Fix: Reduce Main-Thread Work — Defer Analytics and Heavy Scripts",
+        "content": (
+            "Lighthouse mainthread-work-breakdown opportunity: main thread is blocked by JavaScript execution. "
+            "Primary cause in Next.js apps: analytics scripts (Swetrix, Google Analytics, GTM) running synchronously. "
+            "Fix: replace <SwetrixTracker /> with next/script strategy='lazyOnload' to defer execution until after page is idle. "
+            "Also use dynamic imports for heavy components: const HeavyWidget = dynamic(() => import('./HeavyWidget'), { ssr: false }). "
+            "Code splitting via next/dynamic reduces initial JS bundle parsed on main thread. "
+            "Remove unused provider components from layout.tsx that register on every page. "
+            "Total Blocking Time (TBT) drops when main thread is freed from analytics and non-critical scripts. "
+            "Target: TBT < 200ms. Move all analytics to strategy='lazyOnload' or strategy='afterInteractive'."
+        ),
+        "doc_type": "fix_guide",
+    },
+    {
         "title": "Next.js Font Optimization",
         "content": (
             "Use next/font instead of Google Fonts <link> tags to eliminate render-blocking font requests. "
