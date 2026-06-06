@@ -14,6 +14,8 @@ const roboto = Roboto({
   display: 'swap',
 });
 
+<Head><link rel="preload" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap"></noscript></Head>
+
 // Lock the mobile viewport so users can't accidentally zoom in when tapping
 export const viewport: Viewport = {
   width: 'device-width',
