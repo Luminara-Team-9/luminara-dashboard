@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
@@ -26,6 +26,9 @@ const FILTER_TYPES = ['반바지', '반소매 티셔츠', '긴소매 티셔츠',
 const FILTER_SIZES = ['S', 'M', 'L', 'XL', '2XL', 'Free'];
 
 export function CategoryPage({ categorySlug }: { categorySlug: string }) {
+  //const resolvedParams = use(params);
+  //const categorySlug = resolvedParams.slug;
+
   const router = useRouter();
   const categoryName = categoryNames[categorySlug] || categorySlug;
 

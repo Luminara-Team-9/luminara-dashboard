@@ -23,8 +23,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Decathlon Digital Twin (Baseline)',
-  description: 'Performance baseline simulation',
+  title: 'Decathlon Digital Twin (Active-Staging)',
+  description: 'Performance optimized simulation',
   icons: {
     icon: 'https://contents.mediadecathlon.com/s871302/k$102f9e421beebaa21c81cd9f1a0e5b7c/favicon.ico',
   },

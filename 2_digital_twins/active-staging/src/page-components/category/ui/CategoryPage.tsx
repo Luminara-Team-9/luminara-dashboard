@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/widgets/header';
 import { Footer } from '@/widgets/footer';
@@ -25,10 +25,13 @@ const FILTER_COLORS = ['블랙', '화이트', '블루', '레드', '그레이', '
 const FILTER_TYPES = ['반바지', '반소매 티셔츠', '긴소매 티셔츠', '자켓', '양말', '배낭 / 백팩'];
 const FILTER_SIZES = ['S', 'M', 'L', 'XL', '2XL', 'Free'];
 
-export function CategoryPage({ categorySlug }: { categorySlug: string }) {
+export default function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
+  const resolvedParams = use(params);
+  const categorySlug = resolvedParams.slug;
+
   const router = useRouter();
   const categoryName = categoryNames[categorySlug] || categorySlug;
-
+  cp;
   // State Management for ALL complex filters
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedGenders, setSelectedGenders] = useState<string[]>([]);
