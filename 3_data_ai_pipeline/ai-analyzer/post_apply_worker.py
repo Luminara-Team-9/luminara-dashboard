@@ -576,6 +576,10 @@ def _build_failure_is_preexisting(build_log: str, fix_plan_id: int) -> bool:
     if not patched:
         return False
 
+    # ESLint not installed — workspace setup issue, nothing to do with the patch
+    if "pnpm install --save-dev eslint" in build_log or "npm install --save-dev eslint" in build_log:
+        return True
+
     # Match two formats:
     # 1. TypeScript: "path/to/file.tsx(line,col): error TS..."
     # 2. Next.js build: "path/to/file.tsx" on its own line (no line/col suffix)
