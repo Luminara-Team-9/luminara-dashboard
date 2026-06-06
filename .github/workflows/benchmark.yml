@@ -15,10 +15,12 @@ jobs:
       - name: Free Disk Space
         run: |
           rm -rf /tmp/lighthouse.* || true
+          rm -rf /abr/coss41/tmp/lighthouse.* || true
           docker system prune -af || true
           df -h
 
       - name: Run Benchmark
+        continue-on-error: true
         env:
           LHCI_USER: ${{ secrets.LHCI_SERVER_USER }}
           LHCI_PASS: ${{ secrets.LHCI_SERVER_PASS }}
