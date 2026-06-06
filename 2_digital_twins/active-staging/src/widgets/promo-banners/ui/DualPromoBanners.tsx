@@ -20,12 +20,15 @@ export function DualPromoBanners() {
     <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", marginBottom: "8px" }}>
       {banners.map((banner) => (
         <a key={banner.href} href={banner.href} style={{ textDecoration: "none", position: "relative", display: "block" }}>
-          <img
+<img
             src={banner.src}
             alt={banner.alt}
             width={1440}
             height={760}
-            style={{ width: "100%", height: "auto", display: "block" }}
+            loading='eager'
+            fetchPriority='high'
+            decoding='async'
+            style={{ width: '100%', height: 'auto', display: 'block' }}
           />
           <div style={{
             position: "absolute", bottom: "24px", left: "24px",
