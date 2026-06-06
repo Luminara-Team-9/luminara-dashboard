@@ -774,9 +774,13 @@ def run_worker(
             if fix_plan:
                 fid = fix_plan["id"]
                 print(f"\n[post_apply_worker] Processing fix_plan_id={fid}")
-                success = process_fix_plan(fix_plan)
-                status_str = "✅ pushed" if success else "❌ failed"
-                print(f"\n[post_apply_worker] {status_str} — fix_plan_id={fid}")
+                try:
+                    success = process_fix_plan(fix_plan)
+                    status_str = "✅ pushed" if success else "❌ failed"
+                    print(f"\n[post_apply_worker] {status_str} — fix_plan_id={fid}")
+                except Exception as proc_err:
+                    print(f"\n[post_apply_worker] ❌ Unexpected error for fix_plan_id={fid}: {proc_err}")
+                    update_fix_plan_status(fid, "build_failed", error_message=str(proc_err))
             else:
                 print(
                     f"[post_apply_worker] No patch_applied fix plans. "
