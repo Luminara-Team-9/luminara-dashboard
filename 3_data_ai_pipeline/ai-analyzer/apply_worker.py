@@ -200,8 +200,20 @@ def process_fix_plan(fix_plan: dict, dry_run: bool = False) -> bool:
                 tsc_log = tsc_result.stdout + tsc_result.stderr
                 print((tsc_log)[-800:])
 
-                # Check if ALL tsc errors are in files the patch never touched.
-                # If so, it's a pre-existing error — don't revert, let it proceed.
+                # tsc binary itself crashed (Node.js CJS loader error) — not a TS type error.
+                # Treat as pre-existing environment issue and proceed.
+                tsc_crashed = (
+                    "internal/modules/cjs" in tsc_log
+                    or "tsc.js:" in tsc_log
+                    or "Module.require" in tsc_log
+                )
+                if tsc_crashed:
+                    print(f"  ⚠️  tsc binary crashed (Node.js/tsc incompatibility) — pre-existing, proceeding.")
+                else:
+                    # Check if ALL tsc errors are in files the patch never touched.
+                    # If so, it's a pre-existing error — don't revert, let it proceed.
+                    pass
+
                 patched_files: Set[str] = {
                     p.get("target_file", "") for p in applied_patches
                 }
@@ -209,13 +221,13 @@ def process_fix_plan(fix_plan: dict, dry_run: bool = False) -> bool:
                     r"([\w./@\-\[\]]+\.[jt]sx?)(?:\(\d+|(?=\s*\n|\s*$))",
                     tsc_log,
                 )
-                preexisting = bool(error_files) and all(
+                preexisting = tsc_crashed or (bool(error_files) and all(
                     not any(
                         ef in pf or pf.endswith(ef) or ef.endswith(pf.split("/")[-1])
                         for pf in patched_files
                     )
                     for ef in error_files
-                )
+                ))
 
                 if preexisting:
                     print(

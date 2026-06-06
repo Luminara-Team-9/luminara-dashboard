@@ -300,6 +300,7 @@ IMPORTANT RULES:
 4. Do not patch test files, sabotage files, or mock files.
 5. suggested_code must be syntactically complete, executable TypeScript/JSX. Think about what the file looks like after the replacement and ensure it still compiles. A comment alone is not valid code — write actual statements.
 6. If you cannot make a real code change that concretely fixes the performance issue, return auto_applicable=false rather than generating a patch that only adds comments or leaves the original code unchanged.
+7. Before writing suggested_code, verify that every import, file reference, and identifier you add does not already exist in original_code and refers to something that actually exists in the source files shown above.
 
 Return ONLY this JSON (no markdown, no extra text):
 
