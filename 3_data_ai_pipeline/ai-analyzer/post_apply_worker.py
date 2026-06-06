@@ -372,7 +372,7 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
         f"Build verified locally before push.",
     ], use_ai_identity=True)
     if commit.returncode != 0:
-        return False, f"git commit failed:\n{commit.stderr}"
+        return False, f"git commit failed:\nSTDOUT: {commit.stdout}\nSTDERR: {commit.stderr}"
 
     push = git(["push", "-f", "origin", fix_branch])
     if push.returncode != 0:
