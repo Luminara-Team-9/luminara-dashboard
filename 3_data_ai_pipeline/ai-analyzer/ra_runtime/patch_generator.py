@@ -73,6 +73,16 @@ def extract_json(raw_text: str) -> Dict[str, Any]:
             return json.loads(cleaned)
         except json.JSONDecodeError:
             pass
+        # FIX: Qwen sometimes uses single-quoted strings as JSON values e.g. 'height="auto"'
+        cleaned = re.sub(
+            r":\s*'([^']*)'",
+            lambda m: ': "' + m.group(1).replace('"', '\\"') + '"',
+            cleaned,
+        )
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
         raise json.JSONDecodeError("", s, 0)
 
     try:

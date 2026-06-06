@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 from ra_runtime.db_client import (
     get_db_connection,
     update_fix_plan_status,
+    get_fix_plan_changes,
 )
 
 
@@ -338,16 +339,20 @@ def push_branch(repo_path: Path, branch_name: str, fix_plan_id: int) -> tuple[bo
     if checkout.returncode != 0:
         return False, f"git checkout -B {fix_branch} failed:\n{checkout.stderr}"
 
-    # Stage only the patched app directory
-    stage = git(["add", TARGET_DIR])
-    if stage.returncode != 0:
-        return False, f"git add failed:\n{stage.stderr}"
+    # FIX: stage only the specific patched files — not the entire directory.
+    # git add TARGET_DIR accidentally staged unrelated files (Saboteur.tsx, node_modules symlink).
+    changes = get_fix_plan_changes(fix_plan_id, only_pending=False)
+    patched_files = [c["target_file"] for c in (changes or []) if c.get("apply_status") == "applied"]
 
-    # Unstage files that must never be committed
-    git(["reset", "HEAD", "--", "*.bak_*", "**/*.bak_*"])
-    # FIX: unstage node_modules symlink — post_apply_worker may create a symlink
-    # via NODE_MODULES_SOURCE, which git add picks up even if gitignored
-    git(["reset", "HEAD", "--", "node_modules", "**/node_modules"])
+    if patched_files:
+        for f in patched_files:
+            git(["add", f])
+    else:
+        stage = git(["add", TARGET_DIR])
+        if stage.returncode != 0:
+            return False, f"git add failed:\n{stage.stderr}"
+        git(["reset", "HEAD", "--", "*.bak_*", "**/*.bak_*"])
+        git(["reset", "HEAD", "--", "node_modules", "**/node_modules"])
 
     status = git(["status", "--porcelain"])
     if not status.stdout.strip():
