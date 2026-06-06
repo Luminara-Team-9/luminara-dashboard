@@ -941,7 +941,7 @@ def validate_patch_against_files(
             valid_patches.append({**patch, "suggested_code": suggested_code})
             continue
 
-        # Fuzzy match: strip trailing whitespace per line (Qwen often adds/removes trailing spaces)
+        # Fuzzy match level 1: strip trailing whitespace per line
         norm_original_lines = [l.rstrip() for l in original_code.splitlines()]
         content_lines = content.splitlines()
         n_search = len(norm_original_lines)
@@ -951,6 +951,22 @@ def validate_patch_against_files(
             if [l.rstrip() for l in window] == norm_original_lines:
                 actual_original = "\n".join(window)
                 break
+
+        # Fuzzy match level 2: normalize ALL whitespace + quotes (Qwen changes indentation/quote style)
+        if actual_original is None:
+            def _norm_line(s: str) -> str:
+                import re as _re
+                return _re.sub(r'\s+', ' ', s).strip().replace('"', "'")
+
+            norm_orig = [_norm_line(l) for l in original_code.splitlines() if l.strip()]
+            norm_content_lines = [_norm_line(l) for l in content_lines]
+            n_search2 = len(norm_orig)
+            if n_search2 > 0:
+                for i in range(len(norm_content_lines) - n_search2 + 1):
+                    window_norm = [l for l in norm_content_lines[i:i + n_search2 + 2] if l][:n_search2]
+                    if window_norm == norm_orig:
+                        actual_original = "\n".join(content_lines[i:i + n_search2])
+                        break
 
         if actual_original is None:
             logger.info(
