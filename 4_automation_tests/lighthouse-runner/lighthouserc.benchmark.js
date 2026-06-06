@@ -12,6 +12,7 @@ module.exports = {
         'https://www.nike.com/kr',
         'https://www.underarmour.co.kr/ko-kr/',
         'https://www.fila.co.kr/',
+        'https://www.ssg.com/',
       ],
       numberOfRuns: 5,
       settings: {
