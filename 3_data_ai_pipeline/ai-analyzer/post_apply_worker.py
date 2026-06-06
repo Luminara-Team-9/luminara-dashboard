@@ -243,14 +243,18 @@ def _ensure_node_modules(app_dir: Path) -> str:
 def run_build(app_dir: Path) -> tuple[bool, str]:
     """
     Build the Next.js app. Returns (success, log).
-    Streams output live so progress is visible.
     """
     pm = "pnpm" if shutil.which("pnpm") else "npm"
     logs = []
 
+    # Clean stale .next cache — leftover artifacts cause ENOENT build-manifest errors
+    next_dir = app_dir / ".next"
+    if next_dir.exists():
+        shutil.rmtree(next_dir, ignore_errors=True)
+        print("  🧹 Cleaned .next cache", flush=True)
+
     nm_strategy = _ensure_node_modules(app_dir)
     logs.append(f"node_modules: {nm_strategy}")
-
 
     cmds = []
     if nm_strategy == "install_needed":
@@ -261,7 +265,6 @@ def run_build(app_dir: Path) -> tuple[bool, str]:
     for cmd in cmds:
         label = " ".join(cmd)
         print(f"  Running: {label}", flush=True)
-        buf = []
         proc = subprocess.Popen(
             cmd,
             cwd=str(app_dir),
@@ -269,16 +272,15 @@ def run_build(app_dir: Path) -> tuple[bool, str]:
             stderr=subprocess.STDOUT,
             text=True,
         )
-        deadline = time.time() + 600
-        for line in proc.stdout:
-            print(f"    {line}", end="", flush=True)
-            buf.append(line)
-            if time.time() > deadline:
-                proc.kill()
-                proc.wait()
-                return False, "\n".join(logs) + "\nBUILD TIMEOUT (>600s)"
-        proc.wait()
-        logs.append(f"$ {label}\n{''.join(buf)}")
+        try:
+            stdout, _ = proc.communicate(timeout=600)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return False, "\n".join(logs) + "\nBUILD TIMEOUT (>600s)"
+
+        print(stdout[-3000:], flush=True)
+        logs.append(f"$ {label}\n{stdout}")
 
         if proc.returncode != 0:
             return False, "\n".join(logs)
