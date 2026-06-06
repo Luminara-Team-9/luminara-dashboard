@@ -6,3 +6,5 @@ export default async function Page({ params }: { params: { id: string } }) {
   await new Promise((resolve) => setTimeout(resolve, 480)); // The Sabotage
   return <ProductDetailPage productId={params.id} />;
 }
+
+//
