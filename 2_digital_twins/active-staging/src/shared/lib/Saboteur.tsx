@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
+// Remove Saboteur components for production
+// import { CpuSpike, FontShiftSaboteur, LateAnnouncementSaboteur } from '@/shared/lib/Saboteur';
+
 // ==========================================
 // THE SABOTAGE CONFIGURATION MATRIX
 // Defines the exact penalty severity for each specific route.
