@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Head from 'next/head';
 
 export function HeroBanner() {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -35,7 +36,10 @@ export function HeroBanner() {
   }, [slides.length]);
 
   return (
-    <section className="w-full relative bg-gray-200">
+    <Head>
+  <link rel="preload" as="image" href="https://contents.mediadecathlon.com/s1414033/k$de3973b0210cd72f5726758a129a021a/defaut.jpg?format=webp" type="image/webp" fetchPriority="high" />
+</Head>
+<section className="w-full relative bg-gray-200">
       {/* Mobile: Perfect Square. Desktop: Wide Billboard */}
       <div className="relative w-full overflow-hidden aspect-square md:aspect-[1024/286]">
         {slides.map((slide, index) => (
