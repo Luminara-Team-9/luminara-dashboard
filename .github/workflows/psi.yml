@@ -1,0 +1,31 @@
+name: '[Scheduled] Daily PSI INP Audit'
+
+on:
+  schedule:
+    - cron: '0 17 * * *'  # 2am KST = 5pm UTC
+  workflow_dispatch:
+
+jobs:
+  psi_audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Run PSI INP Audit
+        env:
+          PSI_API_KEY: ${{ secrets.PSI_API_KEY }}
+        run: |
+          cd 4_automation_tests/lighthouse-runner
+          node run_psi.js
+
+      - name: Upload PSI Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: psi-results
+          path: 4_automation_tests/lighthouse-runner/results/psi_*.json

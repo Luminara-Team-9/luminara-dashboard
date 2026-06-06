@@ -13,7 +13,7 @@ module.exports = {
         'https://www.underarmour.co.kr/ko-kr/',
         'https://www.fila.co.kr/',
       ],
-      numberOfRuns: 1,
+      numberOfRuns: 5,
       settings: {
         chromeFlags: '--headless --no-sandbox --disable-gpu',
         onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
