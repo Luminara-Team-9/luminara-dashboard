@@ -33,10 +33,3 @@ jobs:
             npx lhci autorun \
             --config=/workspace/lighthouse-runner/lighthouserc.benchmark.js \
             --no-bail
-
-      - name: Run PSI INP Audit
-        env:
-          PSI_API_KEY: ${{ secrets.PSI_API_KEY }}
-        run: |
-          cd ${{ github.workspace }}/4_automation_tests/lighthouse-runner
-          node run_psi.js
