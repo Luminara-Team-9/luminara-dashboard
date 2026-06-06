@@ -14,7 +14,7 @@ jobs:
 
       - name: Free Disk Space
         run: |
-          sudo rm -rf /tmp/lighthouse.* || true
+          rm -rf /tmp/lighthouse.* || true
           docker system prune -af || true
           df -h
 
