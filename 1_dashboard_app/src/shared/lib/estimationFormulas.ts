@@ -23,7 +23,7 @@ export const FORMULA_REFERENCES: Record<string, FormulaReference> = {
     id: 'webVitals',
     title: 'Google web.dev Core Web Vitals thresholds',
     url: 'https://web.dev/articles/vitals',
-    note: 'LCP 2.5s, INP 200ms, CLS 0.1 targets are evaluated at the 75th percentile.',
+    note: 'LCP 2.5s, TBT 200ms, CLS 0.1 targets are evaluated at the 75th percentile. INP is replaced by TBT when unavailable.',
   },
   cwvThresholdMethod: {
     id: 'cwvThresholdMethod',

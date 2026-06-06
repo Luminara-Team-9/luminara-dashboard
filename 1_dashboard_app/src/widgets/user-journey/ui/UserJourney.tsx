@@ -109,7 +109,7 @@ function getReadableResult(
     return {
       title: '구매까지 완료한 경로',
       detail: metrics
-        ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 버튼 반응 ${metrics.inp.value}ms`
+        ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 스크립트 부담 ${metrics.inp.value}ms`
         : `${pageLabel}에서 구매 완료`,
     };
   }
@@ -118,7 +118,7 @@ function getReadableResult(
     return {
       title: '결제까지 이동했지만 구매 완료 전 이탈',
       detail: metrics
-        ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 버튼 반응 ${metrics.inp.value}ms`
+        ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 스크립트 부담 ${metrics.inp.value}ms`
         : `${pageLabel}에서 이탈`,
     };
   }
@@ -127,7 +127,7 @@ function getReadableResult(
     return {
       title: '상품은 확인했지만 장바구니로 이동하지 않음',
       detail: metrics
-        ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 버튼 반응 ${metrics.inp.value}ms`
+        ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 스크립트 부담 ${metrics.inp.value}ms`
         : `${pageLabel}에서 이탈`,
     };
   }
@@ -135,7 +135,7 @@ function getReadableResult(
   return {
     title: '메인/탐색 화면에서 종료',
     detail: metrics
-      ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 버튼 반응 ${metrics.inp.value}ms`
+      ? `${pageLabel} 표시 ${metrics.lcp.value}초 · 스크립트 부담 ${metrics.inp.value}ms`
       : `${pageLabel}에서 이탈`,
   };
 }

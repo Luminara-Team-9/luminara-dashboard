@@ -164,6 +164,7 @@ const server = http.createServer(async (request, response) => {
         range: url.searchParams.get('range'),
         from: url.searchParams.get('from'),
         to: url.searchParams.get('to'),
+        mode: url.searchParams.get('mode'),
       });
       sendJson(response, 200, payload);
     } catch (error) {

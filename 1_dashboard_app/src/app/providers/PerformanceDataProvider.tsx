@@ -4,15 +4,24 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import type { PerformanceApiResponse } from '@/shared/lib/types';
 
-const DEFAULT_REFRESH_INTERVAL_MS = 5_000;
+const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 5_000;
+const DEFAULT_FULL_REFRESH_INTERVAL_MS = 60_000;
 
-function getRefreshIntervalMs(): number {
-  const raw = process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS;
-  if (!raw) return DEFAULT_REFRESH_INTERVAL_MS;
+function getIntervalMs(envName: string, fallback: number): number {
+  const raw = process.env[envName];
+  if (!raw) return fallback;
 
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_REFRESH_INTERVAL_MS;
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return parsed;
+}
+
+function getLiveRefreshIntervalMs(): number {
+  return getIntervalMs("NEXT_PUBLIC_DASHBOARD_LIVE_REFRESH_MS", getIntervalMs("NEXT_PUBLIC_DASHBOARD_REFRESH_MS", DEFAULT_LIVE_REFRESH_INTERVAL_MS));
+}
+
+function getFullRefreshIntervalMs(): number {
+  return getIntervalMs("NEXT_PUBLIC_DASHBOARD_FULL_REFRESH_MS", DEFAULT_FULL_REFRESH_INTERVAL_MS);
 }
 
 interface PerformanceDataContextValue {
@@ -35,9 +44,14 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const dataRef = useRef<PerformanceApiResponse | null>(null);
 
-  const load = useCallback(async (options?: { background?: boolean }) => {
+  const load = useCallback(async (options?: { background?: boolean; liveOnly?: boolean }) => {
     const isBackground = Boolean(options?.background);
+    const isLiveOnly = Boolean(options?.liveOnly);
+
+    if (isLiveOnly && !dataRef.current) return;
+
     if (abortRef.current) {
       if (isBackground) return;
       abortRef.current.abort();
@@ -47,27 +61,30 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
     abortRef.current = controller;
 
     if (!isBackground) {
-      setLoading(true);
+      if (!dataRef.current) setLoading(true);
       setError(null);
     }
 
     try {
       const params = new URLSearchParams();
-      if (dateFrom) params.set('from', dateFrom);
-      if (dateTo) params.set('to', dateTo);
-      const response = await fetch(`/api/performance?${params.toString()}`, {
-        cache: 'no-store',
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
+      if (isLiveOnly) params.set("mode", "live");
+
+      const response = await fetch("/api/performance?" + params.toString(), {
+        cache: "no-store",
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`API 오류: ${response.status}`);
+      if (!response.ok) throw new Error("API 오류: " + response.status);
 
       const payload = await response.json() as PerformanceApiResponse;
+      dataRef.current = payload;
       setData(payload);
       setError(null);
     } catch (err: unknown) {
       if (controller.signal.aborted) return;
-      if (!isBackground) {
-        setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다.');
+      if (!isBackground && !dataRef.current) {
+        setError(err instanceof Error ? err.message : "데이터를 불러오지 못했습니다.");
       }
     } finally {
       if (!controller.signal.aborted) setLoading(false);
@@ -76,23 +93,37 @@ export function PerformanceDataProvider({ children }: { children: ReactNode }) {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    const refreshIntervalMs = getRefreshIntervalMs();
+    const liveRefreshIntervalMs = getLiveRefreshIntervalMs();
+    const fullRefreshIntervalMs = getFullRefreshIntervalMs();
     let stopped = false;
-    let timer: number | undefined;
+    let liveTimer: number | undefined;
+    let fullTimer: number | undefined;
 
-    const scheduleNext = () => {
-      if (stopped || refreshIntervalMs <= 0) return;
+    const scheduleLiveRefresh = () => {
+      if (stopped || liveRefreshIntervalMs <= 0) return;
 
-      timer = window.setTimeout(() => {
-        void load({ background: true }).finally(scheduleNext);
-      }, refreshIntervalMs);
+      liveTimer = window.setTimeout(() => {
+        void load({ background: true, liveOnly: true }).finally(scheduleLiveRefresh);
+      }, liveRefreshIntervalMs);
     };
 
-    void load().finally(scheduleNext);
+    const scheduleFullRefresh = () => {
+      if (stopped || fullRefreshIntervalMs <= 0) return;
+
+      fullTimer = window.setTimeout(() => {
+        void load({ background: true }).finally(scheduleFullRefresh);
+      }, fullRefreshIntervalMs);
+    };
+
+    void load().finally(() => {
+      scheduleLiveRefresh();
+      scheduleFullRefresh();
+    });
 
     return () => {
       stopped = true;
-      if (timer !== undefined) window.clearTimeout(timer);
+      if (liveTimer !== undefined) window.clearTimeout(liveTimer);
+      if (fullTimer !== undefined) window.clearTimeout(fullTimer);
       abortRef.current?.abort();
     };
   }, [load]);

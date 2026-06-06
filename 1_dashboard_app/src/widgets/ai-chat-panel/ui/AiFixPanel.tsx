@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { AiFixCard } from '@/entities/ai-plan';
 import { usePerformanceData } from '@/shared/lib/hooks/usePerformanceData';
 import { Skeleton } from '@/shared/ui';
-import type { FixPriority } from '@/shared/lib/types';
+import type { AiFixPlan, FixPriority } from '@/shared/lib/types';
 import styles from './AiFixPanel.module.css';
 
 const ALL_FILTER = '전체';
 const FILTERS = [ALL_FILTER, 'critical', 'high', 'medium', 'low'] as const;
-const APPLICABILITY_FILTERS = ['all', 'applicable', 'manual'] as const;
+const APPLICABILITY_FILTERS = ['all', 'applicable', 'manual', 'completed'] as const;
 type Filter = (typeof FILTERS)[number];
 type ApplicabilityFilter = (typeof APPLICABILITY_FILTERS)[number];
 
@@ -26,7 +26,15 @@ const APPLICABILITY_LABEL: Record<ApplicabilityFilter, string> = {
   all: '전체',
   applicable: '적용 가능',
   manual: '수동 검토',
+  completed: '완료',
 };
+
+const COMPLETED_PATCH_STATUSES = new Set(['pushed', 'completed', 'applied', 'pr_merged', 'merged']);
+
+function isCompletedPlan(plan: AiFixPlan): boolean {
+  const patchStatus = String(plan.patchStatus ?? "").toLowerCase();
+  return plan.remediationStatus === "completed" || COMPLETED_PATCH_STATUSES.has(patchStatus);
+}
 
 export function AiFixPanel() {
   const { data, loading, error } = usePerformanceData();
@@ -79,10 +87,12 @@ export function AiFixPanel() {
 
   const plans = data.aiFixPlans.filter((plan) => {
     const matchesPriority = filter === ALL_FILTER || plan.priority === (filter as FixPriority);
+    const completed = isCompletedPlan(plan);
     const matchesApplicability =
       applicabilityFilter === 'all' ||
-      (applicabilityFilter === 'applicable' && plan.autoApplicable === true) ||
-      (applicabilityFilter === 'manual' && plan.autoApplicable === false);
+      (applicabilityFilter === 'completed' && completed) ||
+      (applicabilityFilter === 'applicable' && plan.autoApplicable === true && !completed) ||
+      (applicabilityFilter === 'manual' && plan.autoApplicable === false && !completed);
 
     return matchesPriority && matchesApplicability;
   });
@@ -106,7 +116,12 @@ export function AiFixPanel() {
               <span className={styles.count}>
                 {item === 'all'
                   ? data.aiFixPlans.length
-                  : data.aiFixPlans.filter((plan) => item === 'applicable' ? plan.autoApplicable === true : plan.autoApplicable === false).length}
+                  : data.aiFixPlans.filter((plan) => {
+                      const completed = isCompletedPlan(plan);
+                      if (item === 'completed') return completed;
+                      if (item === 'applicable') return plan.autoApplicable === true && !completed;
+                      return plan.autoApplicable === false && !completed;
+                    }).length}
               </span>
             </button>
           ))}

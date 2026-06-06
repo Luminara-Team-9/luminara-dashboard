@@ -337,6 +337,43 @@
   font-style: normal;
 }
 
+.audit_summary,
+.timing_summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.audit_summary strong,
+.timing_summary strong {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.audit_summary span,
+.timing_summary span {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.audit_summary em {
+  overflow-wrap: anywhere;
+}
+
+.score_delta_good {
+  color: #047857 !important;
+}
+
+.score_delta_bad {
+  color: #b91c1c !important;
+}
+
 .status_detail_box {
   max-height: 150px;
   overflow: auto;
@@ -522,6 +559,10 @@
 
 .status_line_error {
   color: #b91c1c;
+}
+
+.status_line_success {
+  color: #047857;
 }
 
 .status_panel {

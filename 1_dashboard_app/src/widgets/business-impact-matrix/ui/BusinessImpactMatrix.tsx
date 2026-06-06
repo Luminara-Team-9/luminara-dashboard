@@ -34,12 +34,12 @@ const METRICS: MetricDef[] = [
   },
   {
     key: 'inp',
-    label: '클릭 반응 (INP)',
+    label: '스크립트 부담 (TBT)',
     unit: 'ms',
     targetLabel: '200ms 이하',
     higherIsBetter: false,
-    area: '필터·장바구니 조작',
-    businessUse: '필터·장바구니·결제 조작 지연으로 구매 진행 과정의 불편이 커질 수 있습니다.',
+    area: '스크립트 실행 부담',
+    businessUse: 'INP를 안정적으로 수집할 수 없어 TBT로 스크립트 부담과 반응성 저하 가능성을 판단합니다.',
   },
   {
     key: 'cls',
@@ -288,8 +288,8 @@ export function BusinessImpactMatrix() {
     {
       label: '반응성',
       value: responseScore,
-      metric: `INP ${inp.value}ms`,
-      area: hasInpMeasurement ? '전환 여정 · 장바구니/결제 조작감' : 'INP 미수집 · 클론사이트 실측 연결 필요',
+      metric: `TBT ${inp.value}ms`,
+      area: hasInpMeasurement ? '전환 여정 · 스크립트 실행 부담' : 'TBT 측정값 연결 필요',
       change: (() => {
         if (!hasInpMeasurement) return null;
         const trend = getTrendValue(data, 'inp');
