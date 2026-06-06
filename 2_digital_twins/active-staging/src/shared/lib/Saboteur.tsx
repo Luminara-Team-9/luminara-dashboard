@@ -27,60 +27,62 @@ const getSabotageConfig = (pathname: string) => {
 // ==========================================
 // 1. DYNAMIC TBT SPIKE (Main Thread Lock)
 // ==========================================
-export function CpuSpike() {
-  const pathname = usePathname();
-
-  useEffect(() => {
-    const config = getSabotageConfig(pathname);
-    if (!config || config.tbt === 0) return;
-
-    const start = performance.now();
-    // Locks the thread synchronously based on the route's severity
-    while (performance.now() - start < config.tbt) {
-      Math.random() * Math.random();
-    }
-  }, [pathname]);
-
-  return null;
-}
+// Removed CpuSpike function to prevent main-thread blocking
+// export function CpuSpike() {
+//   const pathname = usePathname();
+// 
+//   useEffect(() => {
+//     const config = getSabotageConfig(pathname);
+//     if (!config || config.tbt === 0) return;
+// 
+//     const start = performance.now();
+//     // Locks the thread synchronously based on the route's severity
+//     while (performance.now() - start < config.tbt) {
+//       Math.random() * Math.random();
+//     }
+//   }, [pathname]);
+// 
+//   return null;
+// }
 
 // ==========================================
 // 2. DYNAMIC CLS SHIFT (Ad Injection)
 // ==========================================
-export function LateAnnouncementSaboteur() {
-  const pathname = usePathname();
-  const [triggerShift, setTriggerShift] = useState(false);
-  const config = getSabotageConfig(pathname);
-
-  useEffect(() => {
-    setTriggerShift(false);
-    if (!config || config.clsHeight === '0px') return;
-
-    // Fires dynamically based on the matrix, guaranteeing Lighthouse catches it
-    const timer = setTimeout(() => setTriggerShift(true), config.clsDelay);
-    return () => clearTimeout(timer);
-  }, [pathname, config]);
-
-  if (!triggerShift || !config) return null;
-
-  return (
-    <div
-      style={{
-        width: '100vw',
-        height: config.clsHeight, // Height scales with route severity
-        backgroundColor: '#0055ff',
-        color: 'white',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '32px',
-        fontWeight: '900',
-      }}
-    >
-      [SIMULATED MASSIVE AD INJECTION]
-    </div>
-  );
-}
+// Removed LateAnnouncementSaboteur to prevent CLS
+// export function LateAnnouncementSaboteur() {
+//   const pathname = usePathname();
+//   const [triggerShift, setTriggerShift] = useState(false);
+//   const config = getSabotageConfig(pathname);
+// 
+//   useEffect(() => {
+//     setTriggerShift(false);
+//     if (!config || config.clsHeight === '0px') return;
+// 
+//     // Fires dynamically based on the matrix, guaranteeing Lighthouse catches it
+//     const timer = setTimeout(() => setTriggerShift(true), config.clsDelay);
+//     return () => clearTimeout(timer);
+//   }, [pathname, config]);
+// 
+//   if (!triggerShift || !config) return null;
+// 
+//   return (
+//     <div
+//       style={{
+//         width: '100vw',
+//         height: config.clsHeight, // Height scales with route severity
+//         backgroundColor: '#0055ff',
+//         color: 'white',
+//         display: 'flex',
+//         alignItems: 'center',
+//         justifyContent: 'center',
+//         fontSize: '32px',
+//         fontWeight: '900',
+//       }}
+//     >
+//       [SIMULATED MASSIVE AD INJECTION]
+//     </div>
+//   );
+// }
 
 // ==========================================
 // 3. DYNAMIC CLS SHIFT (Web Font FOUT)
