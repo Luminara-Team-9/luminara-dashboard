@@ -135,6 +135,26 @@ def process_fix_plan(fix_plan: dict, dry_run: bool = False) -> bool:
     for i, p in enumerate(patches, 1):
         print(f"      [{i}] {p.get('target_file')}")
 
+    # Step 1.5: reset workspace to clean state before applying
+    # Workspaces are reused across fix plans for the same branch.
+    # A previous failed fix plan may have left broken files behind.
+    branch_name = fix_plan.get("branch_name", "")
+    if not dry_run and branch_name:
+        try:
+            reset = subprocess.run(
+                ["git", "reset", "--hard", f"origin/{branch_name}"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if reset.returncode == 0:
+                print(f"  🧹 Workspace reset to origin/{branch_name} (clean state before apply)")
+            else:
+                print(f"  ⚠️  Workspace reset failed (non-fatal): {reset.stderr.strip()}")
+        except Exception as e:
+            print(f"  ⚠️  Workspace reset error (non-fatal): {e}")
+
     # Step 2: apply patches to cloned repo
     apply_result = apply_patch_result(
         repo_path=repo_path,
