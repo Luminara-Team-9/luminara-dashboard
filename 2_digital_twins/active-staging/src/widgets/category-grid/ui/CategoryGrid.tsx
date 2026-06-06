@@ -14,7 +14,7 @@ export function CategoryGrid() {
         <h2 style={{ fontSize: "18px", fontWeight: 900, color: "#111827", marginBottom: "16px" }}>
           스포츠 카테고리
         </h2>
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+<div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', aspectRatio: '1 / 1' }}>
           {categories.map((cat) => (
             <a
               key={cat.href}
