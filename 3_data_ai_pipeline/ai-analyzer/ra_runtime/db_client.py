@@ -342,7 +342,6 @@ def get_fix_plan_changes(
                         change_type,
                         change_reason,
                         apply_status,
-                        backup_path,
                         created_at
                     FROM fix_plan_changes
                     WHERE fix_plan_id = %s
@@ -363,7 +362,6 @@ def get_fix_plan_changes(
                         change_type,
                         change_reason,
                         apply_status,
-                        backup_path,
                         created_at
                     FROM fix_plan_changes
                     WHERE fix_plan_id = %s
