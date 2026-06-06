@@ -20,8 +20,8 @@ jobs:
 
       - name: Run Benchmark
         env:
-          LHCI_USER: ${{ secrets.LHCI_USER }}
-          LHCI_PASS: ${{ secrets.LHCI_PASS }}
+          LHCI_USER: ${{ secrets.LHCI_SERVER_USER }}
+          LHCI_PASS: ${{ secrets.LHCI_SERVER_PASS }}
           LHCI_BUILD_TOKEN: ${{ secrets.LHCI_BUILD_TOKEN }}
           TMPDIR: /abr/coss41/tmp
         run: |
