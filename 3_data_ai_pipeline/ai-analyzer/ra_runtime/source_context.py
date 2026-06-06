@@ -34,6 +34,7 @@ EXCLUDED_PATH_KEYWORDS = [
     "playwright",
     "cypress",
     "docs",
+    "saboteur",  # intentional performance sabotage for testing — not real production code
 ]
 
 MAX_FILE_CHARS = 20000
