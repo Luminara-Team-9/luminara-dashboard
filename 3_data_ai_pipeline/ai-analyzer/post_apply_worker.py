@@ -576,9 +576,11 @@ def _build_failure_is_preexisting(build_log: str, fix_plan_id: int) -> bool:
     if not patched:
         return False
 
-    # Match TypeScript-style error lines: "path/to/file.ts(line,col): error TS..."
-    # and Next.js build error lines that reference source files
-    error_files = re.findall(r"([\w./@\-]+\.[jt]sx?)\(\d+", build_log)
+    # Match two formats:
+    # 1. TypeScript: "path/to/file.tsx(line,col): error TS..."
+    # 2. Next.js build: "path/to/file.tsx" on its own line (no line/col suffix)
+    # Allow [ and ] for dynamic route segments like category/[slug]/page.tsx
+    error_files = re.findall(r"([\w./@\-\[\]]+\.[jt]sx?)(?:\(\d+|(?=\s*\n|\s*$))", build_log)
     if not error_files:
         return False
 
