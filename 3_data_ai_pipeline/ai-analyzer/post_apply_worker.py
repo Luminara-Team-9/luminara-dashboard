@@ -251,19 +251,6 @@ def run_build(app_dir: Path) -> tuple[bool, str]:
     nm_strategy = _ensure_node_modules(app_dir)
     logs.append(f"node_modules: {nm_strategy}")
 
-    # TEMP: patch next.config.mjs to ignore TypeScript errors during workspace build.
-    # Prevents pre-existing TS errors in base code (not caused by the patch) from
-    # blocking patch verification. Remove once base codebase TypeScript is clean.
-    next_config = app_dir / "next.config.mjs"
-    if next_config.exists():
-        cfg = next_config.read_text(encoding="utf-8")
-        if "ignoreBuildErrors" not in cfg:
-            cfg = cfg.replace(
-                "const nextConfig = {",
-                "const nextConfig = {\n  typescript: { ignoreBuildErrors: true },",
-            )
-            next_config.write_text(cfg, encoding="utf-8")
-            print("  ⚠️  TEMP: patched next.config.mjs to ignoreBuildErrors (base TS errors present)", flush=True)
 
     cmds = []
     if nm_strategy == "install_needed":
