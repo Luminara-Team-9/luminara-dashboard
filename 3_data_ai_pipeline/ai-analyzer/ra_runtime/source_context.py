@@ -34,8 +34,14 @@ EXCLUDED_PATH_KEYWORDS = [
     "playwright",
     "cypress",
     "docs",
-    "saboteur",  # intentional performance sabotage for testing — not real production code
 ]
+
+# Files that must NEVER be patched — hard excluded before scoring.
+# Unlike EXCLUDED_PATH_KEYWORDS (soft -40 score), these are completely invisible to the agent.
+# Use for test infrastructure that would be harmful to modify (e.g. intentional sabotage files).
+HARD_EXCLUDED_FILES = {
+    "saboteur",  # intentional performance sabotage for testing — never patch this
+}
 
 MAX_FILE_CHARS = 20000
 MAX_SNIPPET_CHARS = 5000
@@ -894,6 +900,10 @@ def collect_source_context(
     scored_files: List[Dict[str, Any]] = []
 
     for file_path in source_files:
+        # Hard-exclude specific files that must never be patched (e.g. Saboteur.tsx)
+        if any(kw in file_path.name.lower() for kw in HARD_EXCLUDED_FILES):
+            continue
+
         content = read_file_limited(file_path)
 
         if not content:
