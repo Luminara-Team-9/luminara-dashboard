@@ -23,9 +23,12 @@ jobs:
           LHCI_USER: ${{ secrets.LHCI_USER }}
           LHCI_PASS: ${{ secrets.LHCI_PASS }}
           LHCI_BUILD_TOKEN: ${{ secrets.LHCI_BUILD_TOKEN }}
+          TMPDIR: /abr/coss41/tmp
         run: |
+          mkdir -p /abr/coss41/tmp
           singularity exec \
             --bind ${{ github.workspace }}/4_automation_tests:/workspace \
+            --bind /abr/coss41/tmp:/tmp \
             /abr/coss41/Luminara_App/images-prod/infrastructure_audit_ephemeral.sif \
             npx lhci autorun \
             --config=/workspace/lighthouse-runner/lighthouserc.benchmark.js
