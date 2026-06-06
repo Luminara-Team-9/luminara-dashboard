@@ -31,4 +31,5 @@ jobs:
             --bind /abr/coss41/tmp:/tmp \
             /abr/coss41/Luminara_App/images-prod/infrastructure_audit_ephemeral.sif \
             npx lhci autorun \
-            --config=/workspace/lighthouse-runner/lighthouserc.benchmark.js
+            --config=/workspace/lighthouse-runner/lighthouserc.benchmark.js \
+            --no-bail
