@@ -293,6 +293,13 @@ Fix Plan:
 Source code:
 {source_context_text}
 
+IMPORTANT RULES:
+1. original_code MUST be copied CHARACTER-FOR-CHARACTER from the source code above. Do not paraphrase, reformat, or change a single character.
+2. In Next.js, <link rel="preload"> tags MUST go inside <Head> from 'next/head' — never inline inside JSX elements like <section> or <div>.
+3. Only patch files whose full source is shown above. Do not invent file paths or code.
+4. Do not patch test files, sabotage files, or mock files.
+5. suggested_code must be valid TypeScript/JSX.
+
 Return ONLY this JSON (no markdown, no extra text):
 
 {{
@@ -300,17 +307,10 @@ Return ONLY this JSON (no markdown, no extra text):
   "patches": [
     {{
       "target_file": "exact path copied from SOURCE_FILE above",
-      "original_code": "exact verbatim code snippet from the source to replace",
+      "original_code": "exact verbatim code snippet from the source — copy character-for-character",
       "suggested_code": "your improved replacement — must be valid TypeScript/JS",
       "change_type": "code_replace",
       "change_reason": "one sentence: what this changes and why it helps performance"
-    }},
-    {{
-      "target_file": "another file if the fix requires changes in multiple places",
-      "original_code": "exact verbatim snippet",
-      "suggested_code": "improved replacement",
-      "change_type": "code_replace",
-      "change_reason": "why this second change is needed"
     }}
   ],
   "manual_review_reason": null
