@@ -295,10 +295,15 @@ def run_worker(
             fix_plan = claim_next_approved_fix_plan(worker_id=WORKER_ID)
 
             if fix_plan:
-                print(f"\n[apply_worker] Claimed fix_plan_id={fix_plan['id']}")
-                success = process_fix_plan(fix_plan, dry_run=dry_run)
-                status_str = "✅ success" if success else "❌ failed"
-                print(f"\n[apply_worker] {status_str} — fix_plan_id={fix_plan['id']}")
+                fid = fix_plan["id"]
+                print(f"\n[apply_worker] Claimed fix_plan_id={fid}")
+                try:
+                    success = process_fix_plan(fix_plan, dry_run=dry_run)
+                    status_str = "✅ success" if success else "❌ failed"
+                    print(f"\n[apply_worker] {status_str} — fix_plan_id={fid}")
+                except Exception as proc_err:
+                    print(f"\n[apply_worker] ❌ Unexpected error for fix_plan_id={fid}: {proc_err}")
+                    update_fix_plan_status(fid, "apply_failed", error_message=str(proc_err))
 
             else:
                 print(
