@@ -298,7 +298,7 @@ IMPORTANT RULES:
 2. In Next.js, <link rel="preload"> tags MUST go inside <Head> from 'next/head' — never inline inside JSX elements like <section> or <div>.
 3. Only patch files whose full source is shown above. Do not invent file paths or code.
 4. Do not patch test files, sabotage files, or mock files.
-5. suggested_code must be valid TypeScript/JSX.
+5. suggested_code must be syntactically complete, executable TypeScript/JSX. Think about what the file looks like after the replacement and ensure it still compiles. A comment alone is not valid code — write actual statements.
 
 Return ONLY this JSON (no markdown, no extra text):
 
