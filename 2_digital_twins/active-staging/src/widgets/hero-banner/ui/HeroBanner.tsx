@@ -43,6 +43,9 @@ export function HeroBanner() {
             key={index}
             src={slide.src}
             alt={slide.alt}
+            loading={index === 0 ? 'eager' : 'lazy'}
+            fetchPriority={index === 0 ? 'high' : undefined}
+            decoding='async'
             style={{
               position: 'absolute',
               inset: 0,

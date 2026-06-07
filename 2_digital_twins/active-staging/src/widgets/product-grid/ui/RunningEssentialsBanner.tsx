@@ -4,6 +4,9 @@ export function RunningEssentialsBanner() {
       <img
         src="https://contents.mediadecathlon.com/s1406071/k$94027af63aa2bdabdce68bd86545c2f4/defaut.jpg?format=auto"
         alt="Running Essentials"
+        loading='eager'
+        fetchPriority='high'
+        decoding='async'
         className="w-full h-full object-cover opacity-80 transition-transform duration-500 group-hover:scale-105"
       />
       <div className="absolute inset-0 bg-black/20"></div>
