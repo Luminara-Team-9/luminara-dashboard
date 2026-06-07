@@ -17,7 +17,8 @@ import { HeavyLcpSaboteur } from '@/shared/lib/Saboteur';
 export const dynamic = 'force-dynamic';
 
 export async function HomePage() {
-  await new Promise((resolve) => setTimeout(resolve, 9000));
+  // Removed artificial delay to improve performance
+// await new Promise((resolve) => setTimeout(resolve, 9000));
   return (
     <div
       style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', width: '100%', overflowX: 'clip' }}
