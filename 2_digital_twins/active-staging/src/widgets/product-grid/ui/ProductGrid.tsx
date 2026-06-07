@@ -31,7 +31,7 @@ export function ProductGrid({ title, products, promoCard }: ProductGridProps) {
             전체보기
           </a>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4" style={{ aspectRatio: '1 / 1.5' }}>
           {products.map((product, index) => {
             const isPromoSpot = promoCard && index === promoCard.insertAt;
 
