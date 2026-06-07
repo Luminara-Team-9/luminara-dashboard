@@ -23,6 +23,7 @@ export function SocialProof() {
                 width={300}
                 height={300}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                loading="lazy"
               />
               <div style={{
                 position: "absolute", bottom: "8px", left: "8px",
